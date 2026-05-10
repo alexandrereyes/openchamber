@@ -1,4 +1,4 @@
-import { createWebAPIs } from './api';
+import { createConfiguredWebAPIs } from './runtimeConfig';
 import { registerSW } from 'virtual:pwa-register';
 
 import type { RuntimeAPIs } from '@openchamber/ui/lib/api/types';
@@ -12,7 +12,7 @@ declare global {
   }
 }
 
-window.__OPENCHAMBER_RUNTIME_APIS__ = createWebAPIs();
+window.__OPENCHAMBER_RUNTIME_APIS__ = createConfiguredWebAPIs();
 
 type HostedSurface = 'desktop' | 'mobile';
 
@@ -107,7 +107,7 @@ const unregisterDevelopmentServiceWorkers = (): void => {
 if (hostedSurface === 'mobile') {
   void import('@openchamber/ui/apps/renderMobileApp')
     .then(({ renderMobileApp }) => {
-      renderMobileApp(window.__OPENCHAMBER_RUNTIME_APIS__ ?? createWebAPIs());
+      renderMobileApp(window.__OPENCHAMBER_RUNTIME_APIS__ ?? createConfiguredWebAPIs());
     });
 } else {
   void import('@openchamber/ui/main');

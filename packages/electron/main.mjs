@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, powerMonitor, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net as electronNet, Notification, powerMonitor, protocol, session, shell } from 'electron';
 import contextMenu from 'electron-context-menu';
 import log from 'electron-log/main.js';
 import dgram from 'node:dgram';
@@ -7,7 +7,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import updaterPkg from 'electron-updater';
 import { ElectronSshManager } from './ssh-manager.mjs';
@@ -19,7 +19,20 @@ const __dirname = path.dirname(__filename);
 const isDev = process.env.OPENCHAMBER_ELECTRON_DEV === '1' || !app.isPackaged;
 
 const DEEP_LINK_PROTOCOL = 'openchamber';
+const UI_PROTOCOL = 'openchamber-ui';
 const APP_USER_MODEL_ID = 'dev.openchamber.desktop';
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: UI_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
@@ -125,6 +138,8 @@ const state = {
   serverHandle: null,
   sidecarUrl: null,
   localOrigin: null,
+  apiBaseUrl: null,
+  clientToken: null,
   bootOutcome: null,
   initScript: null,
   mainWindow: null,
@@ -593,6 +608,46 @@ const buildLocalUrl = (port) => `http://127.0.0.1:${port}`;
 
 const resourceRoot = () => isDev ? path.join(__dirname, 'resources') : process.resourcesPath;
 const resolveWebDistDir = () => path.join(resourceRoot(), 'web-dist');
+const shouldUsePackagedUi = () => app.isPackaged && process.env.OPENCHAMBER_ELECTRON_LOAD_SERVER_UI !== '1';
+const packagedUiOrigin = () => `${UI_PROTOCOL}://app`;
+const buildPackagedUiUrl = (pathname = '/index.html') => new URL(pathname, `${packagedUiOrigin()}/`).toString();
+
+const registerPackagedUiProtocol = () => {
+  if (!shouldUsePackagedUi()) return;
+  protocol.handle(UI_PROTOCOL, async (request) => {
+    const distPath = resolveWebDistDir();
+    let requestedPath = '/index.html';
+    try {
+      const url = new URL(request.url);
+      requestedPath = decodeURIComponent(url.pathname || '/index.html');
+    } catch {
+      requestedPath = '/index.html';
+    }
+    const normalized = path.normalize(requestedPath).replace(/^([/\\])+/, '');
+    const candidate = path.join(distPath, normalized || 'index.html');
+    const relative = path.relative(distPath, candidate);
+    const isInsideDist = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+    const filePath = isInsideDist ? candidate : path.join(distPath, 'index.html');
+    try {
+      const info = await fsp.stat(filePath);
+      if (info.isFile()) {
+        if (filePath.endsWith('.html')) {
+          const html = await fsp.readFile(filePath, 'utf8');
+          const initScript = `<script>window.__OPENCHAMBER_LOCAL_ORIGIN__=${JSON.stringify(state.localOrigin || packagedUiOrigin())};window.__OPENCHAMBER_API_BASE_URL__=${JSON.stringify(state.apiBaseUrl || '')};window.__OPENCHAMBER_CLIENT_TOKEN__=${JSON.stringify(state.clientToken || '')};</script>`;
+          const body = html.includes('</head>') ? html.replace('</head>', `${initScript}</head>`) : `${initScript}${html}`;
+          return new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        }
+        return electronNet.fetch(pathToFileURL(filePath).toString());
+      }
+    } catch {
+    }
+    const indexPath = path.join(distPath, 'index.html');
+    const html = await fsp.readFile(indexPath, 'utf8');
+    const initScript = `<script>window.__OPENCHAMBER_LOCAL_ORIGIN__=${JSON.stringify(state.localOrigin || packagedUiOrigin())};window.__OPENCHAMBER_API_BASE_URL__=${JSON.stringify(state.apiBaseUrl || '')};window.__OPENCHAMBER_CLIENT_TOKEN__=${JSON.stringify(state.clientToken || '')};</script>`;
+    const body = html.includes('</head>') ? html.replace('</head>', `${initScript}</head>`) : `${initScript}${html}`;
+    return new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  });
+};
 
 const normalizeNotificationInput = (raw) => {
   if (!raw || typeof raw !== 'object') return {};
@@ -794,6 +849,7 @@ const spawnLocalServer = async () => {
     host: bindHost,
     attachSignals: false,
     exitOnShutdown: false,
+    apiOnly: shouldUsePackagedUi(),
     onDesktopNotification: (payload) => maybeShowNativeNotification(payload),
   });
 
@@ -834,14 +890,16 @@ const macosMajorVersion = () => {
   return major === 10 ? minor : major;
 };
 
-const buildInitScript = (localOrigin, bootOutcome) => {
+const buildInitScript = (localOrigin, bootOutcome, apiBaseUrl = '', clientToken = '') => {
   const home = JSON.stringify(os.homedir() || '');
   const local = JSON.stringify(localOrigin || '');
+  const apiBase = JSON.stringify(apiBaseUrl || '');
+  const token = JSON.stringify(clientToken || '');
   const macVersion = macosMajorVersion();
   const outcome = JSON.stringify(bootOutcome ?? null);
   return [
     '(function(){',
-    `try{window.__OPENCHAMBER_HOME__=${home};window.__OPENCHAMBER_MACOS_MAJOR__=${macVersion};window.__OPENCHAMBER_LOCAL_ORIGIN__=${local};var __oc_bo=${outcome};if(__oc_bo){window.__OPENCHAMBER_DESKTOP_BOOT_OUTCOME__=__oc_bo;}}catch(_e){}`,
+    `try{window.__OPENCHAMBER_HOME__=${home};window.__OPENCHAMBER_MACOS_MAJOR__=${macVersion};window.__OPENCHAMBER_LOCAL_ORIGIN__=${local};window.__OPENCHAMBER_API_BASE_URL__=${apiBase};window.__OPENCHAMBER_CLIENT_TOKEN__=${token};var __oc_bo=${outcome};if(__oc_bo){window.__OPENCHAMBER_DESKTOP_BOOT_OUTCOME__=__oc_bo;}}catch(_e){}`,
     '}())',
   ].join('');
 };
@@ -1031,25 +1089,30 @@ const switchToHostById = async (rawId) => {
   if (!id) return;
   const config = readDesktopHostsConfig();
   let targetUrl = null;
+  let apiBaseUrl = null;
+  let clientToken = '';
   if (id === LOCAL_HOST_ID) {
-    targetUrl = state.sidecarUrl || state.localOrigin;
+    targetUrl = shouldUsePackagedUi() ? buildPackagedUiUrl('/index.html') : (state.sidecarUrl || state.localOrigin);
+    apiBaseUrl = state.sidecarUrl;
   } else {
     const host = config.hosts.find((entry) => entry.id === id);
     if (!host) {
       log.warn('[electron] deep-link host not found:', id);
       return;
     }
-    targetUrl = host.url;
+    targetUrl = shouldUsePackagedUi() ? buildPackagedUiUrl('/index.html') : host.url;
+    apiBaseUrl = host.apiUrl || host.url;
+    clientToken = host.clientToken || '';
   }
-  if (!targetUrl) {
+  if (!targetUrl || !apiBaseUrl) {
     log.warn('[electron] deep-link host has no target URL:', id);
     return;
   }
   const bootOutcome = id === LOCAL_HOST_ID
     ? { target: 'local', status: 'ok' }
-    : { target: 'remote', status: 'ok', hostId: id, url: targetUrl };
+    : { target: 'remote', status: 'ok', hostId: id, url: apiBaseUrl };
   log.info('[electron] switching to host', { id, bootOutcome });
-  await activateMainWindow(targetUrl, state.localOrigin, bootOutcome);
+  await activateMainWindow(targetUrl, state.localOrigin, bootOutcome, { apiBaseUrl, clientToken });
 };
 
 const dispatchDeepLink = (link) => {
@@ -1150,6 +1213,8 @@ const createBrowserWindow = ({ label, restoreGeometry, url }) => {
   const saved = restoreGeometry ? readWindowState() : null;
   const useSaved = saved && typeof saved.width === 'number' && typeof saved.height === 'number';
   const desktopLocalOrigin = state.localOrigin || '';
+  const desktopApiBaseUrl = state.apiBaseUrl || '';
+  const desktopClientToken = state.clientToken || '';
   const desktopHome = os.homedir() || '';
   const desktopMacosMajor = String(macosMajorVersion());
   const options = {
@@ -1168,6 +1233,8 @@ const createBrowserWindow = ({ label, restoreGeometry, url }) => {
     webPreferences: {
       additionalArguments: [
         `--openchamber-local-origin=${desktopLocalOrigin}`,
+        `--openchamber-api-base-url=${desktopApiBaseUrl}`,
+        `--openchamber-client-token=${desktopClientToken}`,
         `--openchamber-home=${desktopHome}`,
         `--openchamber-macos-major=${desktopMacosMajor}`,
         `--openchamber-boot-outcome=${JSON.stringify(state.bootOutcome || null)}`,
@@ -1344,10 +1411,12 @@ const createBrowserWindow = ({ label, restoreGeometry, url }) => {
   return browserWindow;
 };
 
-const activateMainWindow = async (url, localOrigin, bootOutcome) => {
+const activateMainWindow = async (url, localOrigin, bootOutcome, runtimeConfig = {}) => {
   state.localOrigin = localOrigin;
+  state.apiBaseUrl = typeof runtimeConfig.apiBaseUrl === 'string' ? runtimeConfig.apiBaseUrl : state.apiBaseUrl;
+  state.clientToken = typeof runtimeConfig.clientToken === 'string' ? runtimeConfig.clientToken : '';
   state.bootOutcome = bootOutcome ?? null;
-  state.initScript = buildInitScript(localOrigin, state.bootOutcome);
+  state.initScript = buildInitScript(localOrigin, state.bootOutcome, state.apiBaseUrl, state.clientToken);
 
   const mainWindow = state.mainWindow;
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1383,7 +1452,7 @@ const buildMiniChatUrl = ({ mode, sessionId, directory, projectId }) => {
     throw new Error('Local UI is not available');
   }
 
-  const url = new URL('/mini-chat.html', base);
+  const url = new URL(shouldUsePackagedUi() ? buildPackagedUiUrl('/mini-chat.html') : '/mini-chat.html', base);
   url.searchParams.set('mode', mode === 'session' ? 'session' : 'draft');
   if (sessionId) url.searchParams.set('sessionId', sessionId);
   if (directory) url.searchParams.set('directory', directory);
@@ -1513,35 +1582,44 @@ const resolveInitialUrl = async () => {
     ? 'http://127.0.0.1:3901'
     : await spawnLocalServer();
 
-  const localUiUrl = isDev && await waitForHealth('http://127.0.0.1:5173', 8_000, 100)
+  const localUiUrl = shouldUsePackagedUi()
+    ? buildPackagedUiUrl('/index.html')
+    : isDev && await waitForHealth('http://127.0.0.1:5173', 8_000, 100)
     ? 'http://127.0.0.1:5173'
     : localUrl;
 
   state.sidecarUrl = localUrl;
   const localAvailable = Boolean(localUrl);
 
-  const localOrigin = new URL(localUiUrl).origin;
+  const localOrigin = shouldUsePackagedUi() ? packagedUiOrigin() : new URL(localUiUrl).origin;
   let initialUrl = localUiUrl;
+  let apiBaseUrl = localUrl;
+  let clientToken = '';
   let remoteProbe = null;
 
   const envTarget = normalizeHostUrl(process.env.OPENCHAMBER_SERVER_URL || '');
   const config = readDesktopHostsConfig();
   if (envTarget) {
-    initialUrl = envTarget;
+    apiBaseUrl = envTarget;
+    initialUrl = shouldUsePackagedUi() ? localUiUrl : envTarget;
   } else if (config.defaultHostId && config.defaultHostId !== LOCAL_HOST_ID) {
     const host = config.hosts.find((entry) => entry.id === config.defaultHostId);
     if (host?.url) {
-      initialUrl = host.url;
+      apiBaseUrl = host.apiUrl || host.url;
+      clientToken = host.clientToken || '';
+      initialUrl = shouldUsePackagedUi() ? localUiUrl : host.url;
     }
   }
 
-  if (initialUrl !== localUiUrl) {
-    remoteProbe = await probeHostWithTimeout(initialUrl, 2_000);
+  if (apiBaseUrl && apiBaseUrl !== localUrl) {
+    remoteProbe = await probeHostWithTimeout(apiBaseUrl, 2_000);
     if (remoteProbe.status === 'unreachable') {
-      remoteProbe = await probeHostWithTimeout(initialUrl, 10_000);
+      remoteProbe = await probeHostWithTimeout(apiBaseUrl, 10_000);
     }
     if (remoteProbe.status === 'unreachable') {
-      state.unreachableHosts.add(initialUrl);
+      state.unreachableHosts.add(apiBaseUrl);
+      apiBaseUrl = localUrl;
+      clientToken = '';
       initialUrl = localUiUrl;
     }
   }
@@ -1553,7 +1631,7 @@ const resolveInitialUrl = async () => {
     localAvailable,
   });
 
-  return { initialUrl, localOrigin, localUiUrl, bootOutcome };
+  return { initialUrl, localOrigin, localUiUrl, bootOutcome, apiBaseUrl, clientToken };
 };
 
 const compareSemver = (left, right) => {
@@ -2106,7 +2184,7 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
         config: updatedConfig,
         localAvailable: Boolean(state.sidecarUrl || state.localOrigin),
       });
-      state.initScript = buildInitScript(state.localOrigin, state.bootOutcome);
+      state.initScript = buildInitScript(state.localOrigin, state.bootOutcome, state.apiBaseUrl, state.clientToken);
       log.info('[electron] hosts config updated, recomputed bootOutcome', state.bootOutcome);
       return null;
     }
@@ -2275,12 +2353,13 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
 
     case 'desktop_new_window': {
       const config = readDesktopHostsConfig();
-      const localUiUrl = state.sidecarUrl || state.localOrigin;
+      const localUiUrl = shouldUsePackagedUi() ? buildPackagedUiUrl('/index.html') : (state.sidecarUrl || state.localOrigin);
       let targetUrl = localUiUrl;
       if (config.defaultHostId && config.defaultHostId !== LOCAL_HOST_ID) {
         const host = config.hosts.find((entry) => entry.id === config.defaultHostId);
-        if (host?.url && !state.unreachableHosts.has(host.url)) {
-          targetUrl = host.url;
+        const apiUrl = host?.apiUrl || host?.url;
+        if (host?.url && apiUrl && !state.unreachableHosts.has(apiUrl)) {
+          targetUrl = shouldUsePackagedUi() ? buildPackagedUiUrl('/index.html') : host.url;
         }
       }
       await createAdditionalWindow(targetUrl);
@@ -2502,6 +2581,7 @@ const isLocalSender = (webContents) => {
     if (!raw) return false;
     if (raw.startsWith('file://') || raw === 'about:blank') return true;
     const url = new URL(raw);
+    if (url.protocol === `${UI_PROTOCOL}:` && url.hostname === 'app') return true;
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
     const hostname = url.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true;
@@ -2620,11 +2700,14 @@ app.on('activate', async () => {
 
   if (state.localOrigin) {
     const config = readDesktopHostsConfig();
-    const localUiUrl = state.sidecarUrl || state.localOrigin;
+    const localUiUrl = shouldUsePackagedUi() ? buildPackagedUiUrl('/index.html') : (state.sidecarUrl || state.localOrigin);
     const host = config.defaultHostId && config.defaultHostId !== LOCAL_HOST_ID
       ? config.hosts.find((entry) => entry.id === config.defaultHostId)
       : null;
-    const targetUrl = host?.url && !state.unreachableHosts.has(host.url) ? host.url : localUiUrl;
+    const apiUrl = host?.apiUrl || host?.url;
+    const targetUrl = host?.url && apiUrl && !state.unreachableHosts.has(apiUrl)
+      ? (shouldUsePackagedUi() ? buildPackagedUiUrl('/index.html') : host.url)
+      : localUiUrl;
     await createAdditionalWindow(targetUrl);
   }
 });
@@ -2637,6 +2720,7 @@ app.whenReady().then(async () => {
     arch: process.arch,
   });
   nativeTheme.themeSource = readThemeSource();
+  registerPackagedUiProtocol();
   setupAutoUpdater();
 
   if (process.platform === 'darwin') {
@@ -2652,8 +2736,8 @@ app.whenReady().then(async () => {
   const initial = extractInitialDeepLinks();
   if (initial.length > 0) handleDeepLinks(initial);
 
-  const { initialUrl, localOrigin, bootOutcome } = await resolveInitialUrl();
-  await activateMainWindow(initialUrl, localOrigin, bootOutcome);
+  const { initialUrl, localOrigin, bootOutcome, apiBaseUrl, clientToken } = await resolveInitialUrl();
+  await activateMainWindow(initialUrl, localOrigin, bootOutcome, { apiBaseUrl, clientToken });
 
   // Notify renderer on OS wake-from-sleep so the SSE event pipeline can
   // reconnect immediately instead of waiting for the heartbeat watchdog.
