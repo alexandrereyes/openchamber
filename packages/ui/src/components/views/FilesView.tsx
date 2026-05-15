@@ -501,7 +501,7 @@ const Dialogs: React.FC<DialogsProps> = ({
 
   return (
     <Dialog open={!!activeDialog} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
+      <DialogContent initialFocus={inputRef}>
         <DialogHeader>
           <DialogTitle>
             {activeDialog === 'createFile' && t('filesView.dialog.createFile.title')}
@@ -1257,12 +1257,6 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
   }, [activeDialog, dialogData, dialogInputValue, files, refreshDirectory, isMobile, removeOpenPathsByPrefix, root, selectedFile?.path, setSelectedPath, t]);
 
   React.useEffect(() => {
-    if (activeDialog) {
-      dialogInputRef.current?.focus();
-    }
-  }, [activeDialog]);
-
-  React.useEffect(() => {
     if (!currentDirectory) {
       setSearchResults([]);
       setSearching(false);
@@ -1353,9 +1347,12 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
     return null;
   }, [files]);
 
-  const displayedContent = fileContent.length > MAX_VIEW_CHARS
-    ? `${fileContent.slice(0, MAX_VIEW_CHARS)}\n\n… truncated …`
-    : fileContent;
+  const displayedContent = React.useMemo(() =>
+    fileContent.length > MAX_VIEW_CHARS
+      ? `${fileContent.slice(0, MAX_VIEW_CHARS)}\n\n… truncated …`
+      : fileContent,
+    [fileContent]
+  );
 
   const isDirty = draftContent !== displayedContent;
 
