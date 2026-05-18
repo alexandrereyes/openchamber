@@ -956,7 +956,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
     const isCurrentRequest = () => activeDirectoryLoadIdsRef.current.get(normalizedDir) === requestId;
 
     const respectGitignore = !showGitignored;
-    const listPromise = runtime.isDesktop
+    const listPromise = files.listDirectory
       ? files.listDirectory(normalizedDir, { respectGitignore }).then((result) => result.entries.map((entry) => ({
         name: entry.name,
         path: entry.path,
@@ -1000,7 +1000,7 @@ export const FilesView: React.FC<FilesViewProps> = ({ mode = 'full' }) => {
         inFlightDirsRef.current = new Set(inFlightDirsRef.current);
         inFlightDirsRef.current.delete(normalizedDir);
       });
-  }, [files, mapDirectoryEntries, runtime.isDesktop, showGitignored]);
+  }, [files, mapDirectoryEntries, showGitignored]);
 
   const refreshRoot = React.useCallback(async () => {
     if (!root) {

@@ -66,6 +66,17 @@ function waitForExit(child, timeoutMs) {
   });
 }
 
+function killWindowsProcessTree(pid) {
+  if (!pid) return;
+  try {
+    spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
+  } catch {
+  }
+}
+
 function signalChild(child, signal) {
   if (!child || child.exitCode !== null || child.signalCode !== null) {
     return;
@@ -92,6 +103,11 @@ async function stopChildTree(child) {
 
   signalChild(child, 'SIGINT');
   await waitForExit(child, 2500);
+
+  if (process.platform === 'win32' && child.exitCode === null && child.signalCode === null) {
+    killWindowsProcessTree(child.pid);
+    await waitForExit(child, 1000);
+  }
 
   if (child.exitCode === null && child.signalCode === null) {
     signalChild(child, 'SIGTERM');
