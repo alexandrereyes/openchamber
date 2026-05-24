@@ -34,7 +34,12 @@ try {
     '--output-partial-info-plist', path.join(tmpDir, 'partial.plist'),
   ], { stdio: 'inherit' });
 
-  fs.copyFileSync(path.join(tmpDir, 'Assets.car'), outputAssetsPath);
+  const generatedAssetsPath = path.join(tmpDir, 'Assets.car');
+  if (!fs.existsSync(generatedAssetsPath)) {
+    throw new Error(`actool did not generate Assets.car at ${generatedAssetsPath}`);
+  }
+
+  fs.copyFileSync(generatedAssetsPath, outputAssetsPath);
   console.log(`Generated ${outputAssetsPath}`);
 } finally {
   fs.rmSync(tmpDir, { recursive: true, force: true });

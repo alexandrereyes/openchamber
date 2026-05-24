@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-module.exports = async (context) => {
+module.exports = (context) => {
   if (context.electronPlatformName !== 'darwin') return;
 
   const appName = context.packager.appInfo.productFilename;
