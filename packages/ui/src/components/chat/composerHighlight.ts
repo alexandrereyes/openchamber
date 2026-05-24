@@ -146,13 +146,38 @@ function scanInline(segment: string, base: number, out: HighlightRange[]): void 
  * headings, blockquotes, list markers) are detected per line; inline spans are
  * scanned within non-fenced lines.
  */
+const FENCE_OPEN = /^(\s*)(`{3,}|~{3,})\s*(\S*)/;
+
+export interface FenceOpen {
+    /** The full opening fence run, e.g. "```" or "~~~~". */
+    marker: string;
+    /** First info-string token (the language), or '' when absent. */
+    lang: string;
+}
+
+/** Recognize an opening code fence line (3+ backticks or tildes). */
+export function matchFenceOpen(line: string): FenceOpen | null {
+    const match = FENCE_OPEN.exec(line);
+    return match ? { marker: match[2], lang: match[3] || '' } : null;
+}
+
+/**
+ * A closing fence: the same fence character, at least as long as the opening
+ * run, and nothing but whitespace after it — so a `` ```js `` line inside a
+ * block is treated as content, not a close. Shared with highlightFencedCode so
+ * both agree on fence boundaries.
+ */
+export function isFenceClose(line: string, openMarker: string): boolean {
+    return new RegExp(`^\\s*\\${openMarker[0]}{${openMarker.length},}\\s*$`).test(line);
+}
+
 export function tokenizeMarkdown(text: string): HighlightRange[] {
     const ranges: HighlightRange[] = [];
     if (!text) return ranges;
 
     let offset = 0;
     let inFence = false;
-    let fenceChar = '';
+    let openMarker = '';
 
     const lines = text.split('\n');
     for (let li = 0; li < lines.length; li += 1) {
@@ -162,20 +187,18 @@ export function tokenizeMarkdown(text: string): HighlightRange[] {
         // Advance past this line plus its trailing newline for the next iteration.
         offset = lineEnd + 1;
 
-        const fenceMatch = /^(\s*)(`{3,}|~{3,})/.exec(line);
-        if (fenceMatch) {
-            const marker = fenceMatch[2][0];
-            if (!inFence) {
-                inFence = true;
-                fenceChar = marker;
-            } else if (marker === fenceChar) {
+        if (inFence) {
+            ranges.push({ start: lineStart, end: lineEnd, style: 'codeFence' });
+            if (isFenceClose(line, openMarker)) {
                 inFence = false;
             }
-            ranges.push({ start: lineStart, end: lineEnd, style: 'codeFence' });
             continue;
         }
 
-        if (inFence) {
+        const fenceOpen = matchFenceOpen(line);
+        if (fenceOpen) {
+            inFence = true;
+            openMarker = fenceOpen.marker;
             ranges.push({ start: lineStart, end: lineEnd, style: 'codeFence' });
             continue;
         }
@@ -242,21 +265,43 @@ export function buildHighlightParts(
     }
     const sorted = [...bounds].sort((a, b) => a - b);
 
+    // Sweep the boundaries keeping an "active" set of ranges covering the
+    // current segment, so each segment costs O(active) instead of O(ranges).
+    // (Boundaries include every range start/end, so any active range that has
+    // started and not ended necessarily spans the whole segment.)
+    // Keep original index so ties (equal priority) resolve to the earliest
+    // range in input order — matching the prior straight O(n) scan.
+    const byStart = ranges
+        .map((range, index) => ({ range, index }))
+        .filter((item) => item.range.end > item.range.start)
+        .sort((a, b) => a.range.start - b.range.start);
+
     const parts: HighlightPart[] = [];
+    const active: Array<{ range: HighlightRange; index: number }> = [];
+    let nextRange = 0;
+
     for (let i = 0; i < sorted.length - 1; i += 1) {
         const segStart = sorted[i];
         const segEnd = sorted[i + 1];
         if (segEnd <= segStart) continue;
 
+        while (nextRange < byStart.length && byStart[nextRange].range.start <= segStart) {
+            active.push(byStart[nextRange]);
+            nextRange += 1;
+        }
+        for (let a = active.length - 1; a >= 0; a -= 1) {
+            if (active[a].range.end <= segStart) active.splice(a, 1);
+        }
+
         let bestRange: HighlightRange | null = null;
         let bestPriority = -1;
-        for (const range of ranges) {
-            if (range.start <= segStart && range.end >= segEnd) {
-                const priority = range.priority ?? STYLE_PRIORITY[range.style];
-                if (priority > bestPriority) {
-                    bestPriority = priority;
-                    bestRange = range;
-                }
+        let bestIndex = Infinity;
+        for (const { range, index } of active) {
+            const priority = range.priority ?? STYLE_PRIORITY[range.style];
+            if (priority > bestPriority || (priority === bestPriority && index < bestIndex)) {
+                bestPriority = priority;
+                bestIndex = index;
+                bestRange = range;
             }
         }
 

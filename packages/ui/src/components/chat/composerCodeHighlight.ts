@@ -15,7 +15,7 @@
 import { Language } from '@codemirror/language';
 import { highlightTree, tagHighlighter, tags as t } from '@lezer/highlight';
 import { codeBlockLanguageResolver } from '@/lib/codemirror/languageByExtension';
-import type { HighlightRange } from './composerHighlight';
+import { isFenceClose, matchFenceOpen, type HighlightRange } from './composerHighlight';
 
 const CODE_BG = 'bg-[var(--surface-subtle)]';
 // Within a highlighted block: a neutral base (just above the uniform codeFence
@@ -78,7 +78,9 @@ const pickSyntaxClass = (classes: string): string | null => {
     return best ? KEY_CLASS[best] : null;
 };
 
-const OPEN_FENCE = /^(\s*)(`{3,}|~{3,})\s*([A-Za-z0-9+#._-]*)\s*$/;
+// Cap per-block parsing so a giant pasted block can't stall the keystroke path;
+// such blocks still get the neutral code base, just no per-token coloring.
+const MAX_PARSE_LENGTH = 20_000;
 
 const resolveSyncLanguage = (info: string): Language | null => {
     if (!info) return null;
@@ -96,7 +98,7 @@ const resolveSyncLanguage = (info: string): Language | null => {
  * being typed) is highlighted up to the end of the text.
  */
 export function highlightFencedCode(text: string): HighlightRange[] {
-    if (!text || !text.includes('```')) return [];
+    if (!text || (!text.includes('```') && !text.includes('~~~'))) return [];
 
     const ranges: HighlightRange[] = [];
     const lines = text.split('\n');
@@ -106,21 +108,19 @@ export function highlightFencedCode(text: string): HighlightRange[] {
         const line = lines[i];
         offset += line.length + 1; // advance to the start of the next line
 
-        const open = OPEN_FENCE.exec(line);
-        if (!open) continue;
+        const fenceOpen = matchFenceOpen(line);
+        if (!fenceOpen) continue;
 
-        const fence = open[2];
-        const lang = resolveSyncLanguage(open[3]);
+        const lang = resolveSyncLanguage(fenceOpen.lang);
 
         // Collect the body up to the matching closing fence (or end of text).
         const bodyStart = offset;
         const bodyLines: string[] = [];
-        const closeRegex = new RegExp(`^\\s*\\${fence[0]}{${fence.length},}\\s*$`);
         let k = i + 1;
         let cursor = offset;
         for (; k < lines.length; k += 1) {
             const bodyLine = lines[k];
-            if (closeRegex.test(bodyLine)) {
+            if (isFenceClose(bodyLine, fenceOpen.marker)) {
                 cursor += bodyLine.length + 1;
                 break;
             }
@@ -147,6 +147,8 @@ export function highlightFencedCode(text: string): HighlightRange[] {
             className: `${CODE_BG} text-[var(--syntax-foreground)]`,
             priority: NEUTRAL_BASE_PRIORITY,
         });
+
+        if (code.length > MAX_PARSE_LENGTH) continue;
 
         try {
             const tree = lang.parser.parse(code);
