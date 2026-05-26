@@ -19,7 +19,9 @@ const __dirname = path.dirname(__filename);
 const isDev = process.env.OPENCHAMBER_ELECTRON_DEV === '1' || !app.isPackaged;
 
 const DEEP_LINK_PROTOCOL = 'openchamber';
-const APP_USER_MODEL_ID = 'dev.openchamber.desktop';
+const PACKAGED_APP_USER_MODEL_ID = 'dev.openchamber.desktop';
+const DEV_APP_USER_MODEL_ID = 'dev.openchamber.desktop.dev';
+const APP_USER_MODEL_ID = app.isPackaged ? PACKAGED_APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID;
 const BACKGROUND_START_ARG = '--background';
 
 const readLoginItemSettings = () => {
@@ -39,16 +41,16 @@ const shouldStartInBackground = (loginItemSettings = readLoginItemSettings()) =>
   );
 };
 
-if (!app.requestSingleInstanceLock()) {
-  app.exit(0);
-  process.exit(0);
-}
-
 // Set the product name early so electron-log derives its log directory as
 // ~/Library/Logs/OpenChamber/ (not ~/Library/Logs/@openchamber/electron/).
 app.setName('OpenChamber');
 app.setAppUserModelId(APP_USER_MODEL_ID);
 app.commandLine.appendSwitch('proxy-bypass-list', '<-loopback>');
+
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+  process.exit(0);
+}
 
 try {
   process.chdir(os.homedir());
@@ -1257,6 +1259,16 @@ const readThemeSource = () => {
   return 'system';
 };
 
+const getWindowIconPath = () => {
+  if (process.platform !== 'win32' && process.platform !== 'linux') {
+    return undefined;
+  }
+  const iconPath = isDev
+    ? path.join(__dirname, 'resources', 'icons', 'icon.ico')
+    : path.join(process.resourcesPath, 'icons', 'icon.ico');
+  return fs.existsSync(iconPath) ? iconPath : undefined;
+};
+
 const canUseTitleBarOverlay = (browserWindow) => (
   process.platform === 'win32' &&
   Boolean(browserWindow?.__ocTitleBarOverlayEnabled) &&
@@ -1274,6 +1286,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url }) => {
   const usesCustomTitleBar = process.platform === 'darwin' || process.platform === 'win32';
   const titleBarOverlayEnabled = false;
   const autoHidesNativeMenuBar = process.platform !== 'darwin';
+  const windowIconPath = getWindowIconPath();
   const options = {
     title: 'OpenChamber',
     ...(Number.isFinite(restoredBounds?.x) && Number.isFinite(restoredBounds?.y)
@@ -1283,6 +1296,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url }) => {
     height: restoredBounds?.height ?? 800,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
+    icon: windowIconPath,
     show: false,
     backgroundColor: '#151313',
     frame: process.platform === 'win32' ? false : undefined,
@@ -1561,6 +1575,7 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
     height: MINI_CHAT_WINDOW_HEIGHT,
     minWidth: MINI_CHAT_MIN_WINDOW_WIDTH,
     minHeight: MINI_CHAT_MIN_WINDOW_HEIGHT,
+    icon: getWindowIconPath(),
     show: false,
     backgroundColor: '#151313',
     titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
