@@ -613,6 +613,11 @@ const MobileHeader: React.FC<{
       });
   }, [dropdownProviderIds, quotaResults, selectedQuotaModels, t]);
 
+  React.useEffect(() => {
+    if (!metadataOpen || usageGroups.length === 0) return;
+    preloadProviderLogos(usageGroups.map((group) => group.providerId));
+  }, [metadataOpen, usageGroups]);
+
   const handleOpenSessions = React.useCallback(() => {
     setMetadataOpen(false);
     onOpenSessions();
