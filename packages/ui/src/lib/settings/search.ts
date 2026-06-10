@@ -178,13 +178,6 @@ export const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['changed files', 'turns'],
   },
   {
-    id: 'chat.mobile-status-bar',
-    page: 'chat',
-    titleKey: 'settings.openchamber.visual.field.showMobileStatusBar',
-    keywords: ['mobile', 'status bar'],
-    isAvailable: (ctx) => ctx.isMobile,
-  },
-  {
     id: 'chat.dotfiles',
     page: 'chat',
     titleKey: 'settings.openchamber.visual.field.showDotfiles',

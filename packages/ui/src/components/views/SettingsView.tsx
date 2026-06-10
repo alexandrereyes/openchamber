@@ -36,11 +36,13 @@ import { SnippetsPage } from '@/components/sections/snippets/SnippetsPage';
 import { GitPage } from '@/components/sections/git-identities/GitPage';
 import type { OpenChamberSection } from '@/components/sections/openchamber/types';
 import { OpenChamberPage } from '@/components/sections/openchamber/OpenChamberPage';
+import { AboutSettings } from '@/components/sections/openchamber/AboutSettings';
 import { useDeviceInfo } from '@/lib/device';
 import { isDesktopLocalOriginActive, isDesktopShell, isVSCodeRuntime, isWebRuntime } from '@/lib/desktop';
 import { useI18n } from '@/lib/i18n';
 import { Icon } from "@/components/icon/Icon";
 import type { IconName } from "@/components/icon/icons";
+import { McpIcon } from '@/components/icons/McpIcon';
 import { reloadOpenCodeConfiguration } from '@/stores/useAgentsStore';
 import {
   SETTINGS_PAGE_METADATA,
@@ -76,6 +78,7 @@ interface SettingsViewProps {
   isWindowed?: boolean;
   /** Restrict top-level settings navigation to a specific product surface. */
   visiblePageSlugs?: SettingsPageSlug[];
+  initialMobileStage?: MobileStage;
 }
 
 const pageOrder: SettingsPageSlug[] = [
@@ -100,6 +103,7 @@ const pageOrder: SettingsPageSlug[] = [
   'skills.catalog',
   'voice',
   'tunnel',
+  'about',
 ];
 
 const SNIPPETS_SETTINGS_ICON = { icon: 'chat-thread' } as const;
@@ -191,7 +195,7 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
     case 'commands':
       return 'slash-commands-2';
     case 'mcp':
-      return 'plug-2';
+      return null;
     case 'plugins':
       return 'code-box';
 
@@ -209,6 +213,8 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
       return 'mic';
     case 'tunnel':
       return 'global';
+    case 'about':
+      return 'information';
     case 'home':
       return null;
     default:
@@ -292,7 +298,7 @@ const SettingsHome: React.FC<{ onOpen: (slug: SettingsPageSlug) => void }> = ({ 
   );
 };
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile, isWindowed, visiblePageSlugs }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile, isWindowed, visiblePageSlugs, initialMobileStage = 'nav' }) => {
   const { t } = useI18n();
   const deviceInfo = useDeviceInfo();
   const isMobile = forceMobile ?? deviceInfo.isMobile;
@@ -302,7 +308,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
   const setSettingsPage = useUIStore((state) => state.setSettingsPage);
   const settingsSlug = resolveSettingsSlug(settingsPageRaw);
 
-  const [mobileStage, setMobileStage] = React.useState<MobileStage>('nav');
+  const [mobileStage, setMobileStage] = React.useState<MobileStage>(initialMobileStage);
   const autoNavSlugRef = React.useRef<string | null>(null);
 
   const [navWidth, setNavWidth] = React.useState(216);
@@ -515,6 +521,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return t('settings.page.voice.title');
       case 'tunnel':
         return t('settings.page.tunnel.title');
+      case 'about':
+        return t('settings.page.about.title');
       case 'home':
       default:
         return t('settings.view.home.title');
@@ -788,6 +796,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return <ProvidersPage />;
       case 'usage':
         return <UsagePage />;
+      case 'about':
+        return <div className="h-full overflow-auto px-5 py-6"><AboutSettings /></div>;
       case 'magic-prompts':
         return <MagicPromptsPage />;
       case 'snippets':
@@ -995,7 +1005,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
             ) : sortedFilteredPages.map((page) => {
               const selected = settingsSlug === page.slug;
               const iconName = getSettingsNavIcon(page.slug);
-              if (!iconName) return null;
+              if (!iconName && page.slug !== 'mcp') return null;
 
               return (
                 <Tooltip key={page.slug}>
@@ -1011,7 +1021,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
                           : 'text-foreground hover:bg-interactive-hover'
                       )}
                     >
-                      <Icon name={iconName} className="h-4 w-4 shrink-0" />
+                      {page.slug === 'mcp'
+                        ? <McpIcon className="h-4 w-4 shrink-0" />
+                        : <Icon name={iconName!} className="h-4 w-4 shrink-0" />}
                       <span className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden transition-opacity duration-150 opacity-100">
                         <span className="typography-ui-label font-normal truncate">{getPageTitle(page.slug)}</span>
                         {(page.slug === 'voice' || page.slug === 'tunnel') && (
