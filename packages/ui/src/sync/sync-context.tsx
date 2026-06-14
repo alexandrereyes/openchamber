@@ -1710,16 +1710,26 @@ export function SyncProvider(props: {
             }),
           })
 
-          // VS Code race: if sessions are still empty after bootstrap, OpenCode
-          // wasn't ready yet (bridge returned 503). Retry a few times.
-          const state = store.getState()
-          if (state.session.length === 0 && attempt < 5) {
-            console.warn(`[bootstrap] sessions empty for ${directory} after attempt ${attempt + 1}; retrying in 2s`)
-            await new Promise((r) => setTimeout(r, 2000))
-            store.setState({ status: "loading" as const })
-            await runBootstrap(attempt + 1)
-          } else if (state.session.length === 0) {
-            console.warn(`[bootstrap] sessions empty for ${directory} after ${attempt + 1} attempts; giving up`)
+          // VS Code-only race: the bridge can answer with an empty 200 (instead
+          // of a retryable 503) while OpenCode is still warming up, which the two
+          // retry layers inside loadSessions can't catch. Re-run a few times there.
+          //
+          // On web/desktop this retry is both redundant and harmful: loadSessions
+          // already retries transient failures (listGlobalSessionPages throws on
+          // 5xx and retries internally), so an empty result here is AUTHORITATIVE —
+          // the directory genuinely has no sessions (e.g. a deleted worktree only
+          // referenced by archived sessions). Re-running the full bootstrap 6×2s
+          // per such directory is the startup log storm.
+          if (isVSCodeRuntime()) {
+            const state = store.getState()
+            if (state.session.length === 0 && attempt < 5) {
+              console.warn(`[bootstrap] sessions empty for ${directory} after attempt ${attempt + 1}; retrying in 2s`)
+              await new Promise((r) => setTimeout(r, 2000))
+              store.setState({ status: "loading" as const })
+              await runBootstrap(attempt + 1)
+            } else if (state.session.length === 0) {
+              console.warn(`[bootstrap] sessions empty for ${directory} after ${attempt + 1} attempts; giving up`)
+            }
           }
         }
 
