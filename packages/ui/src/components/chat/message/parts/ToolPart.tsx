@@ -1,6 +1,5 @@
 
 import React from 'react';
-import type { AnimationPlaybackControls } from 'motion';
 import { RuntimeAPIContext } from '@/contexts/runtimeAPIContext';
 import { PatchDiff } from '@pierre/diffs/react';
 import { cn } from '@/lib/utils';
@@ -201,28 +200,26 @@ const LiveDuration: React.FC<{ start: number; end?: number; active: boolean }> =
     return <>{formatDuration(start, end, now)}</>;
 };
 
-const EXPANDED_CONTENT_TRANSITION_MS = 0;
-
-const useAnimatedExpandedContent = (isExpanded: boolean) => {
-    const [shouldRender, setShouldRender] = React.useState(isExpanded);
+const useDeferredExpandedContent = (isExpanded: boolean) => {
+    const [shouldRender, setShouldRender] = React.useState(false);
 
     React.useEffect(() => {
-        if (typeof window === 'undefined') {
-            setShouldRender(isExpanded);
+        if (!isExpanded) {
+            setShouldRender(false);
             return;
         }
 
-        if (isExpanded) {
+        if (typeof window === 'undefined') {
             setShouldRender(true);
             return;
         }
 
-        const timer = window.setTimeout(() => {
-            setShouldRender(false);
-        }, EXPANDED_CONTENT_TRANSITION_MS);
+        const frame = window.requestAnimationFrame(() => {
+            setShouldRender(true);
+        });
 
         return () => {
-            window.clearTimeout(timer);
+            window.cancelAnimationFrame(frame);
         };
     }, [isExpanded]);
 
@@ -1981,8 +1978,6 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
     const onContentChangeRef = React.useRef(onContentChange);
     onContentChangeRef.current = onContentChange;
     const expandedContentRef = React.useRef<HTMLDivElement>(null);
-    const expandedContentAnimationRef = React.useRef<AnimationPlaybackControls | null>(null);
-    const expandedContentMountedRef = React.useRef(false);
 
     React.useLayoutEffect(() => {
         if (isTaskTool) {
@@ -1994,9 +1989,6 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
             return;
         }
 
-        expandedContentMountedRef.current = true;
-        expandedContentAnimationRef.current?.stop();
-        expandedContentAnimationRef.current = null;
         element.style.height = isExpanded ? 'auto' : '0px';
         element.style.overflow = isExpanded ? 'visible' : 'hidden';
 
@@ -2004,13 +1996,6 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
             onContentChangeRef.current?.('structural');
         }
     }, [isExpanded, isTaskTool, shouldNotifyStructuralChange]);
-
-    React.useEffect(() => {
-        return () => {
-            expandedContentAnimationRef.current?.stop();
-            expandedContentAnimationRef.current = null;
-        };
-    }, []);
 
     const stateWithData = state as ToolStateWithMetadata;
     const metadata = stateWithData.metadata;
@@ -2664,7 +2649,7 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
 
     const iconStyle = !isTaskTool && isError ? TOOL_ERROR_ICON_STYLE : TOOL_NORMAL_ICON_STYLE;
     const titleStyle = !isTaskTool && isError ? TOOL_ERROR_TITLE_STYLE : TOOL_NORMAL_TITLE_STYLE;
-    const shouldRenderExpandedContent = useAnimatedExpandedContent(isExpanded);
+    const shouldRenderExpandedContent = useDeferredExpandedContent(isExpanded);
 
     if (!shouldTreatAsFinalized && !isActive && !isTaskTool) {
         return null;
@@ -2824,10 +2809,6 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
                     {shouldRenderExpandedContent ? (
                         <div
                             className="relative ml-2 pl-3"
-                            style={{
-                                opacity: isExpanded ? 1 : 0,
-                                transform: isExpanded ? 'translateY(0)' : 'translateY(-4px)',
-                            }}
                         >
                             <span
                                 aria-hidden="true"
