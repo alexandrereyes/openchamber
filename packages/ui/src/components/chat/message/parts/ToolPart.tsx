@@ -200,6 +200,47 @@ const LiveDuration: React.FC<{ start: number; end?: number; active: boolean }> =
     return <>{formatDuration(start, end, now)}</>;
 };
 
+const deferredToolBodyMounts: Array<{ active: boolean; fn: () => void }> = [];
+let deferredToolBodyFrame: number | undefined;
+
+const flushDeferredToolBodyMounts = () => {
+    while (deferredToolBodyMounts.length > 0) {
+        const item = deferredToolBodyMounts.pop();
+        if (!item) {
+            break;
+        }
+        if (item.active) {
+            item.fn();
+            deferredToolBodyFrame = deferredToolBodyMounts.length > 0
+                ? window.requestAnimationFrame(flushDeferredToolBodyMounts)
+                : undefined;
+            return;
+        }
+    }
+
+    deferredToolBodyFrame = undefined;
+};
+
+const scheduleDeferredToolBodyMount = (fn: () => void) => {
+    if (typeof window === 'undefined') {
+        fn();
+        return () => undefined;
+    }
+
+    const item = { active: true, fn };
+    deferredToolBodyMounts.push(item);
+
+    if (deferredToolBodyFrame === undefined) {
+        deferredToolBodyFrame = window.requestAnimationFrame(() => {
+            deferredToolBodyFrame = window.requestAnimationFrame(flushDeferredToolBodyMounts);
+        });
+    }
+
+    return () => {
+        item.active = false;
+    };
+};
+
 const useDeferredExpandedContent = (isExpanded: boolean) => {
     const [shouldRender, setShouldRender] = React.useState(false);
 
@@ -209,18 +250,9 @@ const useDeferredExpandedContent = (isExpanded: boolean) => {
             return;
         }
 
-        if (typeof window === 'undefined') {
-            setShouldRender(true);
-            return;
-        }
-
-        const frame = window.requestAnimationFrame(() => {
+        return scheduleDeferredToolBodyMount(() => {
             setShouldRender(true);
         });
-
-        return () => {
-            window.cancelAnimationFrame(frame);
-        };
     }, [isExpanded]);
 
     return shouldRender;
@@ -2649,7 +2681,8 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
 
     const iconStyle = !isTaskTool && isError ? TOOL_ERROR_ICON_STYLE : TOOL_NORMAL_ICON_STYLE;
     const titleStyle = !isTaskTool && isError ? TOOL_ERROR_TITLE_STYLE : TOOL_NORMAL_TITLE_STYLE;
-    const shouldRenderExpandedContent = useDeferredExpandedContent(isExpanded);
+    const shouldRenderTaskSummary = useDeferredExpandedContent(isTaskTool && (taskSummaryEntries.length > 0 || isActive || shouldTreatAsFinalized || !!taskSessionId));
+    const shouldRenderExpandedContent = useDeferredExpandedContent(!isTaskTool && isExpanded);
 
     if (!shouldTreatAsFinalized && !isActive && !isTaskTool) {
         return null;
@@ -2782,7 +2815,7 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
             </div>
 
             {}
-            {isTaskTool && (taskSummaryEntries.length > 0 || isActive || shouldTreatAsFinalized || taskSessionId) ? (
+            {shouldRenderTaskSummary ? (
                 <TaskToolSummary
                     entries={taskSummaryEntries}
                     isExpanded={isExpanded}
