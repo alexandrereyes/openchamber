@@ -742,6 +742,7 @@ const normalizeCodeBlockText = (code: string, language: string): string => {
 };
 
 const CODE_HIGHLIGHT_SETTLE_MS = 300;
+const CODE_HIGHLIGHT_INITIAL_DELAY_MS = 80;
 const CODE_HIGHLIGHT_LINE_LIMIT = 1200;
 const VSCODE_CODE_HIGHLIGHT_LINE_LIMIT = 200;
 const CODE_SHARED_STYLE: React.CSSProperties = {
@@ -795,7 +796,7 @@ const MarkdownCodeBlock: React.FC<{
   syntaxTheme: { [key: string]: React.CSSProperties };
 }> = ({ code, language, syntaxTheme }) => {
   const [copied, setCopied] = React.useState(false);
-  const [highlight, setHighlight] = React.useState(true);
+  const [highlight, setHighlight] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<'code' | 'preview'>('code');
   const prevCodeRef = React.useRef<string>(code);
   const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -810,8 +811,34 @@ const MarkdownCodeBlock: React.FC<{
     }
   }, [canPreview, viewMode]);
 
+  React.useEffect(() => {
+    if (skipHighlight) {
+      setHighlight(false);
+      return;
+    }
+
+    if (typeof window === 'undefined') {
+      setHighlight(true);
+      return;
+    }
+
+    let frame: number | null = null;
+    const timer = window.setTimeout(() => {
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        setHighlight(true);
+      });
+    }, CODE_HIGHLIGHT_INITIAL_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame);
+      }
+    };
+  }, [skipHighlight]);
+
   // Defer Prism highlighting while code is actively streaming.
-  // Initial mount renders highlighted immediately (plays nice with finalized blocks).
   React.useEffect(() => {
     if (prevCodeRef.current === code) return;
     prevCodeRef.current = code;
