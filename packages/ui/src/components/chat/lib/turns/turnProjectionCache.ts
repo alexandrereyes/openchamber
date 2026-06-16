@@ -14,7 +14,7 @@ const getProjectionCacheMax = () => {
   return TURN_PROJECTION_CACHE_MAX;
 };
 
-const buildProjectionCacheKey = (
+export const buildProjectionCacheKey = (
   sessionKey: string,
   messages: ChatMessageEntry[],
   showTextJustificationActivity: boolean,
@@ -57,11 +57,3 @@ export const setCachedProjection = (
   projectionCache.set(key, projection);
 };
 
-export const buildAndSetProjectionCacheKey = (
-  sessionKey: string,
-  messages: ChatMessageEntry[],
-  showTextJustificationActivity: boolean,
-  showTurnChangedFiles: boolean,
-): string => {
-  return buildProjectionCacheKey(sessionKey, messages, showTextJustificationActivity, showTurnChangedFiles);
-};

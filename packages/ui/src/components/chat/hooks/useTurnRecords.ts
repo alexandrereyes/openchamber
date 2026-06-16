@@ -1,7 +1,7 @@
 import React from 'react';
 import { projectTurnRecords } from '../lib/turns/projectTurnRecords';
 import type { ChatMessageEntry, TurnProjectionResult, TurnRecord } from '../lib/turns/types';
-import { buildAndSetProjectionCacheKey, getCachedProjection, setCachedProjection } from '../lib/turns/turnProjectionCache';
+import { buildProjectionCacheKey, getCachedProjection, setCachedProjection } from '../lib/turns/turnProjectionCache';
 import { streamPerfMeasure } from '@/stores/utils/streamDebug';
 
 interface UseTurnRecordsOptions {
@@ -67,7 +67,7 @@ export const useTurnRecords = (
             });
             previousProjectionRef.current = nextProjection;
 
-            const cacheKey = buildAndSetProjectionCacheKey(
+            const cacheKey = buildProjectionCacheKey(
                 sessionKey,
                 messages,
                 options.showTextJustificationActivity,
