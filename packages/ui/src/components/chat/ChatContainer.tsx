@@ -135,6 +135,7 @@ type ChatViewportProps = {
     isDesktopExpandedInput: boolean;
     isMobile: boolean;
     stickyUserHeader: boolean;
+    directory?: string;
     scrollRef: React.RefObject<HTMLDivElement | null>;
     messageListRef: React.RefObject<MessageListHandle | null>;
     pendingRevealWork: boolean;
@@ -163,6 +164,7 @@ const ChatViewport = React.memo(({
     isDesktopExpandedInput,
     isMobile,
     stickyUserHeader,
+    directory,
     scrollRef,
     messageListRef,
     pendingRevealWork,
@@ -230,6 +232,7 @@ const ChatViewport = React.memo(({
                             isLoadingOlder={isLoadingOlder}
                             scrollToBottom={scrollToBottom}
                             scrollRef={scrollRef}
+                            directory={directory}
                         />
                         {(sessionQuestions.length > 0 || sessionPermissions.length > 0) && (
                             <div>
@@ -258,6 +261,7 @@ const ChatViewport = React.memo(({
         && prev.isDesktopExpandedInput === next.isDesktopExpandedInput
         && prev.isMobile === next.isMobile
         && prev.stickyUserHeader === next.stickyUserHeader
+        && prev.directory === next.directory
         && prev.scrollRef === next.scrollRef
         && prev.messageListRef === next.messageListRef
         && prev.pendingRevealWork === next.pendingRevealWork
@@ -402,7 +406,10 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
         effectiveSessionDirectory,
     );
     // Messages from sync system
-    const sessionMessageRecords = useSessionMessageRecords(currentSessionId ?? '', effectiveSessionDirectory);
+    const sessionMessageRecords = useSessionMessageRecords(currentSessionId ?? '', effectiveSessionDirectory, {
+        suspendPartUpdates: Boolean(streamingMessageId),
+        suspendPartUpdatesForMessageId: streamingMessageId,
+    });
     const sessionMessages = currentSessionId ? sessionMessageRecords : EMPTY_MESSAGES;
     const sessionPrefetchInfo = React.useSyncExternalStore(
         React.useCallback(
@@ -893,6 +900,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
                 isDesktopExpandedInput={isDesktopExpandedInput}
                 isMobile={isMobile}
                 stickyUserHeader={stickyUserHeader}
+                directory={effectiveSessionDirectory}
                 scrollRef={scrollRef}
                 messageListRef={messageListRef}
                 pendingRevealWork={timelineController.pendingRevealWork}

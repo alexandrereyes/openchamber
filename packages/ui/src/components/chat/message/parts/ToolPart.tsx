@@ -2274,6 +2274,25 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
         }
         return metadataTaskSummaryEntries;
     }, [childSessionTaskSummaryEntries, metadataTaskSummaryEntries]);
+    const taskSummaryRenderSignature = React.useMemo(() => {
+        return taskSummaryEntries.map(getTaskSummaryEntryRenderSignature).join('\u0000');
+    }, [taskSummaryEntries]);
+    const lastTaskSummaryRenderSignatureRef = React.useRef<string | null>(null);
+
+    React.useEffect(() => {
+        if (!isTaskTool) {
+            lastTaskSummaryRenderSignatureRef.current = null;
+            return;
+        }
+
+        const previous = lastTaskSummaryRenderSignatureRef.current;
+        lastTaskSummaryRenderSignatureRef.current = taskSummaryRenderSignature;
+        if (previous === null || previous === taskSummaryRenderSignature || taskSummaryEntries.length === 0) {
+            return;
+        }
+
+        onContentChangeRef.current?.('structural');
+    }, [isTaskTool, taskSummaryEntries.length, taskSummaryRenderSignature]);
 
     const diffStats = React.useMemo(() => {
         return (normalizedPartTool === 'edit' || normalizedPartTool === 'multiedit' || normalizedPartTool === 'apply_patch')
