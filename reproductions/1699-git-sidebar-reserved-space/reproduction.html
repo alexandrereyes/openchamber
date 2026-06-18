@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reproduction: RightSidebar leaves empty space after closing (#1699)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: #16213e;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    height: 48px;
+  }
+
+  .toolbar-title { font-weight: 600; font-size: 14px; }
+
+  .toolbar-actions { display: flex; gap: 8px; }
+
+  .toolbar-btn {
+    background: #0f3460;
+    color: #e0e0e0;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+  .toolbar-btn:hover { background: #1a4a7a; }
+  .toolbar-btn.active { background: #533483; border-color: #7b5ea7; }
+
+  .layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chat-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1a1a2e;
+    transition: flex 0.2s ease;
+    border-right: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .chat-content {
+    text-align: center;
+    padding: 24px;
+  }
+  .chat-content h2 { margin-bottom: 8px; font-weight: 500; }
+  .chat-content p { color: #888; font-size: 14px; }
+
+  /* Right sidebar — this is a reproduction of the BUGGY behavior */
+  .right-sidebar {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+    background: #16213e;
+    border-left: 1px solid rgba(255,255,255,0.1);
+    transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: width;
+    position: relative;
+  }
+  .right-sidebar.closed {
+    width: 0 !important;
+    border-left: none;
+  }
+
+  .right-sidebar-inner {
+    width: var(--oc-right-sidebar-width, 360px);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 16px;
+    overflow-y: auto;
+  }
+  .right-sidebar.closed .right-sidebar-inner {
+    opacity: 0;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .resize-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 20;
+    height: 100%;
+    width: 3px;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.15s;
+  }
+  .resize-handle:hover,
+  .resize-handle.resizing {
+    background: rgba(255,255,255,0.2);
+  }
+
+  /* State indicators */
+  .state-panel {
+    padding: 16px;
+    background: #0d1b2a;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    font-size: 12px;
+    font-family: monospace;
+  }
+  .state-panel .prop { margin-bottom: 4px; }
+  .state-panel .prop .label { color: #7b5ea7; }
+  .state-panel .prop .value { color: #e0e0e0; }
+  .state-panel .warn { color: #ff6b6b; font-weight: 600; }
+
+  .issue-demo {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 8px;
+    padding: 8px;
+    background: #1a1a2e;
+    border-radius: 4px;
+  }
+  .issue-demo button {
+    background: #533483;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .issue-demo button:hover { background: #6b44a8; }
+  .issue-demo button.danger { background: #c0392b; }
+  .issue-demo button.danger:hover { background: #e74c3c; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <div class="toolbar-title">OpenChamber — Chat</div>
+  <div class="toolbar-actions">
+    <button class="toolbar-btn active" id="toggleSidebarBtn" onclick="toggleSidebar()">
+      Toggle Git Panel
+    </button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="chat-area" id="chatArea">
+    <div class="chat-content">
+      <h2>💬 Conversation Area</h2>
+      <p>This area should expand when the sidebar is closed.</p>
+      <p>Width: <span id="chatWidth">100%</span></p>
+    </div>
+  </div>
+
+  <div class="right-sidebar closed" id="rightSidebar">
+    <div class="resize-handle" id="resizeHandle"></div>
+    <div class="right-sidebar-inner" id="sidebarInner">
+      <h3 style="margin-bottom: 12px; font-size: 14px; font-weight: 600;">📂 Git Management</h3>
+      <div style="color: #888; font-size: 13px;">
+        <p>Branch: main</p>
+        <p>Status: clean</p>
+        <p style="margin-top: 12px; padding: 8px; background: #0d1b2a; border-radius: 4px;">
+          This panel takes up 360px of width.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="state-panel">
+  <div class="prop"><span class="label">Sidebar State:</span> <span class="value" id="stateText">closed</span></div>
+  <div class="prop"><span class="label">Sidebar Width (style):</span> <span class="value" id="widthStyle">0px</span></div>
+  <div class="prop"><span class="label">Sidebar minWidth (inline):</span> <span class="value" id="minWidthStyle">not set</span></div>
+  <div class="prop"><span class="label">Effective Computed Width:</span> <span class="value" id="computedWidth">0px</span></div>
+  <div class="prop"><span class="label">Chat Area Width (computed):</span> <span class="value" id="chatComputedWidth">calculating...</span></div>
+
+  <div class="issue-demo">
+    <span style="color: #aaa;">Bug reproduction:</span>
+    <button onclick="reproduceBug()">1. Open sidebar</button>
+    <button onclick="simulateResize()">2. Simulate resize</button>
+    <button onclick="closeSidebarAndCheck()">3. Close sidebar & check</button>
+    <button class="danger" onclick="resetDemo()">Reset</button>
+  </div>
+  <div style="margin-top: 6px; color: #ff6b6b; font-size: 12px;" id="resultMessage"></div>
+</div>
+
+<script>
+let isOpen = false;
+let hasResized = false;
+
+const sidebar = document.getElementById('rightSidebar');
+const sidebarInner = document.getElementById('sidebarInner');
+const toggleBtn = document.getElementById('toggleSidebarBtn');
+const stateText = document.getElementById('stateText');
+const widthStyle = document.getElementById('widthStyle');
+const minWidthStyle = document.getElementById('minWidthStyle');
+const computedWidth = document.getElementById('computedWidth');
+const chatComputedWidth = document.getElementById('chatComputedWidth');
+const chatArea = document.getElementById('chatArea');
+const chatWidth = document.getElementById('chatWidth');
+const resultMessage = document.getElementById('resultMessage');
+const resizeHandle = document.getElementById('resizeHandle');
+
+const SIDEBAR_WIDTH = 360;
+let isResizing = false;
+let startX = 0;
+let startWidth = SIDEBAR_WIDTH;
+let currentWidth = SIDEBAR_WIDTH;
+
+function toggleSidebar() {
+  isOpen = !isOpen;
+  updateSidebar();
+}
+
+function updateSidebar() {
+  if (isOpen) {
+    const openWidth = currentWidth;
+    sidebar.classList.remove('closed');
+    sidebar.style.width = openWidth + 'px';
+
+    // The BUG: RightSidebar.tsx does NOT set minWidth/maxWidth in the React style prop
+    // during normal open/close. But if the element has leftover minWidth from resize...
+    // we demonstrate both: without resize it works, with resize it breaks.
+
+    updateDisplay();
+    toggleBtn.classList.add('active');
+    toggleBtn.textContent = 'Toggle Git Panel';
+    resultMessage.textContent = '';
+  } else {
+    sidebar.classList.add('closed');
+    sidebar.style.width = '0px';
+
+    // BUG: the leftover minWidth from resize overrides this width: 0
+    // The effective computed width stays at the minWidth value
+
+    updateDisplay();
+    toggleBtn.classList.remove('active');
+    toggleBtn.textContent = 'Toggle Git Panel';
+
+    // Check for the bug
+    checkForBug();
+  }
+}
+
+function simulateResize() {
+  if (!isOpen) {
+    resultMessage.textContent = '⚠️ Open the sidebar first!';
+    return;
+  }
+
+  // Simulates what RightSidebar.tsx's applyLiveWidth does:
+  // It sets width, minWidth, maxWidth directly on the DOM element
+  hasResized = true;
+  currentWidth = 420; // simulate resizing to 420px
+
+  // Direct DOM manipulation — same as applyLiveWidth in RightSidebar.tsx
+  sidebar.style.width = currentWidth + 'px';
+  sidebar.style.minWidth = currentWidth + 'px';
+  sidebar.style.maxWidth = currentWidth + 'px';
+  sidebar.style.setProperty('--oc-right-sidebar-width', currentWidth + 'px');
+
+  resultMessage.textContent = '✅ Resize simulated (minWidth set to ' + currentWidth + 'px)';
+  updateDisplay();
+}
+
+function closeSidebarAndCheck() {
+  if (!hasResized) {
+    resultMessage.textContent = '⚠️ Please simulate a resize first (step 2)';
+    return;
+  }
+
+  // Close via React — this is what happens when toggleRightSidebar() is called:
+  // isOpen = false, appliedWidth = 0, so width is set to 0 in the style prop
+  isOpen = false;
+  sidebar.classList.add('closed');
+  sidebar.style.width = '0px';
+  // BUT: React does NOT clear minWidth because it wasn't in the style prop
+  // So the minWidth from step 2 persists!
+
+  updateDisplay();
+  checkForBug();
+}
+
+function checkForBug() {
+  const computed = window.getComputedStyle(sidebar);
+  const compWidth = parseInt(computed.width);
+
+  // Check if the leftover minWidth is forcing the sidebar to stay wide
+  let minW = sidebar.style.minWidth;
+
+  if (minW && !isOpen) {
+    // BUG CONFIRMED: sidebar has width: 0 but minWidth is still set from resize
+    if (compWidth > 10) {
+      resultMessage.innerHTML = '🐛 <strong>BUG CONFIRMED:</strong> Sidebar width is <code>0px</code> in style, but ' +
+        'leftover <code>minWidth: ' + minW + '</code> from resize makes the effective width <code>' + compWidth + 'px</code>. ' +
+        'The empty gap squeezes the chat area!';
+      resultMessage.style.color = '#ff6b6b';
+    } else {
+      resultMessage.innerHTML = '⚠️ <code>minWidth</code> is set (' + minW + ') but computed width is ' + compWidth + 'px. ' +
+        'Open the sidebar wider and resize to a larger value.';
+      resultMessage.style.color = '#f39c12';
+    }
+  } else if (!isOpen) {
+    resultMessage.textContent = '✅ No issue: sidebar collapsed properly. ' +
+      '(This would change after a resize, see steps above.)';
+    resultMessage.style.color = '#2ecc71';
+  }
+}
+
+function reproduceBug() {
+  resetDemo();
+  // Step 1: Open
+  isOpen = true;
+  sidebar.classList.remove('closed');
+  sidebar.style.width = SIDEBAR_WIDTH + 'px';
+  toggleBtn.classList.add('active');
+
+  // Step 2: Resize (simulate applyLiveWidth bug)
+  hasResized = true;
+  currentWidth = 420;
+  sidebar.style.width = currentWidth + 'px';
+  sidebar.style.minWidth = currentWidth + 'px';  // ← THE BUG: direct DOM, never cleaned up
+  sidebar.style.maxWidth = currentWidth + 'px';  // ← THE BUG: direct DOM, never cleaned up
+  sidebar.style.setProperty('--oc-right-sidebar-width', currentWidth + 'px');
+
+  // Step 3: Close
+  isOpen = false;
+  sidebar.classList.add('closed');
+  sidebar.style.width = '0px';
+  // minWidth/maxWidth are still 420px on the DOM!
+
+  updateDisplay();
+  checkForBug();
+}
+
+function resetDemo() {
+  isOpen = false;
+  hasResized = false;
+  currentWidth = SIDEBAR_WIDTH;
+
+  sidebar.classList.add('closed');
+  sidebar.style.width = '0px';
+  sidebar.style.minWidth = '';
+  sidebar.style.maxWidth = '';
+  sidebar.style.removeProperty('--oc-right-sidebar-width');
+
+  toggleBtn.classList.remove('active');
+  toggleBtn.textContent = 'Toggle Git Panel';
+  resultMessage.textContent = '';
+  resultMessage.style.color = '#ff6b6b';
+  updateDisplay();
+}
+
+function updateDisplay() {
+  stateText.textContent = isOpen ? 'open' : 'closed';
+  widthStyle.textContent = sidebar.style.width || '(not set)';
+
+  const minW = sidebar.style.minWidth;
+  minWidthStyle.textContent = minW || '(not set)';
+
+  const computed = window.getComputedStyle(sidebar);
+  const compWidth = parseInt(computed.width);
+  computedWidth.textContent = compWidth + 'px';
+
+  if (isNaN(compWidth)) {
+    computedWidth.textContent = '(not set)';
+  }
+
+  // Track chat area width
+  const chatComputed = window.getComputedStyle(chatArea);
+  const chatW = chatArea.getBoundingClientRect().width;
+  chatComputedWidth.textContent = Math.round(chatW) + 'px';
+  chatWidth.textContent = Math.round(chatW) + 'px';
+}
+
+// Resize handle for manual testing
+let resizeActive = false;
+let resizeStartX = 0;
+let resizeStartWidth = 0;
+
+resizeHandle.addEventListener('pointerdown', (e) => {
+  if (!isOpen) return;
+  resizeActive = true;
+  resizeHandle.classList.add('resizing');
+  resizeStartX = e.clientX;
+  resizeStartWidth = sidebar.getBoundingClientRect().width;
+  e.preventDefault();
+});
+
+document.addEventListener('pointermove', (e) => {
+  if (!resizeActive) return;
+  const delta = resizeStartX - e.clientX;
+  const newWidth = Math.min(860, Math.max(360, resizeStartWidth + delta));
+  currentWidth = newWidth;
+  hasResized = true;
+
+  // This is exactly what applyLiveWidth does in RightSidebar.tsx — direct DOM
+  sidebar.style.width = newWidth + 'px';
+  sidebar.style.minWidth = newWidth + 'px';  // ← THE BUG
+  sidebar.style.maxWidth = newWidth + 'px';  // ← THE BUG
+  sidebar.style.setProperty('--oc-right-sidebar-width', newWidth + 'px');
+
+  updateDisplay();
+});
+
+document.addEventListener('pointerup', () => {
+  if (!resizeActive) return;
+  resizeActive = false;
+  resizeHandle.classList.remove('resizing');
+  updateDisplay();
+});
+
+// Poll for computed style changes (transition-related)
+setInterval(updateDisplay, 100);
+
+// Initial state
+resetDemo();
+</script>
+</body>
+</html>
