@@ -1,6 +1,6 @@
-require_relative '../../../../node_modules/.bun/@capacitor+ios@7.6.7+d8a2320436209c74/node_modules/@capacitor/ios/scripts/pods_helpers'
+require_relative '../../../../node_modules/.bun/@capacitor+ios@8.4.1+767ac80cbab8ae50/node_modules/@capacitor/ios/scripts/pods_helpers'
 
-platform :ios, '14.0'
+platform :ios, '15.0'
 use_frameworks!
 
 # workaround to avoid Xcode caching of Pods that requires
@@ -9,8 +9,8 @@ use_frameworks!
 install! 'cocoapods', :disable_input_output_paths => true
 
 def capacitor_pods
-  pod 'Capacitor', :path => '../../../../node_modules/.bun/@capacitor+ios@7.6.7+d8a2320436209c74/node_modules/@capacitor/ios'
-  pod 'CapacitorCordova', :path => '../../../../node_modules/.bun/@capacitor+ios@7.6.7+d8a2320436209c74/node_modules/@capacitor/ios'
+  pod 'Capacitor', :path => '../../../../node_modules/.bun/@capacitor+ios@8.4.1+767ac80cbab8ae50/node_modules/@capacitor/ios'
+  pod 'CapacitorCordova', :path => '../../../../node_modules/.bun/@capacitor+ios@8.4.1+767ac80cbab8ae50/node_modules/@capacitor/ios'
 
 end
 
@@ -21,4 +21,14 @@ end
 
 post_install do |installer|
   assertDeploymentTarget(installer)
+  # Xcode 16+/iOS 26 SDK rejects deployment targets below 15.0. Force every Pods
+  # target up so the Capacitor/Cordova pods build for a real device.
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      # Capacitor's Cordova compatibility headers use quoted includes; newer Xcode
+      # treats those as errors in framework headers. Keep it a (non-fatal) warning.
+      config.build_settings['CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER'] = 'NO'
+    end
+  end
 end
