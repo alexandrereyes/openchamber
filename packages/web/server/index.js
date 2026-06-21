@@ -1094,7 +1094,13 @@ async function main(options = {}) {
 
   const app = express();
   const serverStartedAt = new Date().toISOString();
-  const packagedClientOrigins = new Set(['openchamber-ui://app']);
+  const packagedClientOrigins = new Set([
+    'openchamber-ui://app',
+    'capacitor://localhost',
+    'http://localhost',
+    'https://localhost',
+  ]);
+  const isLocalDevClientOrigin = (origin) => /^https?:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
   app.set('trust proxy', true);
   // Keep self-hosted instances out of search engines. The app shell is served
   // publicly (it loads before prompting for the UI password), so without this
@@ -1109,7 +1115,7 @@ async function main(options = {}) {
   });
   app.use((req, res, next) => {
     const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
-    if (packagedClientOrigins.has(origin)) {
+    if (packagedClientOrigins.has(origin) || isLocalDevClientOrigin(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');

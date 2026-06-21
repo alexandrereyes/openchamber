@@ -30,7 +30,7 @@ import { resolveProjectForDirectory, resolveProjectForSessionDirectory } from '@
 import { clampPercent, formatQuotaResetLabel, formatQuotaValueLabel, formatWindowLabel, QUOTA_PROVIDERS, resolveUsageTone } from '@/lib/quota';
 import { getDisplayModelName } from '@/lib/quota/model-families';
 import { runtimeFetch } from '@/lib/runtime-fetch';
-import { switchRuntimeEndpoint } from '@/lib/runtime-switch';
+import { getRuntimeApiBaseUrl, switchRuntimeEndpoint } from '@/lib/runtime-switch';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { cn } from '@/lib/utils';
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -86,6 +86,21 @@ type MobileSavedConnection = {
   url: string;
   clientToken?: string;
   lastUsedAt: number;
+};
+
+const isCapacitorMobileApp = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const maybeCapacitor = (window as typeof window & {
+    Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
+  }).Capacitor;
+  if (maybeCapacitor?.isNativePlatform?.() === true) return true;
+  return window.location.protocol === 'capacitor:';
+};
+
+type MobilePendingConnection = {
+  label: string;
+  url: string;
+  clientToken?: string;
 };
 
 const normalizeConnectionUrl = (value: string): string => {
@@ -148,6 +163,20 @@ const upsertMobileConnection = (connection: Omit<MobileSavedConnection, 'id' | '
   return next;
 };
 
+const deleteMobileConnection = (id: string): MobileSavedConnection[] => {
+  const next = loadMobileConnections().filter((connection) => connection.id !== id);
+  saveMobileConnections(next);
+  return next;
+};
+
+const isSameConnectionUrl = (left: string, right: string): boolean => {
+  try {
+    return normalizeConnectionUrl(left) === normalizeConnectionUrl(right);
+  } catch {
+    return left.trim().replace(/\/+$/, '') === right.trim().replace(/\/+$/, '');
+  }
+};
+
 const normalizePath = (value?: string | null): string =>
   (value || '').replace(/\\/g, '/').replace(/\/+$/g, '');
 
@@ -175,7 +204,7 @@ const getProjectLabel = (path: string): string => {
 };
 
 type OverflowItem = {
-  key: 'files' | 'changes' | 'mcp' | 'update' | 'settings';
+  key: 'files' | 'changes' | 'mcp' | 'instances' | 'update' | 'settings';
   icon?: IconName;
   iconNode?: React.ReactNode;
   label: string;
@@ -202,6 +231,8 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
   const [isConnecting, setIsConnecting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [qrHintVisible, setQrHintVisible] = React.useState(false);
+  const [pendingConnection, setPendingConnection] = React.useState<MobilePendingConnection | null>(null);
+  const [password, setPassword] = React.useState('');
 
   const connect = React.useCallback(async (input: { url: string; clientToken?: string }) => {
     setError(null);
@@ -213,9 +244,10 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
         return;
       }
 
+      const headers = input.clientToken ? { Authorization: `Bearer ${input.clientToken}` } : undefined;
       const health = await fetch(`${normalizedUrl}/health`, {
         method: 'GET',
-        headers: input.clientToken ? { Authorization: `Bearer ${input.clientToken}` } : undefined,
+        headers,
       }).catch(() => null);
 
       if (!health || !health.ok) {
@@ -223,8 +255,27 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
         return;
       }
 
+      const label = getConnectionLabel(normalizedUrl);
+      const session = await fetch(`${normalizedUrl}/auth/session`, {
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      }).catch(() => null);
+
+      if (session?.status === 401 && !input.clientToken) {
+        const nextConnection = { label, url: normalizedUrl };
+        setPendingConnection(nextConnection);
+        setConnections(upsertMobileConnection(nextConnection));
+        return;
+      }
+
+      if (!session || (!session.ok && session.status !== 404)) {
+        setError(t('mobile.connect.error.authRequired'));
+        return;
+      }
+
       const nextConnections = upsertMobileConnection({
-        label: getConnectionLabel(normalizedUrl),
+        label,
         url: normalizedUrl,
         clientToken: input.clientToken?.trim() || undefined,
       });
@@ -243,6 +294,45 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
     void connect({ url: serverUrl, clientToken });
   }, [clientToken, connect, serverUrl]);
 
+  const handlePasswordSubmit = React.useCallback(async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!pendingConnection || !password.trim() || isConnecting) return;
+    setError(null);
+    setIsConnecting(true);
+    try {
+      const response = await fetch(`${pendingConnection.url}/auth/session`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          password,
+          trustDevice: true,
+          issueClientToken: true,
+          clientLabel: 'OpenChamber Mobile',
+        }),
+      }).catch(() => null);
+
+      if (!response?.ok) {
+        setError(t('mobile.connect.error.passwordFailed'));
+        return;
+      }
+
+      const payload = await response.json().catch(() => null) as { clientToken?: unknown } | null;
+      const issuedToken = typeof payload?.clientToken === 'string' ? payload.clientToken.trim() : '';
+      const nextConnection = { ...pendingConnection, clientToken: issuedToken || undefined };
+      setConnections(upsertMobileConnection(nextConnection));
+      setPassword('');
+      setPendingConnection(null);
+      switchRuntimeEndpoint({ apiBaseUrl: pendingConnection.url, clientToken: issuedToken || null });
+      onConnected();
+    } finally {
+      setIsConnecting(false);
+    }
+  }, [isConnecting, onConnected, password, pendingConnection, t]);
+
   return (
     <main className="min-h-dvh bg-background px-5 pb-[calc(env(safe-area-inset-bottom)+24px)] pt-[calc(env(safe-area-inset-top)+32px)] text-foreground">
       <div className="mx-auto flex min-h-[calc(100dvh-72px)] w-full max-w-[460px] flex-col justify-between gap-8">
@@ -258,7 +348,7 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
             </div>
           </div>
 
-          <form className="space-y-4 rounded-[28px] border border-border/70 bg-surface-elevated p-4 shadow-sm" onSubmit={handleSubmit}>
+          <form className="space-y-4 rounded-[28px] border border-border/70 bg-surface-elevated p-4 shadow-sm" onSubmit={pendingConnection ? handlePasswordSubmit : handleSubmit}>
             <label className="block space-y-2">
               <span className="typography-ui-label text-foreground">{t('mobile.connect.url.label')}</span>
               <input
@@ -282,10 +372,31 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
                 className="h-12 w-full rounded-[16px] border border-border/70 bg-background px-3 text-[16px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </label>
+            {pendingConnection ? (
+              <label className="block space-y-2">
+                <span className="typography-ui-label text-foreground">{t('mobile.connect.password.label')}</span>
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder={t('mobile.connect.password.placeholder')}
+                  type="password"
+                  className="h-12 w-full rounded-[16px] border border-border/70 bg-background px-3 text-[16px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </label>
+            ) : null}
             {error ? <p className="typography-small text-[var(--status-error)]">{error}</p> : null}
             <Button type="submit" size="lg" className="h-12 w-full" disabled={isConnecting}>
-              {isConnecting ? t('mobile.connect.connecting') : t('mobile.connect.connectButton')}
+              {isConnecting
+                ? t('mobile.connect.connecting')
+                : pendingConnection
+                  ? t('mobile.connect.unlockButton')
+                  : t('mobile.connect.connectButton')}
             </Button>
+            {pendingConnection ? (
+              <Button type="button" variant="ghost" size="sm" className="w-full" onClick={() => { setPendingConnection(null); setPassword(''); setError(null); }}>
+                {t('mobile.connect.cancelPassword')}
+              </Button>
+            ) : null}
           </form>
 
           <div className="grid grid-cols-2 gap-3">
@@ -335,6 +446,155 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
         </section>
       </div>
     </main>
+  );
+};
+
+const MobileInstancesSurface: React.FC<{
+  onConnect: () => void;
+  onActiveConnectionDeleted: () => void;
+}> = ({ onActiveConnectionDeleted, onConnect }) => {
+  const { t } = useI18n();
+  const [connections, setConnections] = React.useState<MobileSavedConnection[]>(() => loadMobileConnections());
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const editingConnection = editingId ? connections.find((connection) => connection.id === editingId) ?? null : null;
+  const [url, setUrl] = React.useState('');
+  const [label, setLabel] = React.useState('');
+  const [clientToken, setClientToken] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!editingConnection) {
+      setUrl('');
+      setLabel('');
+      setClientToken('');
+      setError(null);
+      return;
+    }
+    setUrl(editingConnection.url);
+    setLabel(editingConnection.label);
+    setClientToken(editingConnection.clientToken || '');
+    setError(null);
+  }, [editingConnection]);
+
+  const saveInstance = React.useCallback((event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      const normalizedUrl = normalizeConnectionUrl(url);
+      if (!normalizedUrl) {
+        setError(t('mobile.connect.error.urlRequired'));
+        return;
+      }
+      const next = upsertMobileConnection({
+        label: label.trim() || getConnectionLabel(normalizedUrl),
+        url: normalizedUrl,
+        clientToken: clientToken.trim() || undefined,
+      });
+      setConnections(next);
+      setEditingId(null);
+    } catch {
+      setError(t('mobile.connect.error.invalidUrl'));
+    }
+  }, [clientToken, label, t, url]);
+
+  const connectToInstance = React.useCallback((connection: MobileSavedConnection) => {
+    switchRuntimeEndpoint({ apiBaseUrl: connection.url, clientToken: connection.clientToken || null });
+    onConnect();
+  }, [onConnect]);
+
+  const removeInstance = React.useCallback((id: string) => {
+    const removed = connections.find((connection) => connection.id === id) ?? null;
+    setConnections(deleteMobileConnection(id));
+    if (editingId === id) setEditingId(null);
+    if (removed && isSameConnectionUrl(removed.url, getRuntimeApiBaseUrl())) {
+      onActiveConnectionDeleted();
+    }
+  }, [connections, editingId, onActiveConnectionDeleted]);
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        <div className="space-y-5">
+          <section className="space-y-3">
+            {connections.length > 0 ? (
+              <div className="overflow-hidden rounded-[22px] border border-border/70 bg-surface-elevated">
+                {connections.map((connection) => (
+                  <div key={connection.id} className="flex items-center gap-3 border-b border-border/60 p-3 last:border-b-0">
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      onClick={() => connectToInstance(connection)}
+                    >
+                      <span className="block truncate typography-ui-label text-foreground">{connection.label}</span>
+                      <span className="block truncate typography-small text-muted-foreground">{connection.url}</span>
+                    </button>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => setEditingId(connection.id)}>
+                      {t('mobile.instances.edit')}
+                    </Button>
+                    <Button type="button" variant="ghost" size="xs" onClick={() => removeInstance(connection.id)}>
+                      {t('mobile.instances.delete')}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-[22px] border border-dashed border-border/70 px-4 py-5 typography-small text-muted-foreground">
+                {t('mobile.connect.saved.empty')}
+              </p>
+            )}
+          </section>
+
+          <form className="space-y-4 rounded-[24px] border border-border/70 bg-surface-elevated p-4" onSubmit={saveInstance}>
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="typography-ui-label text-foreground">
+                {editingConnection ? t('mobile.instances.editTitle') : t('mobile.instances.addTitle')}
+              </h3>
+              {editingConnection ? (
+                <Button type="button" variant="ghost" size="xs" onClick={() => setEditingId(null)}>
+                  {t('mobile.instances.cancelEdit')}
+                </Button>
+              ) : null}
+            </div>
+            <label className="block space-y-2">
+              <span className="typography-small text-muted-foreground">{t('mobile.instances.label.label')}</span>
+              <input
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                placeholder={t('mobile.instances.label.placeholder')}
+                className="h-11 w-full rounded-[14px] border border-border/70 bg-background px-3 text-[16px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="typography-small text-muted-foreground">{t('mobile.connect.url.label')}</span>
+              <input
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder={t('mobile.connect.url.placeholder')}
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                className="h-11 w-full rounded-[14px] border border-border/70 bg-background px-3 text-[16px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="typography-small text-muted-foreground">{t('mobile.connect.token.label')}</span>
+              <input
+                value={clientToken}
+                onChange={(event) => setClientToken(event.target.value)}
+                placeholder={t('mobile.connect.token.placeholder')}
+                autoCapitalize="none"
+                autoCorrect="off"
+                className="h-11 w-full rounded-[14px] border border-border/70 bg-background px-3 text-[16px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </label>
+            {error ? <p className="typography-small text-[var(--status-error)]">{error}</p> : null}
+            <Button type="submit" size="lg" className="h-11 w-full">
+              {editingConnection ? t('mobile.instances.saveEdit') : t('mobile.instances.saveNew')}
+            </Button>
+          </form>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -1003,12 +1263,13 @@ const MobileHeader: React.FC<{
   );
 };
 
-const MobileShell: React.FC = () => {
+const MobileShell: React.FC<{ onActiveConnectionDeleted: () => void }> = ({ onActiveConnectionDeleted }) => {
   const { t } = useI18n();
   const [sessionsSheetOpen, setSessionsSheetOpen] = React.useState(false);
   const [filesOpen, setFilesOpen] = React.useState(false);
   const [changesOpen, setChangesOpen] = React.useState(false);
   const [mcpOpen, setMcpOpen] = React.useState(false);
+  const [instancesOpen, setInstancesOpen] = React.useState(false);
   const [isMcpRefreshing, setIsMcpRefreshing] = React.useState(false);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [updateOpen, setUpdateOpen] = React.useState(false);
@@ -1020,6 +1281,7 @@ const MobileShell: React.FC = () => {
   const setSettingsPage = useUIStore((state) => state.setSettingsPage);
   const updateAvailable = useUpdateStore((state) => state.available);
   const updateRuntimeType = useUpdateStore((state) => state.runtimeType);
+  const showCapacitorOnlyFeatures = React.useMemo(() => isCapacitorMobileApp(), []);
   const mcpServers = useMcpConfigStore((state) => state.mcpServers);
   const setMcpDraft = useMcpConfigStore((state) => state.setMcpDraft);
   const setSelectedMcp = useMcpConfigStore((state) => state.setSelectedMcp);
@@ -1097,7 +1359,8 @@ const MobileShell: React.FC = () => {
   }, [currentDirectory, isMcpRefreshing, loadMcpConfigs, refreshMcpStatus]);
 
   const overflowItems: OverflowItem[] = React.useMemo(
-    () => [
+    () => {
+      const items: OverflowItem[] = [
       {
         key: 'files',
         icon: 'file-text',
@@ -1117,13 +1380,24 @@ const MobileShell: React.FC = () => {
         label: t('mobile.menu.mcp'),
         onSelect: () => setMcpOpen(true),
       },
-      ...(showUpdateItem ? [{
-        key: 'update' as const,
-        icon: 'download' as const,
-        label: t('mobile.menu.update'),
-        onSelect: () => setUpdateOpen(true),
-      }] : []),
-      {
+      ];
+      if (showCapacitorOnlyFeatures) {
+        items.push({
+          key: 'instances',
+          icon: 'server',
+          label: t('mobile.menu.instances'),
+          onSelect: () => setInstancesOpen(true),
+        });
+      }
+      if (showUpdateItem) {
+        items.push({
+          key: 'update',
+          icon: 'download',
+          label: t('mobile.menu.update'),
+          onSelect: () => setUpdateOpen(true),
+        });
+      }
+      items.push({
         key: 'settings',
         icon: 'settings-3',
         label: t('mobile.menu.settings'),
@@ -1131,9 +1405,10 @@ const MobileShell: React.FC = () => {
           setSettingsInitialMobileStage('nav');
           setSettingsOpen(true);
         },
-      },
-    ],
-    [dirtyChangeCount, showUpdateItem, t],
+      });
+      return items;
+    },
+    [dirtyChangeCount, showCapacitorOnlyFeatures, showUpdateItem, t],
   );
 
   return (
@@ -1252,6 +1527,20 @@ const MobileShell: React.FC = () => {
           </MobileOverlayPanel>
         ) : null}
 
+        {instancesOpen && showCapacitorOnlyFeatures ? (
+          <MobileSurfaceShell
+            open
+            onClose={() => setInstancesOpen(false)}
+            ariaLabel={t('mobile.menu.instances')}
+            title={t('mobile.menu.instances')}
+          >
+            <MobileInstancesSurface
+              onConnect={() => setInstancesOpen(false)}
+              onActiveConnectionDeleted={onActiveConnectionDeleted}
+            />
+          </MobileSurfaceShell>
+        ) : null}
+
         {settingsOpen ? (
           <MobileSurfaceShell
             open
@@ -1291,6 +1580,7 @@ const MobileShell: React.FC = () => {
 };
 
 export function MobileApp({ apis }: MobileAppProps) {
+  const { t } = useI18n();
   const initializeApp = useConfigStore((state) => state.initializeApp);
   const isInitialized = useConfigStore((state) => state.isInitialized);
   const isConnected = useConfigStore((state) => state.isConnected);
@@ -1306,6 +1596,7 @@ export function MobileApp({ apis }: MobileAppProps) {
   const setPlanModeEnabled = useFeatureFlagsStore((state) => state.setPlanModeEnabled);
   const projects = useProjectsStore((state) => state.projects);
   const [connectionEpoch, setConnectionEpoch] = React.useState(0);
+  const isNativeMobileApp = React.useMemo(() => isCapacitorMobileApp(), []);
 
   React.useEffect(() => {
     registerRuntimeAPIs(apis);
@@ -1410,8 +1701,19 @@ export function MobileApp({ apis }: MobileAppProps) {
   useWindowTitle();
   useRouter();
 
-  if (!isConnected) {
+  if (!isConnected && isNativeMobileApp) {
     return <MobileConnectionWelcome onConnected={() => setConnectionEpoch((value) => value + 1)} />;
+  }
+
+  if (!isConnected) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-background px-6 text-center text-foreground">
+        <div className="max-w-sm space-y-3">
+          <h1 className="typography-h3 text-foreground">{t('sessionAuth.error.networkTitle')}</h1>
+          <p className="typography-body text-muted-foreground">{t('sessionAuth.error.networkDescription')}</p>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -1422,7 +1724,10 @@ export function MobileApp({ apis }: MobileAppProps) {
             <div className="h-full bg-background text-foreground">
               <SyncAppEffects embeddedBackgroundWorkEnabled={isInitialized} />
               <OpenCodeUpdateToast />
-              <MobileShell />
+              <MobileShell onActiveConnectionDeleted={() => {
+                switchRuntimeEndpoint({ apiBaseUrl: '', clientToken: null, runtimeKey: 'mobile-disconnected' });
+                setConnectionEpoch((value) => value + 1);
+              }} />
               <Toaster />
               {isInitialized ? <ConfigUpdateOverlay /> : null}
             </div>

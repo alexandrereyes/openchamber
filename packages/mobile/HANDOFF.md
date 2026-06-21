@@ -12,6 +12,10 @@ This handoff summarizes the mobile app work completed in this worktree and the c
   - `packages/mobile/android`
 - Generated native ignores exclude copied web assets, Pods, Gradle outputs, APKs, and local SDK paths.
 - Root package scripts expose mobile build/sync/simulator commands.
+- The dedicated mobile renderer no longer uses the web `SessionAuthGate`; native mobile owns its own connection onboarding flow.
+- The native mobile connection flow supports server URL entry, password unlock for locked servers, client-token storage, saved connections, and an `Instances` management sheet.
+- Mobile connection onboarding and `Instances` are Capacitor-only. Hosted `mobile.html` in a normal browser does not expose them.
+- Server CORS now allows packaged/mobile origins such as `capacitor://localhost` plus local dev origins like `http://127.0.0.1:<port>`.
 
 ## Key Commands
 
@@ -131,11 +135,26 @@ The earlier default `iPhone 16 Pro` was not available on this machine.
 
 ## Product/Architecture State
 
-This work does not implement mobile pairing/auth, push notifications, secure storage, biometrics, deep links, or native lifecycle handling yet. It only prepares the native packaging and local simulator workflow around the already-existing `MobileApp` web surface.
+This work now includes the first mobile connection/auth shell, but still does not implement QR scanning, secure native storage, push notifications, biometrics, deep links, or native lifecycle handling.
+
+Current mobile connection behavior:
+
+- If no runtime is connected in Capacitor, the app shows a connect screen instead of the web UI auth error.
+- A server URL can be entered manually.
+- If the server is password-protected, the app prompts for the password and requests an issued client token.
+- Saved instances are stored in browser/WebView local storage under the mobile connections key.
+- The overflow menu has a Capacitor-only `Instances` sheet for adding, editing, deleting, and switching saved instances.
+- Deleting the active instance resets the active runtime and returns the app to the connect screen.
+
+Remaining production hardening:
+
+- Move saved instance tokens from local storage to native secure storage.
+- Implement QR pairing and camera permission flow.
+- Add a first-class server-side pairing/token issuance route instead of relying on manual URL/password entry.
+- Add explicit logout/revoke-token behavior.
+- Add native lifecycle/back-button/status-bar/keyboard handling.
 
 Next useful product step after simulator streaming is stable:
 
-- Add a first-class mobile connection/pairing screen.
 - Define the remote packaged-client auth token model.
-- Add native lifecycle/back-button/status-bar/keyboard handling.
 - Keep inspecting the mobile import graph and bundle size; current mobile graph still includes heavy shared chunks.

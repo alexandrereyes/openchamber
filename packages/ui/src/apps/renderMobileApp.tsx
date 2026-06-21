@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import '@/styles/fonts';
 import '@/index.css';
 import '@/lib/debug';
-import { SessionAuthGate } from '@/components/auth/SessionAuthGate';
 import { DiffWorkerProvider } from '@/contexts/DiffWorkerProvider';
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 import { ThemeSystemProvider } from '@/contexts/ThemeSystemContext';
@@ -49,9 +48,7 @@ export function renderMobileApp(apis: RuntimeAPIs) {
         <ThemeSystemProvider>
           <ThemeProvider>
             <DiffWorkerProvider>
-              <SessionAuthGate>
-                <MobileApp apis={apis} />
-              </SessionAuthGate>
+              <MobileApp apis={apis} />
             </DiffWorkerProvider>
           </ThemeProvider>
         </ThemeSystemProvider>
