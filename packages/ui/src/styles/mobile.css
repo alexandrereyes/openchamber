@@ -499,6 +499,15 @@
   }
 }
 
+/* Small app-wide bottom safe area for the native shell. The phone's rounded hardware
+   corners clip controls flush against the bottom edge, and the PWA's own safe-area
+   padding is gated behind display-mode: standalone — which the Capacitor WebView does
+   not match — so nothing reserves bottom room in the native app. Expose it as a token
+   so any native surface can consume it; the chat shell does so below. */
+:root.oc-capacitor-app {
+  --oc-app-bottom-safe: max(8px, calc(env(safe-area-inset-bottom, 0px) * 0.25));
+}
+
 /* Native (Capacitor) keyboard handling.
    The Keyboard plugin runs in `resize: 'none'` mode so the WebView keeps its full
    height; instead we shrink the app shell by the keyboard frame height, exposed as
@@ -513,7 +522,12 @@
    but doesn't report under WKWebView's `resize: 'none'`, so this is the best signal.) */
 :root.oc-capacitor-app .oc-mobile-app-shell {
   height: calc(100dvh - var(--oc-keyboard-inset, 0px));
-  transition: height 0.25s cubic-bezier(0.38, 0.7, 0.125, 1);
+  /* Reserve the bottom safe area only while the keyboard is down — when it's up the
+     inset cancels it out (the home indicator is hidden and the composer should sit
+     flush above the keyboard). The shell keeps its own bg behind this padding. */
+  padding-bottom: max(0px, calc(var(--oc-app-bottom-safe, 0px) - var(--oc-keyboard-inset, 0px)));
+  transition: height 0.25s cubic-bezier(0.38, 0.7, 0.125, 1),
+              padding-bottom 0.25s cubic-bezier(0.38, 0.7, 0.125, 1);
 }
 
 /* Portal surfaces (bottom sheets, overlay panels) render at <body> level, outside
@@ -537,4 +551,15 @@
   height: calc(100dvh - var(--oc-keyboard-inset, 0px));
   min-height: 0;
   transition: height 0.25s cubic-bezier(0.38, 0.7, 0.125, 1);
+}
+
+/* The composer keeps its 1rem bottom padding while the keyboard is down (breathing
+   room above the home indicator), but that gap looks artificial sitting above the
+   keyboard's accessory bar — so tighten it while the keyboard is open. Animated to
+   match the keyboard motion. */
+:root.oc-capacitor-app .oc-mobile-composer {
+  transition: padding-bottom 0.25s cubic-bezier(0.38, 0.7, 0.125, 1);
+}
+:root.oc-capacitor-app.oc-keyboard-open .oc-mobile-composer {
+  padding-bottom: 6px;
 }
