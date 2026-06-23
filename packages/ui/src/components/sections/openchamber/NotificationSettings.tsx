@@ -482,7 +482,10 @@ export const NotificationSettings: React.FC = () => {
               <span className="typography-ui-label text-foreground">{t('settings.notifications.page.delivery.enableLabel')}</span>
             </div>
 
-            {nativeNotificationsEnabled && canShowNotifications && (
+            {/* The native Capacitor app never notifies while focused (hard rule) and uses
+                generic, non-customizable text, so the "notify while focused" toggle and the
+                test button are hidden there. */}
+            {nativeNotificationsEnabled && canShowNotifications && !isNativeApp && (
               <>
                 <div
                   className="group flex cursor-pointer items-center gap-2 py-1.5"
@@ -626,7 +629,8 @@ export const NotificationSettings: React.FC = () => {
               </section>
             </div>
 
-            {/* --- Template Customization --- */}
+            {/* --- Template Customization (not on the native app — it uses generic text) --- */}
+            {!isNativeApp && (
             <div className="mb-8">
               <div className="mb-1 px-1">
                 <h3 className="typography-ui-header font-medium text-foreground">
@@ -674,6 +678,7 @@ export const NotificationSettings: React.FC = () => {
                 ))}
               </div>
             </div>
+            )}
 
           </>
         )}

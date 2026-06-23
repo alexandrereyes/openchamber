@@ -22,10 +22,63 @@ const sendVisibility = (visible: boolean) => {
   void apis.push.setVisibility({ visible });
 };
 
+const isCapacitorNative = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  const capacitor = (window as typeof window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+  return capacitor?.isNativePlatform?.() === true;
+};
+
 export const usePushVisibilityBeacon = (options?: { enabled?: boolean }) => {
   const enabled = options?.enabled ?? true;
   React.useEffect(() => {
-    if (!enabled || !isWebRuntime() || typeof document === 'undefined') {
+    if (!enabled || !isWebRuntime() || typeof window === 'undefined') {
+      return;
+    }
+
+    // Native (Capacitor): drive visibility AUTHORITATIVELY from App.appStateChange. The
+    // web signals (document.visibilityState / hasFocus) are unreliable in a WKWebView —
+    // hasFocus() often returns false while the app is active — which made the app report
+    // "hidden" while foregrounded and leaked push notifications. The server's focus gate
+    // suppresses push whenever a UI client is visible, so getting this right is what
+    // guarantees "no push while the app is active".
+    if (isCapacitorNative()) {
+      let active = true;
+      let disposed = false;
+      let removeListener: (() => void) | null = null;
+      const reportActive = () => sendVisibility(active);
+
+      void import('@capacitor/app')
+        .then(async ({ App }) => {
+          if (disposed) return;
+          const state = await App.getState().catch(() => null);
+          if (state) active = state.isActive === true;
+          reportActive();
+          const handle = await App.addListener('appStateChange', ({ isActive }) => {
+            active = isActive === true;
+            reportActive();
+          });
+          if (disposed) {
+            void handle.remove();
+            return;
+          }
+          removeListener = () => void handle.remove();
+        })
+        .catch(() => undefined);
+
+      // Heartbeat so the server's visibility TTL never expires while the app is active.
+      const interval = window.setInterval(() => {
+        if (active) sendVisibility(true);
+      }, HEARTBEAT_MS);
+
+      return () => {
+        disposed = true;
+        window.clearInterval(interval);
+        removeListener?.();
+      };
+    }
+
+    // Web / desktop: document-based visibility.
+    if (typeof document === 'undefined') {
       return;
     }
 
@@ -45,7 +98,6 @@ export const usePushVisibilityBeacon = (options?: { enabled?: boolean }) => {
 
     report();
 
-    // Heartbeat while visible so server TTL (30s) never expires.
     const interval = window.setInterval(reportVisibleOnly, HEARTBEAT_MS);
 
     document.addEventListener('visibilitychange', report);

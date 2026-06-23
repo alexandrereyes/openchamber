@@ -36,7 +36,6 @@ export const createApnsRuntime = (deps) => {
     http2,
     APNS_TOKENS_FILE_PATH,
     readSettingsFromDiskMigrated,
-    isAnyUiVisible,
   } = deps;
 
   let persistLock = Promise.resolve();
@@ -388,12 +387,12 @@ export const createApnsRuntime = (deps) => {
     });
   };
 
-  const sendApnsToAllUiSessions = async (payload, options = {}) => {
-    const requireNoSse = options.requireNoSse === true;
-    if (requireNoSse && typeof isAnyUiVisible === 'function' && isAnyUiVisible()) {
-      return;
-    }
-
+  // NOT gated on UI visibility (unlike web push). A backgrounded WKWebView can't reliably
+  // report "hidden" before iOS suspends it, so a visibility gate wrongly suppressed
+  // background push for short responses. Instead we always send, and rely on iOS to NOT
+  // display the alert while the app is foreground (presentationOptions: [] in
+  // capacitor.config) — so there is no notification when the app is active, with no race.
+  const sendApnsToAllUiSessions = async (payload, _options = {}) => {
     const store = await readTokensFromDisk();
     const deviceTokens = [];
     const seen = new Set();

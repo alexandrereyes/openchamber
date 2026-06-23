@@ -19,8 +19,11 @@ delivered via APNs through a **central relay**, so no user configures an Apple k
 4. Tapping a push deep-links to its session via the forwarded `sessionId`.
 
 Cloudflare is touched **only** when: native app + notifications on + app backgrounded + a
-registered token exists. Local notifications (`nativeNotifications.ts`) still cover the
-foreground / brief-background window; APNs covers true background.
+registered token exists. APNs is the native app's **only** notification channel — local
+notifications were removed because a WKWebView can't reliably tell foreground from
+background (`document.hasFocus()` is unreliable), so they leaked while the app was open.
+Foreground suppression is enforced server-side via the visibility gate, with the app
+reporting visibility authoritatively from Capacitor `App.appStateChange`.
 
 ## Modes
 

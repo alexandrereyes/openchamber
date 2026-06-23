@@ -15,24 +15,23 @@ export const createNotificationTriggerRuntime = (deps) => {
     getOpenCodeAuthHeaders,
   } = deps;
 
-  // Generic, content-free notification text for native push (per the mobile design: no
-  // session content crosses the relay). Keyed by trigger type; the model name comes from
-  // the payload's `data.model`.
-  const APNS_GENERIC_BODY_BY_TYPE = {
-    ready: 'finished task',
-    error: 'hit an error',
-    question: 'needs your input',
-    permission: 'needs your input',
+  // Generic notification for native push (per the mobile design): a fixed, scenario-based
+  // title + the session name as the body. No model/project/message content crosses the relay.
+  const APNS_TITLE_BY_TYPE = {
+    ready: 'Agent response is ready',
+    error: 'Agent hit an error',
+    question: 'Agent needs your input',
+    permission: 'Agent needs permission',
   };
 
   const toApnsGenericPayload = (payload) => {
     const data = payload?.data && typeof payload.data === 'object' ? payload.data : {};
-    const model = typeof data.model === 'string' && data.model.trim().length > 0
-      ? data.model.trim()
-      : 'OpenChamber';
+    const sessionName = typeof data.sessionName === 'string' && data.sessionName.trim().length > 0
+      ? data.sessionName.trim()
+      : 'Session';
     return {
-      title: model,
-      body: APNS_GENERIC_BODY_BY_TYPE[data.type] || 'has an update',
+      title: APNS_TITLE_BY_TYPE[data.type] || 'Agent update',
+      body: sessionName,
       tag: payload?.tag,
       // sessionId is forwarded so a tapped push can deep-link; it is an opaque id, not content.
       data: typeof data.sessionId === 'string' ? { sessionId: data.sessionId } : undefined,
@@ -277,6 +276,7 @@ export const createNotificationTriggerRuntime = (deps) => {
 
         let title = `${formatMode(info?.mode)} agent is ready`;
         let body = `${formatModelId(info?.modelID)} completed the task`;
+        let sessionName = '';
 
         try {
           const templates = settings.notificationTemplates || {};
@@ -286,6 +286,7 @@ export const createNotificationTriggerRuntime = (deps) => {
             : (templates.completion || { title: '{agent_name} is ready', message: '{model_name} completed the task' });
 
           const variables = await buildTemplateVariables(payload, sessionId);
+          sessionName = typeof variables.session_name === 'string' ? variables.session_name : sessionName;
 
           const messageId = info?.id;
           let lastMessage = extractLastMessageText(payload);
@@ -328,7 +329,7 @@ export const createNotificationTriggerRuntime = (deps) => {
             data: {
               url: buildSessionDeepLinkUrl(sessionId),
               sessionId,
-              model: variables.model_name,
+              sessionName,
               type: 'ready',
             },
           },
@@ -346,9 +347,11 @@ export const createNotificationTriggerRuntime = (deps) => {
 
         let title = 'Tool error';
         let body = 'An error occurred';
+        let sessionName = '';
 
         try {
           const variables = await buildTemplateVariables(payload, sessionId);
+          sessionName = typeof variables.session_name === 'string' ? variables.session_name : sessionName;
           const errorMessageId = info?.id;
           let lastMessage = extractLastMessageText(payload);
           if (!lastMessage) {
@@ -391,7 +394,7 @@ export const createNotificationTriggerRuntime = (deps) => {
             data: {
               url: buildSessionDeepLinkUrl(sessionId),
               sessionId,
-              model: variables.model_name,
+              sessionName,
               type: 'error',
             },
           },
@@ -430,9 +433,11 @@ export const createNotificationTriggerRuntime = (deps) => {
             ? 'Switch to build mode'
             : header || 'Input needed';
         let body = questionText || 'Agent is waiting for your response';
+        let sessionName = '';
 
         try {
           const variables = await buildTemplateVariables(payload, sessionId);
+          sessionName = typeof variables.session_name === 'string' ? variables.session_name : sessionName;
           variables.last_message = questionText || header || '';
 
           const templates = settings.notificationTemplates || {};
@@ -468,7 +473,7 @@ export const createNotificationTriggerRuntime = (deps) => {
             data: {
               url: buildSessionDeepLinkUrl(sessionId),
               sessionId,
-              model: variables.model_name,
+              sessionName,
               type: 'question',
             },
           },
@@ -545,9 +550,11 @@ export const createNotificationTriggerRuntime = (deps) => {
 
         let title = 'Permission required';
         let body = fallbackMessage;
+        let sessionName = '';
 
         try {
           const variables = await buildTemplateVariables(payload, sessionId);
+          sessionName = typeof variables.session_name === 'string' ? variables.session_name : sessionName;
           variables.last_message = fallbackMessage;
 
           const templates = settings.notificationTemplates || {};
@@ -587,7 +594,7 @@ export const createNotificationTriggerRuntime = (deps) => {
             data: {
               url: buildSessionDeepLinkUrl(sessionId),
               sessionId,
-              model: variables.model_name,
+              sessionName,
               type: 'permission',
             },
           },

@@ -63,9 +63,7 @@ import { isQrScanSupported, parseConnectionPayload, scanConnectionQr } from './m
 import { resetAppForRuntimeEndpointChange } from './runtimeEndpointReset';
 import { useAppFontEffects } from './useAppFontEffects';
 import { useFontsReady } from './useFontsReady';
-import { useNativeLocalNotifications } from './useNativeLocalNotifications';
 import { useNativePushRegistration } from './useNativePushRegistration';
-import { useWebNotificationStream } from '@/hooks/useWebNotificationStream';
 
 const MOBILE_SETTINGS_PAGES = [
   'appearance',
@@ -1988,14 +1986,12 @@ export function MobileApp({ apis }: MobileAppProps) {
   useUpdatePolling();
   useWindowTitle();
   useRouter();
-  useNativeLocalNotifications({ enabled: isNativeMobileApp });
-  // Register the APNs device token with the server (relay mode) for background push.
+  // APNs is the only notification channel on the native app (background-capable,
+  // focus-suppressed server-side via the visibility beacon). Local notifications are
+  // intentionally disabled — they can't tell foreground from background in a WKWebView
+  // (document.hasFocus() is unreliable) and leaked while the app was open; the in-app SSE
+  // notification dispatch is no-op'd for native in renderMobileApp.
   useNativePushRegistration({ enabled: isNativeMobileApp && isConnected });
-  // Subscribe to the server's notification SSE stream so agent ready/error/question/
-  // permission events become native local notifications (delivery via the native
-  // notifications API wired in renderMobileApp). Gated internally on the notification
-  // settings + focus.
-  useWebNotificationStream({ enabled: isConnected });
   const fontsReady = useFontsReady();
 
   // `isConnected` is a LIVE flag that flips false on every transient SSE/WS drop and

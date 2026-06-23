@@ -87,15 +87,6 @@ describe('apns runtime relay mode (default)', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).tokens).toEqual(['tokenA']);
   });
 
-  it('suppresses when a UI client is focused (requireNoSse)', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    const runtime = createApnsRuntime(makeDeps({ isAnyUiVisible: () => true }));
-    await runtime.addOrUpdateApnsToken('s', 'tokenF');
-    await runtime.sendApnsToAllUiSessions({ title: 't', body: 'b' }, { requireNoSse: true });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
   it('no-ops (no relay call) when no tokens are registered', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
