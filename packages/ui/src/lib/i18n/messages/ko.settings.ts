@@ -926,6 +926,7 @@ export const settingsDict = {
   'settings.openchamber.keyboardShortcuts.action.cycle_agent.label': '에이전트 순환',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_forward.label': '즐겨찾기 모델 앞으로 순환',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_backward.label': '즐겨찾기 모델 뒤로 순환',
+  'settings.openchamber.keyboardShortcuts.action.open_model_selector.label': '모델 선택기 열기',
   'settings.openchamber.keyboardShortcuts.action.expand_input.label': '입력 확장',
   'settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label': '대화 타임라인 열기',
   'settings.projects.sidebar.total': '총 {count}개',

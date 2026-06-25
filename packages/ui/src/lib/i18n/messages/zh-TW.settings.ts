@@ -848,6 +848,7 @@
   'settings.openchamber.keyboardShortcuts.action.cycle_agent.label': '輪換 agent',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_forward.label': '向前輪換收藏模型',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_backward.label': '向後輪換收藏模型',
+  'settings.openchamber.keyboardShortcuts.action.open_model_selector.label': '開啟模型選擇器',
   'settings.openchamber.keyboardShortcuts.action.expand_input.label': '展開輸入方塊',
   'settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label': '開啟對話時間軸',
   'settings.projects.sidebar.total': '總計 {count}',

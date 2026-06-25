@@ -926,6 +926,7 @@ export const settingsDict = {
   'settings.openchamber.keyboardShortcuts.action.cycle_agent.label': '轮换智能体',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_forward.label': '向前轮换收藏模型',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_backward.label': '向后轮换收藏模型',
+  'settings.openchamber.keyboardShortcuts.action.open_model_selector.label': '打开模型选择器',
   'settings.openchamber.keyboardShortcuts.action.expand_input.label': '展开输入框',
   'settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label': '打开对话时间线',
   'settings.projects.sidebar.total': '总计 {count}',

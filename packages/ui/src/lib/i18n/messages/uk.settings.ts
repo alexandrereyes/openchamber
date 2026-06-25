@@ -926,6 +926,7 @@ export const settingsDict = {
   "settings.openchamber.keyboardShortcuts.action.cycle_agent.label": "Перемкнути агента",
   "settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_forward.label": "Перемкнути улюблену модель вперед",
   "settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_backward.label": "Перемкнути улюблену модель назад",
+  "settings.openchamber.keyboardShortcuts.action.open_model_selector.label": "Відкрити вибір моделі",
   "settings.openchamber.keyboardShortcuts.action.expand_input.label": "Розгорнути введення",
   "settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label": "Відкрити хронологію розмови",
   "settings.projects.sidebar.total": "Усього {count}",

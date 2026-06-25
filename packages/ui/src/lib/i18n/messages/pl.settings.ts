@@ -713,6 +713,7 @@ export const settingsDict = {
   'settings.openchamber.git.showGitignoredAria': 'Wyświetlaj pliki zignorowane przez Git',
   'settings.openchamber.git.title': 'Preferencje Git',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_backward.label': 'Przełącz ulubiony model wstecz',
+  'settings.openchamber.keyboardShortcuts.action.open_model_selector.label': 'Otwórz wybór modelu',
   'settings.openchamber.keyboardShortcuts.action.cycle_favorite_model_forward.label': 'Przełącz ulubiony model w przód',
   'settings.openchamber.keyboardShortcuts.action.cycle_right_sidebar_tab.label': 'Przełącz zakładkę prawego paska bocznego',
   'settings.openchamber.keyboardShortcuts.action.cycle_services_tab.label': 'Przełącz zakładkę usług',
