@@ -2,7 +2,6 @@ import React from 'react';
 
 import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { useUIStore } from '@/stores/useUIStore';
-import { useSessionUIStore } from '@/sync/session-ui-store';
 
 /**
  * Registers the native iOS APNs device token with the connected server so the app can
@@ -52,27 +51,19 @@ export const useNativePushRegistration = (options: { enabled: boolean }): void =
           console.warn('[Push] APNs registration error:', error);
         });
 
-        // Tap on a delivered push → open its session.
-        const actionHandle = await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-          const data = action?.notification?.data as Record<string, unknown> | undefined;
-          const sessionId = typeof data?.sessionId === 'string' ? data.sessionId : undefined;
-          if (sessionId) {
-            void useSessionUIStore.getState().setCurrentSession(sessionId);
-          }
-        });
+        // Note: notification-tap handling lives in `useNativePushDeepLink` (registered
+        // unconditionally) so cold-launch taps aren't lost while disconnected.
 
         await PushNotifications.register().catch(() => undefined);
 
         if (disposed) {
           void registrationHandle.remove();
           void registrationErrorHandle.remove();
-          void actionHandle.remove();
           return;
         }
         cleanup.push(
           () => void registrationHandle.remove(),
           () => void registrationErrorHandle.remove(),
-          () => void actionHandle.remove(),
         );
       })
       .catch(() => undefined);

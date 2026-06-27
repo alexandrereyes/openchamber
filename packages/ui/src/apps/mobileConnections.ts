@@ -417,6 +417,48 @@ export const deleteMobileConnection = async (id: string): Promise<MobileSavedCon
   return next;
 };
 
+// Cold-launch auto-connect: silently reconnect to the most-recently-used saved
+// instance so a returning user (and notification deep-links) land straight in the
+// app instead of the connect screen. Returns true and switches the runtime endpoint
+// when the instance is reachable AND we already have a usable bearer token; returns
+// false — caller shows the connect screen — when there is no saved instance, it's
+// unreachable, or it needs a (re)login. Mirrors the success path of
+// `useMobileConnection.connect`, with no prompts or UI state.
+export const autoConnectLastInstance = async (): Promise<boolean> => {
+  await migrateLegacyInlineTokens();
+  const candidate = readConnections()[0]; // sorted most-recent-first
+  if (!candidate) return false;
+
+  const url = normalizeConnectionUrl(candidate.url);
+  if (!url) return false;
+
+  // The native runtime transport needs a bearer token; only auto-connect when one is
+  // already saved. A missing/expired token must go through the login UI, not silently.
+  let token: string | undefined;
+  if (isCapacitorNative()) {
+    if (!candidate.hasToken) return false;
+    token = await readSecureToken(url);
+    if (!token) return false;
+  } else {
+    token = candidate.clientToken;
+  }
+
+  const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+  const health = await requestWithTimeout(`${url}/health`, { method: 'GET', headers });
+  if (!health?.ok) return false;
+
+  const session = await requestWithTimeout(`${url}/auth/session`, { method: 'GET', credentials: 'include', headers });
+  // Token rejected / session invalid → fall back to the login screen.
+  if (!session || (!session.ok && session.status !== 404)) return false;
+  const status = await readSessionStatus(session);
+  if (status && status.disabled !== true && status.authenticated === false) return false;
+
+  await upsertMobileConnection({ label: candidate.label, url }); // bump lastUsedAt (keeps hasToken)
+  switchRuntimeEndpoint({ apiBaseUrl: url, clientToken: token ?? null });
+  return true;
+};
+
 // ---------------------------------------------------------------------------
 // Shared connection controller
 // ---------------------------------------------------------------------------

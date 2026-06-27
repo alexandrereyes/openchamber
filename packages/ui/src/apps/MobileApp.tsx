@@ -58,11 +58,12 @@ import { MobileFilesSurface } from './MobileFilesSurface';
 import { MobileSessionsSheet } from './MobileSessionsSheet';
 import { MobileSurfaceShell } from './MobileSurfaceShell';
 import { DedicatedMobileAppProvider, type MobileAppActions } from './mobileAppContext';
-import { isSameConnectionUrl, useMobileConnection } from './mobileConnections';
+import { autoConnectLastInstance, isSameConnectionUrl, useMobileConnection } from './mobileConnections';
 import { isQrScanSupported, parseConnectionPayload, scanConnectionQr } from './mobileQrScan';
 import { resetAppForRuntimeEndpointChange } from './runtimeEndpointReset';
 import { useAppFontEffects } from './useAppFontEffects';
 import { useFontsReady } from './useFontsReady';
+import { useNativePushDeepLink } from './useNativePushDeepLink';
 import { useNativePushRegistration } from './useNativePushRegistration';
 
 const MOBILE_SETTINGS_PAGES = [
@@ -1850,6 +1851,10 @@ export function MobileApp({ apis }: MobileAppProps) {
   const [connectionEpoch, setConnectionEpoch] = React.useState(0);
   const [runtimeEndpointEpoch, setRuntimeEndpointEpoch] = React.useState(0);
   const [showConnectionRecovery, setShowConnectionRecovery] = React.useState(false);
+  // Cold-launch auto-connect to the last instance: 'pending'/'attempting' hold the
+  // splash so we don't flash the connect screen; 'done' means we either connected or
+  // exhausted the attempt (then the connect screen shows).
+  const [autoConnectPhase, setAutoConnectPhase] = React.useState<'pending' | 'attempting' | 'done'>('pending');
   const isNativeMobileApp = React.useMemo(() => isCapacitorMobileApp(), []);
 
   const handleNativeResume = React.useCallback(() => {
@@ -1878,6 +1883,31 @@ export function MobileApp({ apis }: MobileAppProps) {
       setRuntimeEndpointEpoch((epoch) => epoch + 1);
       setConnectionEpoch((epoch) => epoch + 1);
     });
+  }, []);
+
+  // On cold launch, silently reconnect to the most-recent saved instance so a
+  // returning user — and notification deep-links — land in the app instead of the
+  // connect screen. The splash is held while we try (see render below). If there's
+  // no saved instance, it's unreachable, or it needs a (re)login, we fall through
+  // to the connect screen. A successful switchRuntimeEndpoint fires the endpoint-
+  // changed subscription above, which bumps the epochs and bootstraps the app.
+  React.useEffect(() => {
+    if (!isNativeMobileApp || isConnected || getRuntimeApiBaseUrl()) {
+      setAutoConnectPhase('done');
+      return;
+    }
+    let cancelled = false;
+    setAutoConnectPhase('attempting');
+    void autoConnectLastInstance()
+      .catch(() => false)
+      .then(() => {
+        if (!cancelled) setAutoConnectPhase('done');
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Run once on mount — auto-connect is a cold-launch concern only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
@@ -1992,6 +2022,10 @@ export function MobileApp({ apis }: MobileAppProps) {
   // (document.hasFocus() is unreliable) and leaked while the app was open; the in-app SSE
   // notification dispatch is no-op'd for native in renderMobileApp.
   useNativePushRegistration({ enabled: isNativeMobileApp && isConnected });
+  // Capture notification-tap deep-links even before we're connected (cold launch),
+  // then open the session once the app is ready. Registered unconditionally so a
+  // cold-launch tap isn't lost on the connect/splash screen.
+  useNativePushDeepLink({ ready: isNativeMobileApp && isConnected && isInitialized });
   const fontsReady = useFontsReady();
 
   // `isConnected` is a LIVE flag that flips false on every transient SSE/WS drop and
@@ -2038,6 +2072,16 @@ export function MobileApp({ apis }: MobileAppProps) {
               </>
             ) : null}
           </div>
+        </main>
+      );
+    }
+    // Cold-launch auto-connect is still resolving — hold the splash instead of
+    // flashing the connect screen. Only show the connect screen once we've finished
+    // (no saved instance, unreachable, or needs re-login).
+    if (autoConnectPhase !== 'done') {
+      return (
+        <main className="flex min-h-dvh items-center justify-center bg-background text-foreground">
+          <OpenChamberLogo width={96} height={96} isAnimated />
         </main>
       );
     }
