@@ -10,6 +10,7 @@ import type { RuntimeAPIs } from '@/lib/api/types';
 import { startAppearanceAutoSave } from '@/lib/appearanceAutoSave';
 import { getDeviceInfo } from '@/lib/device';
 import { markAppBootReady } from './appBootReady';
+import { installMobileWidgetSnapshotBridge } from './mobileWidgetSnapshot';
 import { applyPersistedDirectoryPreferences } from '@/lib/directoryPersistence';
 import { initializeLocale, I18nProvider } from '@/lib/i18n';
 import { initializeAppearancePreferences, syncDesktopSettings } from '@/lib/persistence';
@@ -42,6 +43,10 @@ const initializeSharedPreferences = () => {
 
 export function renderMobileApp(apis: RuntimeAPIs) {
   initializeSharedPreferences();
+
+  // Expose the widget snapshot builder so the native shell can read the session overview
+  // (attention count + recent sessions) and feed the home/lock-screen/Control Center widgets.
+  installMobileWidgetSnapshotBridge();
 
   // Apply the device classes (`device-mobile`, `mobile-pointer`) to <html> BEFORE the
   // first React paint. They gate the mobile typography rules in mobile.css (larger

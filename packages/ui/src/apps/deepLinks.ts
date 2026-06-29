@@ -24,6 +24,7 @@ export type DeepLinkIntent =
   | { type: 'session'; sessionId: string; directory?: string }
   | { type: 'new-session'; directory?: string; projectId?: string; agent?: string; model?: string }
   | { type: 'sessions'; filter?: SessionsFilter }
+  | { type: 'status' }
   | { type: 'settings'; section?: string }
   | { type: 'changes'; path?: string; staged?: boolean }
   | { type: 'view'; target: ViewTarget };
@@ -94,6 +95,9 @@ export function parseDeepLink(raw: string | null | undefined): DeepLinkIntent | 
       };
     }
 
+    case 'status':
+      return { type: 'status' };
+
     case 'settings':
       return { type: 'settings', section: rest[0] || query.get('section') || undefined };
 
@@ -151,6 +155,8 @@ export function buildDeepLink(intent: DeepLinkIntent): string {
       });
     case 'sessions':
       return withQuery('sessions', { filter: intent.filter });
+    case 'status':
+      return `${base}status`;
     case 'settings':
       return intent.section ? `${base}settings/${encodeURIComponent(intent.section)}` : `${base}settings`;
     case 'changes':

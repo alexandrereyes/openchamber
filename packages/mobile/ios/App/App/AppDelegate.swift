@@ -1,6 +1,7 @@
 import UIKit
 import Capacitor
 import UserNotifications
+import WidgetKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -97,6 +98,34 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             UNUserNotificationCenter.current().setBadgeCount(0)
         } else {
             UIApplication.shared.applicationIconBadgeNumber = 0
+        }
+
+        // Refresh the widgets' session overview now that the WebView is loaded and state is fresh.
+        writeWidgetSnapshot()
+    }
+
+    func sceneWillResignActive(_ scene: UIScene) {
+        // Capture the latest session overview before the app leaves the foreground, so the
+        // home/lock-screen/Control Center widgets reflect what the user just saw.
+        writeWidgetSnapshot()
+    }
+
+    private static let widgetAppGroup = "group.com.openchamber.app"
+    private static let widgetSnapshotKey = "widgetSnapshot"
+
+    /// Pulls the session overview JSON from the web layer (window.__OPENCHAMBER_WIDGET_SNAPSHOT__),
+    /// stores it in the shared App Group, and reloads the widget timelines. localStorage/stores
+    /// aren't reachable from the widget process, so this is how the bundled UI feeds the widgets —
+    /// no server involved. Failures are ignored so a transient read never clobbers a good snapshot.
+    private func writeWidgetSnapshot() {
+        guard let bridge = window?.rootViewController as? CAPBridgeViewController,
+              let webView = bridge.webView else { return }
+        let js = "(typeof window.__OPENCHAMBER_WIDGET_SNAPSHOT__ === 'function') ? window.__OPENCHAMBER_WIDGET_SNAPSHOT__() : null"
+        webView.evaluateJavaScript(js) { result, _ in
+            guard let json = result as? String, !json.isEmpty,
+                  let defaults = UserDefaults(suiteName: SceneDelegate.widgetAppGroup) else { return }
+            defaults.set(json, forKey: SceneDelegate.widgetSnapshotKey)
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 

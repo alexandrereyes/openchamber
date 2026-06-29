@@ -292,6 +292,10 @@ export const createApnsRuntime = (deps) => {
         badge: Number.isFinite(payload?.badge) && payload.badge >= 0 ? Math.trunc(payload.badge) : undefined,
         sound: 'default',
         'thread-id': typeof payload?.tag === 'string' ? payload.tag : undefined,
+        // Wakes the Notification Service Extension so it can refresh the home/lock-screen
+        // widgets (attention count + unread dot) from the push, even when the app is closed.
+        // No extra network call — just an extra key on the push we already send.
+        'mutable-content': 1,
       },
       ...data,
     });

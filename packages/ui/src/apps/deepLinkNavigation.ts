@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { useSessionUIStore } from '@/sync/session-ui-store';
+import { useUIStore } from '@/stores/useUIStore';
 
 import { buildDeepLink, parseDeepLink, type DeepLinkIntent, type SessionsFilter, type ViewTarget } from './deepLinks';
 
@@ -54,6 +55,12 @@ const execute = (intent: DeepLinkIntent): boolean => {
     case 'sessions':
       if (!handlers.openSessions) return false;
       handlers.openSessions(intent.filter);
+      return true;
+
+    case 'status':
+      // The session status panel is store-backed (useUIStore.mobileSessionPanelOpen),
+      // so it opens without a shell handler — like session/new-session.
+      useUIStore.getState().setMobileSessionPanelOpen(true);
       return true;
 
     case 'view':
