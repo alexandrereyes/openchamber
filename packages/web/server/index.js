@@ -86,6 +86,7 @@ import { createGracefulShutdownRuntime } from './lib/opencode/shutdown-runtime.j
 import { createProjectConfigRuntime } from './lib/projects/project-config.js';
 import { createRemoteClientAuthRuntime } from './lib/client-auth/remote-clients.js';
 import { createPreviewProxyRuntime } from './lib/preview/proxy-runtime.js';
+import { attachRealtimeProxy } from './lib/realtime-proxy.js';
 import { createProxyMiddleware, responseInterceptor } from 'http-proxy-middleware';
 import webPush from 'web-push';
 
@@ -137,9 +138,14 @@ const SSE_PATH_PREFIXES = [
   '/api/global/event',
   '/api/notifications/stream',
   '/api/openchamber/events',
+  '/api/openchamber/realtime-proxy/sse',
 ];
 
 function shouldSkipCompression(req, res) {
+  if (process.env.OPENCHAMBER_RUNTIME === 'desktop') {
+    return true;
+  }
+
   if (headerIncludesEventStream(req.headers.accept)) {
     return true;
   }
@@ -1113,6 +1119,9 @@ async function main(options = {}) {
   if (typeof options.getIsWindowFocused === 'function') {
     notificationTriggerRuntime.setGetIsWindowFocused(options.getIsWindowFocused);
   }
+  const getDesktopRuntimeConfig = typeof options.getDesktopRuntimeConfig === 'function'
+    ? options.getDesktopRuntimeConfig
+    : null;
 
   console.log(`Starting OpenChamber on port ${port === 0 ? 'auto' : port}`);
 
@@ -1164,6 +1173,7 @@ async function main(options = {}) {
   }));
   expressApp = app;
   server = http.createServer(app);
+  let realtimeProxyRuntime = { stop: () => {} };
 
   const bootstrapResult = bootstrapRuntime.setupBaseRoutes(app, {
     process,
@@ -1237,6 +1247,13 @@ async function main(options = {}) {
     setAutoAcceptSession,
   });
   uiAuthController = bootstrapResult.uiAuthController;
+  realtimeProxyRuntime = attachRealtimeProxy({
+    app,
+    server,
+    getDesktopRuntimeConfig,
+    getUiAuthController: () => uiAuthController,
+    isRequestOriginAllowed,
+  });
 
   const tunnelRuntimeContext = tunnelWiringRuntime.initialize(app, port);
   const { tunnelService, startTunnelWithNormalizedRequest } = tunnelRuntimeContext;
@@ -1376,8 +1393,10 @@ async function main(options = {}) {
         port: managed ? openCodePort : null,
       };
     },
-    stop: (shutdownOptions = {}) =>
-      gracefulShutdown({ exitProcess: shutdownOptions.exitProcess ?? false })
+    stop: (shutdownOptions = {}) => {
+      realtimeProxyRuntime.stop();
+      return gracefulShutdown({ exitProcess: shutdownOptions.exitProcess ?? false });
+    }
   };
 }
 
