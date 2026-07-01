@@ -189,3 +189,30 @@ TestFlight / Play internal testing:
   them in the workflow instead of relying on local Homebrew paths.
 - Relay/push secrets (APNs key, FCM service account) live in the relay infrastructure, not app CI.
 - Version/build-number bumping is not automated yet.
+
+## Store review readiness
+
+Xcode build warnings do not block review; the concrete items are store requirements, not code
+quality. Done in-repo vs. to-do at release time:
+
+**Done in-repo (this branch):**
+
+- iOS app **Privacy Manifest** (`ios/App/App/PrivacyInfo.xcprivacy`) — declares no tracking and the
+  required-reason UserDefaults API (App Group snapshot). Bundled SDKs ship their own manifests.
+- iOS **`ITSAppUsesNonExemptEncryption = false`** in `Info.plist` (skips the per-build export-
+  compliance prompt).
+- iOS camera + local-network usage strings; Android SDK levels (`target/compile 35`, `min 24`) meet
+  Play's current requirements.
+
+**To-do at release (console / infra, not code):**
+
+- **Privacy policy URL** — required by both stores because the app uses camera + notifications.
+- iOS **App Privacy nutrition label** (App Store Connect) and Android **Data Safety** form — declare
+  what's collected (device push token; the app otherwise talks only to the user's own server).
+- **Production APNs** for App Store / TestFlight builds: the app's `aps-environment` must be
+  `production` in the release build, and the relay must send to production APNs (not sandbox).
+- **Demo instance + credentials** for reviewers — the app connects to a user's server, so review
+  needs a reachable test instance (App Store 2.1 / Play).
+- **Guideline 4.2 (minimum functionality)** — WebView-wrapper apps can be scrutinized; cite the
+  native features (push, widgets, Control Center, QR pairing) in the review notes.
+- Signing/upload as covered in the CI section above (all three iOS targets; signed Android AAB).
