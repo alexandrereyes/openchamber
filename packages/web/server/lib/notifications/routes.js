@@ -109,6 +109,7 @@ export const registerNotificationRoutes = (app, dependencies) => {
       }
     }
 
+    const platform = typeof req.body?.platform === 'string' ? req.body.platform : undefined;
     await addOrUpdatePushSubscription(
       uiToken,
       {
@@ -116,7 +117,8 @@ export const registerNotificationRoutes = (app, dependencies) => {
         p256dh: keys.p256dh,
         auth: keys.auth,
       },
-      req.headers['user-agent']
+      req.headers['user-agent'],
+      platform
     );
 
     return res.json({ ok: true });
@@ -192,8 +194,9 @@ export const registerNotificationRoutes = (app, dependencies) => {
       return res.status(401).json({ error: 'UI session missing' });
     }
 
-    const visible = req.body && typeof req.body === 'object' ? req.body.visible : null;
-    updateUiVisibility(uiToken, visible === true);
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const platform = typeof body.platform === 'string' ? body.platform : undefined;
+    updateUiVisibility(uiToken, body.visible === true, platform);
     return res.json({ ok: true });
   });
 

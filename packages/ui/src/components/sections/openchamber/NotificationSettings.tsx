@@ -7,6 +7,7 @@ import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { getClientPlatform } from '@/lib/platform';
 import { useI18n } from '@/lib/i18n';
 
 const DEFAULT_NOTIFICATION_TEMPLATES = {
@@ -391,6 +392,7 @@ export const NotificationSettings: React.FC = () => {
             auth: keys.auth,
           },
           origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+          platform: getClientPlatform(),
         }),
         15000,
         'Push subscribe request timed out'

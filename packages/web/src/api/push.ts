@@ -47,7 +47,7 @@ export const createWebPushAPI = (): PushAPI => ({
     });
   },
 
-  async setVisibility(payload: { visible: boolean }) {
+  async setVisibility(payload: { visible: boolean; platform?: string }) {
     return fetchJson<{ ok: true }>('/api/push/visibility', {
       method: 'POST',
       headers: {
