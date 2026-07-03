@@ -952,6 +952,8 @@ export const settingsDict = {
   'settings.projects.page.section.worktree': '工作树',
   'settings.projects.page.field.projectName': '项目名称',
   'settings.projects.page.field.projectNamePlaceholder': '项目名称',
+  'settings.projects.page.field.defaultModel': '新聊天的默认模型',
+  'settings.projects.page.field.defaultModelDescription': '在此项目中开始新聊天时使用。未设置时回退到全局默认值。',
   'settings.projects.page.field.accentColor': '强调色',
   'settings.projects.page.field.projectIcon': '项目图标',
   'settings.projects.page.field.projectIconBackgroundAria': '项目图标背景颜色',

@@ -985,6 +985,8 @@ export const settingsDict = {
   'settings.projects.page.section.worktree': 'Worktree',
   'settings.projects.page.field.projectName': 'Project Name',
   'settings.projects.page.field.projectNamePlaceholder': 'Project name',
+  'settings.projects.page.field.defaultModel': 'Default model for new chats',
+  'settings.projects.page.field.defaultModelDescription': 'Used when starting a new chat in this project. Falls back to global defaults when unset.',
   'settings.projects.page.field.accentColor': 'Accent Color',
   'settings.projects.page.field.projectIcon': 'Project Icon',
   'settings.projects.page.field.projectIconBackgroundAria': 'Project icon background color',

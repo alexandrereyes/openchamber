@@ -952,6 +952,8 @@ export const settingsDict = {
   "settings.projects.page.section.worktree": "Worktree",
   "settings.projects.page.field.projectName": "Назва проєкту",
   "settings.projects.page.field.projectNamePlaceholder": "Назва проєкту",
+  "settings.projects.page.field.defaultModel": "Модель за замовчуванням для нових чатів",
+  "settings.projects.page.field.defaultModelDescription": "Використовується під час початку нового чату в цьому проєкті. Якщо не задано, застосовуються глобальні значення.",
   "settings.projects.page.field.accentColor": "Колір акценту",
   "settings.projects.page.field.projectIcon": "Значок проєкту",
   "settings.projects.page.field.projectIconBackgroundAria": "Колір тла значка проєкту",

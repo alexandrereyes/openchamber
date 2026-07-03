@@ -1206,6 +1206,8 @@ export const settingsDict = {
   'settings.projects.page.field.projectIconBackgroundAria': 'Kolor tła ikony projektu',
   'settings.projects.page.field.projectName': 'Nazwa projektu',
   'settings.projects.page.field.projectNamePlaceholder': 'Nazwa projektu',
+  'settings.projects.page.field.defaultModel': 'Domyślny model dla nowych czatów',
+  'settings.projects.page.field.defaultModelDescription': 'Używany przy rozpoczynaniu nowego czatu w tym projekcie. Gdy nie ustawiono, stosowane są globalne domyślne wartości.',
   'settings.projects.page.section.worktree': 'Worktree',
   'settings.projects.page.title.default': 'Project Settings',
   'settings.projects.page.toast.customIconAlreadySet': 'Dla tego projektu ustawiono już własną ikonę',

@@ -952,6 +952,8 @@ export const settingsDict = {
   'settings.projects.page.section.worktree': 'Worktree',
   'settings.projects.page.field.projectName': '프로젝트 이름',
   'settings.projects.page.field.projectNamePlaceholder': '프로젝트 이름',
+  'settings.projects.page.field.defaultModel': '새 채팅의 기본 모델',
+  'settings.projects.page.field.defaultModelDescription': '이 프로젝트에서 새 채팅을 시작할 때 사용됩니다. 설정하지 않으면 전역 기본값으로 대체됩니다.',
   'settings.projects.page.field.accentColor': '강조 색상',
   'settings.projects.page.field.projectIcon': '프로젝트 아이콘',
   'settings.projects.page.field.projectIconBackgroundAria': '프로젝트 아이콘 배경색',

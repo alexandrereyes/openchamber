@@ -985,6 +985,8 @@ export const settingsDict = {
   'settings.projects.page.section.worktree': 'ワークツリー',
   'settings.projects.page.field.projectName': 'プロジェクト名',
   'settings.projects.page.field.projectNamePlaceholder': 'プロジェクト名',
+  'settings.projects.page.field.defaultModel': '新規チャットのデフォルトモデル',
+  'settings.projects.page.field.defaultModelDescription': 'このプロジェクトで新しいチャットを開始するときに使用されます。未設定の場合はグローバル既定値にフォールバックします。',
   'settings.projects.page.field.accentColor': 'アクセントカラー',
   'settings.projects.page.field.projectIcon': 'プロジェクトアイコン',
   'settings.projects.page.field.projectIconBackgroundAria': 'プロジェクトアイコンの背景色',
