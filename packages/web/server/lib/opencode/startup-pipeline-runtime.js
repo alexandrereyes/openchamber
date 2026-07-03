@@ -1,6 +1,7 @@
 export const createStartupPipelineRuntime = (dependencies) => {
   const {
     createTerminalRuntime,
+    createDictationRuntime,
     createMessageStreamWsRuntime,
     createOpenChamberAgentEventsWebSocketRuntime,
     createServerStartupRuntime,
@@ -53,6 +54,7 @@ export const createStartupPipelineRuntime = (dependencies) => {
       tunnelRuntimeContext,
       attachSignals,
       apiOnly,
+      dictationModelsDir,
     } = options;
 
     const terminalRuntime = createTerminalRuntime({
@@ -70,6 +72,16 @@ export const createStartupPipelineRuntime = (dependencies) => {
       TERMINAL_INPUT_WS_HEARTBEAT_INTERVAL_MS: terminalHeartbeatIntervalMs,
       TERMINAL_INPUT_WS_REBIND_WINDOW_MS: terminalRebindWindowMs,
       TERMINAL_INPUT_WS_MAX_REBINDS_PER_WINDOW: terminalMaxRebindsPerWindow,
+    });
+
+    const dictationRuntime = createDictationRuntime({
+      app,
+      server,
+      express,
+      uiAuthController,
+      isRequestOriginAllowed,
+      rejectWebSocketUpgrade,
+      modelsDir: dictationModelsDir,
     });
 
     const messageStreamRuntime = createMessageStreamWsRuntime({
@@ -133,6 +145,7 @@ export const createStartupPipelineRuntime = (dependencies) => {
 
     return {
       terminalRuntime,
+      dictationRuntime,
       messageStreamRuntime,
       openChamberAgentEventsWebSocketRuntime,
     };
