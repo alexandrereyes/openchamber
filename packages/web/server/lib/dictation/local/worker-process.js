@@ -19,7 +19,8 @@ import {
   SherpaOfflineRecognizerEngine,
   SherpaRealtimeTranscriptionSession,
 } from './sherpa-recognizer.js';
-import { getLocalSttModelDir } from './model-catalog.js';
+import { getLocalSttModelDir, getLocalSttModelSpec } from './model-catalog.js';
+import path from 'path';
 
 process.title = 'OpenChamber Dictation';
 
@@ -53,11 +54,13 @@ function getEngine(modelsDir, modelId) {
     return existing;
   }
   const modelDir = getLocalSttModelDir(modelsDir, modelId);
+  const spec = getLocalSttModelSpec(modelId);
   const created = new SherpaOfflineRecognizerEngine({
-    encoder: `${modelDir}/encoder.int8.onnx`,
-    decoder: `${modelDir}/decoder.int8.onnx`,
-    joiner: `${modelDir}/joiner.int8.onnx`,
-    tokens: `${modelDir}/tokens.txt`,
+    type: spec.type,
+    encoder: path.join(modelDir, spec.files.encoder),
+    decoder: path.join(modelDir, spec.files.decoder),
+    ...(spec.files.joiner ? { joiner: path.join(modelDir, spec.files.joiner) } : {}),
+    tokens: path.join(modelDir, spec.files.tokens),
     numThreads: 2,
   });
   engines.set(key, created);

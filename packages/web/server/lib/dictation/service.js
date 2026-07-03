@@ -9,12 +9,15 @@
  *   endpoint (faster-whisper, whisper.cpp, OpenAI).
  */
 
+import { rm } from 'fs/promises';
+
 import { DictationWorkerClient, WorkerBackedTranscriptionSession } from './local/worker-client.js';
 import { OpenAICompatibleTranscriptionSession } from './openai-compatible-session.js';
 import {
   DEFAULT_LOCAL_STT_MODEL,
   LOCAL_STT_MODEL_CATALOG,
   LOCAL_STT_MODEL_IDS,
+  getLocalSttModelDir,
   isLocalSttModelId,
 } from './local/model-catalog.js';
 import { ensureLocalSttModel, isLocalSttModelInstalled } from './local/model-downloader.js';
@@ -27,6 +30,8 @@ export function createDictationService({ modelsDir }) {
   const downloadErrors = new Map();
   /** modelId -> in-flight ensure promise */
   const downloadPromises = new Map();
+  /** modelId -> 0..100 download percent (null while size unknown) */
+  const downloadProgress = new Map();
 
   const startModelDownload = (modelId) => {
     const existing = downloadPromises.get(modelId);
@@ -35,15 +40,27 @@ export function createDictationService({ modelsDir }) {
     }
     downloadStates.set(modelId, 'downloading');
     downloadErrors.delete(modelId);
-    const promise = ensureLocalSttModel({ modelsDir, modelId })
+    downloadProgress.set(modelId, 0);
+    const promise = ensureLocalSttModel({
+      modelsDir,
+      modelId,
+      onProgress: (downloadedBytes, totalBytes) => {
+        downloadProgress.set(
+          modelId,
+          totalBytes ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)) : null,
+        );
+      },
+    })
       .then(() => {
         downloadStates.delete(modelId);
         downloadPromises.delete(modelId);
+        downloadProgress.delete(modelId);
       })
       .catch((error) => {
         downloadStates.set(modelId, 'error');
         downloadErrors.set(modelId, error?.message || String(error));
         downloadPromises.delete(modelId);
+        downloadProgress.delete(modelId);
       });
     downloadPromises.set(modelId, promise);
     return promise;
@@ -110,8 +127,21 @@ export function createDictationService({ modelsDir }) {
     try {
       await session.connect();
     } catch (error) {
+      const message = error?.message || String(error);
+      // A model that passes the file-presence check but fails to load is
+      // corrupt on disk (e.g. truncated by an interrupted extraction). Remove
+      // it so the next attempt re-downloads instead of crashing forever.
+      if (/Load model|Protobuf parsing failed/i.test(message)) {
+        await rm(getLocalSttModelDir(modelsDir, modelId), { recursive: true, force: true })
+          .catch(() => undefined);
+        return {
+          error: 'Dictation model files were corrupt and have been removed; retry to re-download',
+          retryable: true,
+          reasonCode: 'model_corrupt',
+        };
+      }
       return {
-        error: error?.message || String(error),
+        error: message,
         retryable: true,
         reasonCode: 'stt_unavailable',
       };
@@ -133,6 +163,7 @@ export function createDictationService({ modelsDir }) {
         description: LOCAL_STT_MODEL_CATALOG[id].description,
         installed: await isLocalSttModelInstalled(modelsDir, id),
         downloading: downloadStates.get(id) === 'downloading',
+        downloadProgress: downloadProgress.get(id) ?? null,
         downloadError: downloadErrors.get(id) || null,
       })),
     );
@@ -188,6 +219,24 @@ export function createDictationService({ modelsDir }) {
     return { ok: true, installed: false };
   };
 
+  /**
+   * Delete an installed model from disk. A model that is mid-download cannot
+   * be deleted. An engine already loaded in the worker keeps its in-memory
+   * copy until the worker's idle shutdown; the files are simply re-downloaded
+   * on the next use if the model is selected again.
+   */
+  const deleteModel = async (modelId) => {
+    if (!isLocalSttModelId(modelId)) {
+      return { ok: false, error: 'Unknown model id' };
+    }
+    if (downloadStates.get(modelId) === 'downloading') {
+      return { ok: false, error: 'Model is downloading' };
+    }
+    await rm(getLocalSttModelDir(modelsDir, modelId), { recursive: true, force: true });
+    downloadErrors.delete(modelId);
+    return { ok: true };
+  };
+
   const shutdown = () => {
     workerClient.shutdown();
   };
@@ -196,6 +245,7 @@ export function createDictationService({ modelsDir }) {
     createSttSession,
     getStatus,
     requestModelDownload,
+    deleteModel,
     shutdown,
   };
 }

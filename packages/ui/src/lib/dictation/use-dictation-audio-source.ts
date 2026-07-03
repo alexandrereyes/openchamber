@@ -253,6 +253,12 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
                 }
             });
         }
+        const pending = graph.pending;
+        graph.pending = new Int16Array(0);
+        if (pending.length > 0) {
+            onPcmSegmentRef.current(int16ToBase64(pending));
+        }
+
         if (graph.context) {
             try {
                 await graph.context.close();
@@ -261,11 +267,10 @@ export function useDictationAudioSource(config: DictationAudioSourceConfig): Dic
             }
         }
 
-        const pending = graph.pending;
-        graphRef.current = emptyGraph();
-
-        if (pending.length > 0) {
-            onPcmSegmentRef.current(int16ToBase64(pending));
+        // A new capture may have started while the old context was closing;
+        // only clear the ref if it still points at the graph we tore down.
+        if (graphRef.current === graph) {
+            graphRef.current = emptyGraph();
         }
     }, []);
 

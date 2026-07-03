@@ -1875,6 +1875,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.placeholder.selectSession': '채팅을 시작할 세션을 선택하거나 새로 만드세요',
   'chat.dictation.start': '받아쓰기 시작',
   'chat.dictation.overlayAria': '받아쓰기',
+  'chat.dictation.downloadingModel': '음성 모델 다운로드 중...',
+  'chat.dictation.downloadingModelProgress': '음성 모델 다운로드 중... {percent}%',
   'chat.dictation.listening': '듣는 중...',
   'chat.dictation.processing': '변환 중...',
   'chat.dictation.failed': '변환에 실패했습니다',

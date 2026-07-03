@@ -22,33 +22,56 @@ function assertFileExists(filePath, label) {
 
 export class SherpaOfflineRecognizerEngine {
   /**
-   * @param {{ encoder: string, decoder: string, joiner: string, tokens: string, numThreads?: number }} config
+   * @param {{ type: 'nemo_transducer' | 'whisper',
+   *           encoder: string, decoder: string, joiner?: string, tokens: string,
+   *           numThreads?: number }} config
    */
   constructor(config) {
     assertFileExists(config.encoder, 'offline encoder');
     assertFileExists(config.decoder, 'offline decoder');
-    assertFileExists(config.joiner, 'offline joiner');
+    if (config.type === 'nemo_transducer') {
+      assertFileExists(config.joiner, 'offline joiner');
+    }
     assertFileExists(config.tokens, 'tokens');
 
     const sherpa = loadSherpaOnnxNode();
+
+    const modelConfig =
+      config.type === 'whisper'
+        ? {
+            whisper: {
+              encoder: config.encoder,
+              decoder: config.decoder,
+              // Empty language auto-detects for multilingual Whisper exports.
+              language: '',
+              task: 'transcribe',
+              tailPaddings: -1,
+            },
+            tokens: config.tokens,
+            modelType: 'whisper',
+            numThreads: config.numThreads ?? 2,
+            provider: 'cpu',
+            debug: 0,
+          }
+        : {
+            transducer: {
+              encoder: config.encoder,
+              decoder: config.decoder,
+              joiner: config.joiner,
+            },
+            tokens: config.tokens,
+            modelType: 'nemo_transducer',
+            numThreads: config.numThreads ?? 2,
+            provider: 'cpu',
+            debug: 0,
+          };
 
     const recognizerConfig = {
       featConfig: {
         sampleRate: 16000,
         featureDim: 80,
       },
-      modelConfig: {
-        transducer: {
-          encoder: config.encoder,
-          decoder: config.decoder,
-          joiner: config.joiner,
-        },
-        tokens: config.tokens,
-        modelType: 'nemo_transducer',
-        numThreads: config.numThreads ?? 2,
-        provider: 'cpu',
-        debug: 0,
-      },
+      modelConfig,
       decodingMethod: 'greedy_search',
       maxActivePaths: 4,
     };
@@ -228,8 +251,13 @@ export class SherpaRealtimeTranscriptionSession extends EventEmitter {
 
     this.decoding = true;
     try {
+      const decodeStartedAt = Date.now();
       const text = this.engine.decodePcm16(this.pcm16);
       this.lastDecodeAt = Date.now();
+      // Adaptive throttle: on slow hardware (or heavy models) re-decoding the
+      // growing segment every 350ms would monopolize the worker. Space partial
+      // decodes to ~1.5x the observed decode time.
+      this.minDecodeIntervalMs = Math.max(350, (this.lastDecodeAt - decodeStartedAt) * 1.5);
       if (text !== this.lastPartialText) {
         this.lastPartialText = text;
         this.emit('transcript', {

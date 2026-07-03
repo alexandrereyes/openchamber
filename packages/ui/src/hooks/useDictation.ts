@@ -30,10 +30,12 @@ export interface UseDictationResult {
     volume: number;
     duration: number;
     error: string | null;
+    errorReason: string | null;
     startDictation: () => Promise<void>;
     confirmDictation: () => Promise<string | null>;
     cancelDictation: () => Promise<void>;
     retryFailedDictation: () => Promise<string | null>;
+    acceptPartialTranscript: () => string | null;
     discardFailedDictation: () => void;
 }
 
@@ -70,6 +72,7 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
     const [partialTranscript, setPartialTranscript] = useState('');
     const [duration, setDuration] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [errorReason, setErrorReason] = useState<string | null>(null);
 
     const statusRef = useRef(status);
     useEffect(() => {
@@ -114,7 +117,14 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
     const reportError = useCallback((err: unknown) => {
         const normalized = toError(err);
         setError(normalized.message);
+        const reason = (normalized as Error & { reasonCode?: string }).reasonCode;
+        setErrorReason(typeof reason === 'string' ? reason : null);
         onErrorRef.current?.(normalized);
+    }, []);
+
+    const clearError = useCallback(() => {
+        setError(null);
+        setErrorReason(null);
     }, []);
 
     const clearStreamingState = useCallback(() => {
@@ -203,7 +213,7 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
         }
 
         gate.starting = true;
-        setError(null);
+        clearError();
         setPartialTranscript('');
         setDuration(0);
         setStatus('recording');
@@ -214,8 +224,11 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
             await audio.start();
             startDurationTracking();
             // Open the stream eagerly so partials start flowing immediately.
-            await senderRef.current?.restartStream().catch(() => {
-                // Non-fatal: segments buffer locally, finish() retries the start.
+            await senderRef.current?.restartStream().catch((err) => {
+                // Non-fatal: segments buffer locally and finish() retries the
+                // start, but surface the reason (e.g. model downloading) so
+                // the overlay can show it.
+                reportError(err);
             });
         } catch (err) {
             await audio.stop().catch(() => undefined);
@@ -226,7 +239,7 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
         } finally {
             gate.starting = false;
         }
-    }, [audio, canStart, clearStreamingState, reportError, startDurationTracking, stopDurationTracking]);
+    }, [audio, canStart, clearError, clearStreamingState, reportError, startDurationTracking, stopDurationTracking]);
 
     const cancelDictation = useCallback(async () => {
         const gate = actionGateRef.current;
@@ -239,24 +252,28 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
         gate.cancelling = true;
         stopDurationTracking();
         setDuration(0);
-        setError(null);
+        clearError();
+
+        // Optimistic: dismiss the overlay immediately. Tearing down the audio
+        // graph (AudioContext.close) can take up to ~1s on mobile WebViews and
+        // must not delay the visible response to Cancel.
+        setStatus('idle');
+        statusRef.current = 'idle';
+        try {
+            senderRef.current?.cancel();
+        } catch {
+            // no-op
+        }
+        clearStreamingState();
 
         try {
-            try {
-                senderRef.current?.cancel();
-            } catch {
-                // no-op
-            }
             await audio.stop();
-        } catch (err) {
-            reportError(err);
+        } catch {
+            // Cancelled anyway; mic teardown failures are not user-actionable.
         } finally {
-            setStatus('idle');
-            statusRef.current = 'idle';
-            clearStreamingState();
             gate.cancelling = false;
         }
-    }, [audio, clearStreamingState, reportError, stopDurationTracking]);
+    }, [audio, clearError, clearStreamingState, stopDurationTracking]);
 
     const confirmDictation = useCallback(async (): Promise<string | null> => {
         const gate = actionGateRef.current;
@@ -268,7 +285,7 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
         }
 
         gate.confirming = true;
-        setError(null);
+        clearError();
         stopDurationTracking();
 
         try {
@@ -289,13 +306,13 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
         } finally {
             gate.confirming = false;
         }
-    }, [audio, handleFailure, handleSuccess, stopDurationTracking]);
+    }, [audio, clearError, handleFailure, handleSuccess, stopDurationTracking]);
 
     const retryFailedDictation = useCallback(async (): Promise<string | null> => {
         if (statusRef.current !== 'failed' || !senderRef.current?.hasSegments()) {
             return null;
         }
-        setError(null);
+        clearError();
         setStatus('uploading');
         statusRef.current = 'uploading';
 
@@ -308,15 +325,61 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
             handleFailure(err);
             return null;
         }
-    }, [handleFailure, handleSuccess]);
+    }, [clearError, handleFailure, handleSuccess]);
+
+    /**
+     * Failed dictations still hold the last streamed partial transcript.
+     * Accept it as-is instead of retrying the full transcription.
+     */
+    const acceptPartialTranscript = useCallback((): string | null => {
+        if (statusRef.current !== 'failed') {
+            return null;
+        }
+        const text = latestPartialRef.current.trim();
+        setDuration(0);
+        setStatus('idle');
+        statusRef.current = 'idle';
+        clearError();
+        try {
+            senderRef.current?.cancel();
+        } catch {
+            // no-op
+        }
+        clearStreamingState();
+        if (!text) {
+            return null;
+        }
+        onTranscriptRef.current?.(text);
+        return text;
+    }, [clearError, clearStreamingState]);
 
     const discardFailedDictation = useCallback(() => {
         setDuration(0);
         setStatus('idle');
         statusRef.current = 'idle';
-        setError(null);
+        clearError();
         clearStreamingState();
-    }, [clearStreamingState]);
+    }, [clearError, clearStreamingState]);
+
+    // While recording without an open stream (e.g. the model is still
+    // downloading), retry the stream start so live partials kick in as soon
+    // as the provider becomes ready. Buffered segments replay on success.
+    useEffect(() => {
+        if (status !== 'recording' || errorReason !== 'model_download_in_progress') {
+            return;
+        }
+        const interval = setInterval(() => {
+            if (statusRef.current !== 'recording' || senderRef.current?.getDictationId()) {
+                return;
+            }
+            senderRef.current?.restartStream().then(() => {
+                clearError();
+            }).catch((err) => {
+                reportError(err);
+            });
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [status, errorReason, clearError, reportError]);
 
     useEffect(() => {
         return () => {
@@ -334,10 +397,12 @@ export function useDictation(options: UseDictationOptions = {}): UseDictationRes
         volume: audio.volume,
         duration,
         error,
+        errorReason,
         startDictation,
         confirmDictation,
         cancelDictation,
         retryFailedDictation,
+        acceptPartialTranscript,
         discardFailedDictation,
     };
 }

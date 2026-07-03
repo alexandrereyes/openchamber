@@ -1093,6 +1093,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.placeholder.shell': 'Wpisz polecenie powłoki...',
   'chat.dictation.start': 'Rozpocznij dyktowanie',
   'chat.dictation.overlayAria': 'Dyktowanie',
+  'chat.dictation.downloadingModel': 'Pobieranie modelu mowy...',
+  'chat.dictation.downloadingModelProgress': 'Pobieranie modelu mowy... {percent}%',
   'chat.dictation.listening': 'Słucham...',
   'chat.dictation.processing': 'Transkrybowanie...',
   'chat.dictation.failed': 'Transkrypcja nie powiodła się',

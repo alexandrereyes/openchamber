@@ -4447,6 +4447,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                                 : undefined}
                         />
                     )}
+                    {/* Positioning context for the dictation overlay: covers the
+                        text area + footer exactly, excluding MobileSessionStatusBar. */}
+                    <div className={cn('relative flex flex-col', isDesktopExpanded && 'flex-1 min-h-0')}>
                     <div className={cn("overflow-hidden", isDesktopExpanded && 'flex flex-1 min-h-0 flex-col')}>
                         <div className="flex items-center gap-1 px-3 pt-1 flex-wrap relative z-10">
                             <AttachedVSCodeFileChips onShowPopup={handleShowAttachmentPreview} />
@@ -4588,8 +4591,11 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                                         <div className="flex items-center gap-x-1 flex-shrink-0">
                                             <MemoComposerDictation
                                                 radius={chatInputRadius}
+                                                isMobile={isMobile}
                                                 footerIconButtonClass={footerIconButtonClass}
+                                                footerPaddingClass={footerPaddingClass}
                                                 iconSizeClass={iconSizeClass}
+                                                sendIconSizeClass={sendIconSizeClass}
                                                 onInsert={handleDictationInsert}
                                                 onInsertAndSend={handleDictationInsertAndSend}
                                             />
@@ -4649,8 +4655,11 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                                     <MemoModelControls className={cn('flex-1 min-w-0 justify-end')} />
                                     <MemoComposerDictation
                                         radius={chatInputRadius}
+                                        isMobile={isMobile}
                                         footerIconButtonClass={footerIconButtonClass}
+                                        footerPaddingClass={footerPaddingClass}
                                         iconSizeClass={iconSizeClass}
+                                        sendIconSizeClass={sendIconSizeClass}
                                         onInsert={handleDictationInsert}
                                         onInsertAndSend={handleDictationInsertAndSend}
                                     />
@@ -4671,6 +4680,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                                 </div>
                             </>
                         )}
+                    </div>
                     </div>
 
                     {/* Mobile session panel: slide-up overlay toggled by MobileSessionPanelTrigger. */}

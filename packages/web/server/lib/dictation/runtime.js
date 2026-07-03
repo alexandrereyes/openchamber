@@ -72,6 +72,19 @@ export function createDictationRuntime({
     }
   });
 
+  app.delete('/api/dictation/models/:modelId', async (req, res) => {
+    try {
+      const result = await service.deleteModel(req.params.modelId);
+      if (!result.ok) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error?.message || 'Failed to delete model' });
+    }
+  });
+
   const wsServer = new WebSocketServer({
     noServer: true,
     maxPayload: DICTATION_WS_MAX_PAYLOAD_BYTES,

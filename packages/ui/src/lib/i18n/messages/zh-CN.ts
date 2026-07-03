@@ -1841,6 +1841,8 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.placeholder.selectSession': '选择或创建会话以开始聊天',
   'chat.dictation.start': '开始语音输入',
   'chat.dictation.overlayAria': '语音输入',
+  'chat.dictation.downloadingModel': '正在下载语音模型...',
+  'chat.dictation.downloadingModelProgress': '正在下载语音模型... {percent}%',
   'chat.dictation.listening': '正在聆听...',
   'chat.dictation.processing': '正在转写...',
   'chat.dictation.failed': '转写失败',

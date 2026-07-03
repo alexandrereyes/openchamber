@@ -1247,6 +1247,8 @@ export const dict: Record<I18nKey, string> = {
   'diffView.reviewDialog.toast.startFailed': 'No se pudo iniciar el flujo de revisión',
   'chat.dictation.start': 'Iniciar dictado',
   'chat.dictation.overlayAria': 'Dictado',
+  'chat.dictation.downloadingModel': 'Descargando el modelo de voz...',
+  'chat.dictation.downloadingModelProgress': 'Descargando el modelo de voz... {percent}%',
   'chat.dictation.listening': 'Escuchando...',
   'chat.dictation.processing': 'Transcribiendo...',
   'chat.dictation.failed': 'La transcripción falló',

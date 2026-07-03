@@ -30,7 +30,7 @@ async function hasRequiredFiles(modelDir, requiredFiles) {
   return results.every(Boolean);
 }
 
-async function downloadToFile(url, outputPath) {
+async function downloadToFile(url, outputPath, onProgress) {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to download ${url}: ${res.status} ${res.statusText}`);
@@ -39,10 +39,19 @@ async function downloadToFile(url, outputPath) {
     throw new Error(`Failed to download ${url}: missing response body`);
   }
 
+  const totalBytes = Number.parseInt(res.headers.get('content-length') || '', 10) || null;
+  let downloadedBytes = 0;
+
   const tmpPath = `${outputPath}.tmp-${Date.now()}`;
   await mkdir(path.dirname(outputPath), { recursive: true });
 
   const nodeStream = Readable.fromWeb(res.body);
+  if (typeof onProgress === 'function') {
+    nodeStream.on('data', (chunk) => {
+      downloadedBytes += chunk.length;
+      onProgress(downloadedBytes, totalBytes);
+    });
+  }
 
   try {
     await pipeline(nodeStream, createWriteStream(tmpPath));
@@ -94,31 +103,59 @@ export async function isLocalSttModelInstalled(modelsDir, modelId) {
 
 /**
  * Ensure a model is downloaded and extracted. Resolves with the model dir.
- * @param {{ modelsDir: string, modelId: string }} options
+ *
+ * Extraction is staged: the archive unpacks into a temporary directory and is
+ * verified before being renamed into place. An interrupted or failed tar must
+ * never leave partial files at the final path — the installed check only
+ * verifies file presence, so a truncated .onnx there would be treated as an
+ * installed model forever ("Protobuf parsing failed" at load time).
+ *
+ * @param {{ modelsDir: string, modelId: string,
+ *           onProgress?: (downloadedBytes: number, totalBytes: number | null) => void }} options
  * @returns {Promise<string>}
  */
-export async function ensureLocalSttModel({ modelsDir, modelId }) {
+export async function ensureLocalSttModel({ modelsDir, modelId, onProgress }) {
   const spec = getLocalSttModelSpec(modelId);
   const modelDir = path.join(modelsDir, spec.extractedDir);
   if (await hasRequiredFiles(modelDir, spec.requiredFiles)) {
     return modelDir;
   }
 
+  // A directory that exists but fails the required-files check is a partial
+  // extraction from an earlier interrupted attempt — remove it before retrying.
+  await rm(modelDir, { recursive: true, force: true }).catch(() => undefined);
+
   const downloadsDir = path.join(modelsDir, '.downloads');
   const archiveFilename = path.basename(new URL(spec.archiveUrl).pathname);
   const archivePath = path.join(downloadsDir, archiveFilename);
 
   if (!(await isNonEmptyFile(archivePath))) {
-    await downloadToFile(spec.archiveUrl, archivePath);
+    await downloadToFile(spec.archiveUrl, archivePath, onProgress);
   }
 
-  await extractTarArchive(archivePath, modelsDir);
+  const stagingDir = path.join(modelsDir, `.staging-${spec.extractedDir}-${Date.now()}`);
+  try {
+    await extractTarArchive(archivePath, stagingDir);
 
-  if (!(await hasRequiredFiles(modelDir, spec.requiredFiles))) {
-    throw new Error(
-      `Downloaded and extracted ${archiveFilename}, but required files are still missing in ${modelDir}`,
-    );
+    const stagedModelDir = path.join(stagingDir, spec.extractedDir);
+    if (!(await hasRequiredFiles(stagedModelDir, spec.requiredFiles))) {
+      // Bad archive (truncated download / corrupt cache): drop it so the next
+      // attempt re-downloads instead of re-extracting the same broken bytes.
+      await rm(archivePath, { force: true }).catch(() => undefined);
+      throw new Error(
+        `Extracted ${archiveFilename}, but required model files are missing or empty. The archive was discarded; retry to re-download.`,
+      );
+    }
+
+    await rename(stagedModelDir, modelDir);
+  } catch (error) {
+    await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+    // Any extraction failure means the cached archive can't be trusted
+    // (corrupt bz2, truncated download). Discard it so retry re-downloads.
+    await rm(archivePath, { force: true }).catch(() => undefined);
+    throw error;
   }
+  await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
 
   await rm(archivePath, { force: true }).catch(() => undefined);
 

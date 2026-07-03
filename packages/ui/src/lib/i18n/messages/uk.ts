@@ -1247,6 +1247,8 @@ export const dict: Record<I18nKey, string> = {
   'diffView.reviewDialog.toast.startFailed': 'Не вдалося запустити review flow',
   'chat.dictation.start': 'Почати диктування',
   'chat.dictation.overlayAria': 'Диктування',
+  'chat.dictation.downloadingModel': 'Завантаження мовної моделі...',
+  'chat.dictation.downloadingModelProgress': 'Завантаження мовної моделі... {percent}%',
   'chat.dictation.listening': 'Слухаю...',
   'chat.dictation.processing': 'Розшифровка...',
   'chat.dictation.failed': 'Не вдалося розшифрувати запис',
