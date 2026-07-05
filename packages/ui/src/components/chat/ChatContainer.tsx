@@ -522,10 +522,17 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
     // History metadata — use sync's hasMore/isLoading
     const historyMeta = React.useMemo(() => {
         if (!currentSessionId) return null;
-        const prefetchHasMore = Boolean(sessionPrefetchInfo?.cursor) && sessionPrefetchInfo?.complete !== true;
+        // Sync's meta is authoritative once a fetch has confirmed the history
+        // is fully loaded — a stale prefetch-cache entry (cursor recorded at
+        // the initial page) must not keep the "load older" affordance alive
+        // after the user has already reached the top.
+        const syncComplete = sync.isComplete(currentSessionId);
+        const prefetchHasMore = !syncComplete
+            && Boolean(sessionPrefetchInfo?.cursor)
+            && sessionPrefetchInfo?.complete !== true;
         return {
             limit: sessionMessages.length,
-            complete: !(sync.hasMore(currentSessionId) || prefetchHasMore),
+            complete: syncComplete || !(sync.hasMore(currentSessionId) || prefetchHasMore),
             loading: sync.isLoading(currentSessionId),
         };
     }, [currentSessionId, sessionMessages.length, sessionPrefetchInfo, sync]);
@@ -535,7 +542,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
     const chatSurfaceMode = useChatSurfaceMode();
     const draftOpen = Boolean(newSessionDraft?.open);
     const initError = useGlobalSyncStore((s) => s.error);
-    const isDesktopExpandedInput = isExpandedInput && !isMobile;
+    // Despite the historical name, this now covers mobile too: the mobile
+    // composer enters the same fullscreen-input mode via its drag handle.
+    const isDesktopExpandedInput = isExpandedInput;
     const useCompactDraftLayout = isMobile || isVSCode || chatSurfaceMode === 'mini-chat';
     const messageListRef = React.useRef<MessageListHandle | null>(null);
     const draftProjectLabel = React.useMemo(() => {
@@ -799,7 +808,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
 		return (
 			<div className="relative flex h-full flex-col bg-background transform-gpu">
 				{useCompactDraftLayout && !isDesktopExpandedInput ? (
-					<div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
+					<div className="oc-draft-center flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center">
 						<h1 className="text-balance text-3xl font-normal tracking-tight text-foreground">
 							{renderDraftTitle(
 								draftProjectLabel
@@ -810,7 +819,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
 						</h1>
 						<DraftPresetChips
 							onSubmit={(text) => useInputStore.getState().requestPresetSubmit(text)}
-							className="mt-8 max-w-md"
+							className="oc-draft-starters mt-8 max-w-md"
 						/>
 					</div>
 				) : null}
