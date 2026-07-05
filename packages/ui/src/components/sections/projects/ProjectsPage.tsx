@@ -31,7 +31,13 @@ export const ProjectsPage: React.FC = () => {
 
   const handleIdentitySave = React.useCallback(async (data: ProjectIdentitySaveData) => {
     if (!selectedProject) return;
-    updateProjectMeta(selectedProject.id, data);
+    updateProjectMeta(selectedProject.id, {
+      label: data.label,
+      icon: data.icon,
+      color: data.color,
+      iconBackground: data.iconBackground,
+      defaultModel: data.defaultModel ?? null,
+    });
   }, [selectedProject, updateProjectMeta]);
 
   if (!selectedProject) {

@@ -23,7 +23,7 @@ export type ProjectIdentitySaveData = {
   icon: string | null;
   color: string | null;
   iconBackground: string | null;
-  defaultModel: string | undefined;
+  defaultModel: string | null;
 };
 
 type EditableProject = Pick<
@@ -231,7 +231,7 @@ export const useProjectIdentityForm = (project: EditableProject | null) => {
       icon,
       color,
       iconBackground: normalizeProjectIconBackground(willRemoveImageIcon ? null : iconBackground),
-      defaultModel,
+      defaultModel: defaultModel ?? null,
     };
   }, [
     clearPendingUploadIcon,

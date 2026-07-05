@@ -57,7 +57,7 @@ interface ProjectsStore {
     icon?: string | null;
     color?: string | null;
     iconBackground?: string | null;
-    defaultModel?: string | undefined;
+    defaultModel?: string | null;
   }) => void;
   uploadProjectIcon: (id: string, file: File) => Promise<{ ok: boolean; error?: string }>;
   removeProjectIcon: (id: string) => Promise<{ ok: boolean; error?: string }>;
@@ -697,7 +697,7 @@ export const useProjectsStore = create<ProjectsStore>()(
       icon?: string | null;
       color?: string | null;
       iconBackground?: string | null;
-      defaultModel?: string | undefined;
+      defaultModel?: string | null;
     }) => {
       if (isVSCodeProjectsRuntime) {
         return;

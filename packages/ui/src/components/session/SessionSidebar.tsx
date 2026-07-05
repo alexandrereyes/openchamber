@@ -607,12 +607,18 @@ export const SessionSidebar: React.FC<SessionSidebarProps> = ({
     icon: string | null;
     color: string | null;
     iconBackground: string | null;
-    defaultModel: string | undefined;
+    defaultModel: string | null;
   }) => {
     if (!editingProjectDialogId) {
       return;
     }
-    updateProjectMeta(editingProjectDialogId, data);
+    updateProjectMeta(editingProjectDialogId, {
+      label: data.label,
+      icon: data.icon,
+      color: data.color,
+      iconBackground: data.iconBackground,
+      defaultModel: data.defaultModel ?? null,
+    });
   }, [editingProjectDialogId, updateProjectMeta]);
 
   const openNewWorktreeDialog = React.useCallback(() => {
