@@ -20,9 +20,9 @@ export const ProjectEditDialog: React.FC<ProjectEditDialogProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-4xl gap-0 overflow-hidden p-0">
+      <DialogContent className="w-full max-w-2xl gap-0 overflow-hidden p-0">
         <ScrollableOverlay outerClassName="max-h-[min(90vh,48rem)]" className="w-full bg-background">
-          <div className="mx-auto w-full max-w-4xl p-3 sm:p-6 sm:pt-8">
+          <div className="w-full p-3 sm:p-6 sm:pt-8">
             {open && project ? (
               <ProjectSettingsPanel
                 project={project}
