@@ -364,11 +364,13 @@ export async function generatePullRequestDescription(
     to: payload.head,
     maxCount: 50,
   });
+  const COMMIT_BODY_CHAR_LIMIT = 2_000;
   const commits = (Array.isArray(commitLog?.all) ? commitLog.all : [])
     .filter((entry) => typeof entry?.hash === 'string' && entry.hash.length > 0)
     .map((entry) => ({
       hash: entry.hash,
       subject: typeof entry.message === 'string' ? entry.message.trim() : '',
+      body: typeof entry.body === 'string' ? entry.body.trim().slice(0, COMMIT_BODY_CHAR_LIMIT) : '',
     }));
 
   if (commits.length === 0) {
@@ -408,7 +410,12 @@ export async function generatePullRequestDescription(
   const hiddenPrompt = await renderMagicPrompt('git.pr.generate.instructions', {
     base_branch: payload.base,
     head_branch: payload.head,
-    commits: commits.map((commit) => `- ${commit.hash.slice(0, 7)} ${commit.subject || '(no subject)'}`).join('\n'),
+    commits: commits.map((commit) => {
+      const line = `- ${commit.hash.slice(0, 7)} ${commit.subject || '(no subject)'}`;
+      if (!commit.body) return line;
+      const indentedBody = commit.body.split('\n').map((bodyLine) => `  ${bodyLine}`).join('\n');
+      return `${line}\n${indentedBody}`;
+    }).join('\n'),
     changed_files: changedFiles.length > 0 ? changedFiles.map((file) => `- ${file}`).join('\n') : '- none detected',
     additional_context_block: payload.context?.trim() ? `\nAdditional context:\n${payload.context.trim()}` : '',
   });
