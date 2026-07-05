@@ -1,5 +1,6 @@
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { useConfigStore } from '@/stores/useConfigStore';
+import { getSessionLastAssistantModel } from '@/sync/session-actions';
 
 // Selections shorter than this are already note-sized — summarizing them
 // would only add latency and risk losing the exact wording.
@@ -20,14 +21,19 @@ const NOTES_SYSTEM_PROMPT = [
  * available within the session's provider (explicit settings/config picks
  * are still honored server-side).
  */
-export async function summarizeSelectionForNotes(text: string): Promise<string> {
+export async function summarizeSelectionForNotes(text: string, sessionId?: string | null): Promise<string> {
   const trimmed = text.trim();
   if (trimmed.length < NOTES_SUMMARIZE_MIN_CHARS) {
     return trimmed;
   }
 
   try {
+    // The selection's session provider is authoritative — the text came from
+    // that conversation. The composer picker only serves as a fallback.
+    const sessionModel = sessionId ? getSessionLastAssistantModel(sessionId) : null;
     const { currentProviderId, currentModelId } = useConfigStore.getState();
+    const preferredProviderID = sessionModel?.providerID || currentProviderId || '';
+    const preferredModelID = sessionModel?.modelID || currentModelId || '';
     const response = await runtimeFetch('/api/small-model/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -35,8 +41,8 @@ export async function summarizeSelectionForNotes(text: string): Promise<string> 
         prompt: trimmed,
         system: NOTES_SYSTEM_PROMPT,
         restrictToPreferredProvider: true,
-        ...(currentProviderId ? { preferredProviderID: currentProviderId } : {}),
-        ...(currentModelId ? { preferredModelID: currentModelId } : {}),
+        ...(preferredProviderID ? { preferredProviderID } : {}),
+        ...(preferredModelID ? { preferredModelID } : {}),
       }),
     });
     if (!response.ok) {

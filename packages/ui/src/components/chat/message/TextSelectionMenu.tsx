@@ -521,7 +521,7 @@ export const TextSelectionMenu: React.FC<TextSelectionMenuProps> = ({ containerR
       setIsAddingToNotes(true);
       // Long selections are distilled into a compact note by the small model;
       // short ones (and any generation failure) go in verbatim.
-      const noteText = await summarizeSelectionForNotes(selectedTextMarkdown || selectedText);
+      const noteText = await summarizeSelectionForNotes(selectedTextMarkdown || selectedText, currentSessionId);
       const projectData = await getProjectNotesAndTodos(currentProjectRef);
       const nextNotes = appendDistilledInsightToNotes(projectData.notes, noteText);
       const saved = await saveProjectNotesAndTodos(currentProjectRef, {

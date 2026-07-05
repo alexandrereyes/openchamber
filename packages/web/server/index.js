@@ -1058,6 +1058,7 @@ const gracefulShutdownRuntime = createGracefulShutdownRuntime({
   },
   syncToHmrState,
   openCodeWatcherRuntime,
+  sessionAssistRuntime,
   sessionRuntime,
   getHealthCheckInterval: () => healthCheckInterval,
   clearHealthCheckInterval: (value) => clearInterval(value),
