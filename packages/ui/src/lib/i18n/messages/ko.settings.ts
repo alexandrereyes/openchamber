@@ -1573,6 +1573,7 @@ export const settingsDict = {
   'settings.voice.page.field.ttsInputMode': 'TTS 입력 모드',
   'settings.voice.page.field.ttsInputModeSanitized': '정제된 텍스트',
   'settings.voice.page.field.ttsInputModeRaw': '원본 Markdown',
+  'settings.voice.page.field.ttsInputModeSummarized': '요약',
   'settings.openchamber.visual.section.colorMode': '색상 모드',
   'settings.openchamber.visual.section.mobileLayout': '모바일 레이아웃',
   'settings.openchamber.visual.option.mobileLayout.default': '이전',

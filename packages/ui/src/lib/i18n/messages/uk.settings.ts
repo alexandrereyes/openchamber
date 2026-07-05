@@ -1573,6 +1573,7 @@ export const settingsDict = {
   "settings.voice.page.field.ttsInputMode": "Режим вводу TTS",
   "settings.voice.page.field.ttsInputModeSanitized": "Очищений текст",
   "settings.voice.page.field.ttsInputModeRaw": "Сирий Markdown",
+  "settings.voice.page.field.ttsInputModeSummarized": "скорочений",
   "settings.openchamber.visual.section.colorMode": "Режим теми",
   "settings.openchamber.visual.section.mobileLayout": "Мобільний макет",
   "settings.openchamber.visual.option.mobileLayout.default": "Попередній",

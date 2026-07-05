@@ -1606,6 +1606,7 @@ export const settingsDict = {
   'settings.voice.page.field.ttsInputMode': 'TTS 入力モード',
   'settings.voice.page.field.ttsInputModeSanitized': 'サニタイズ',
   'settings.voice.page.field.ttsInputModeRaw': '生 Markdown',
+  'settings.voice.page.field.ttsInputModeSummarized': '要約',
   'settings.openchamber.visual.section.colorMode': 'カラーモード',
   'settings.openchamber.visual.section.mobileLayout': 'モバイルレイアウト',
   'settings.openchamber.visual.option.mobileLayout.default': '旧',

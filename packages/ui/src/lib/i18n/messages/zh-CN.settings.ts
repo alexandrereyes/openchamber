@@ -1573,6 +1573,7 @@ export const settingsDict = {
   'settings.voice.page.field.ttsInputMode': 'TTS 输入模式',
   'settings.voice.page.field.ttsInputModeSanitized': '清理后文本',
   'settings.voice.page.field.ttsInputModeRaw': '原始 Markdown',
+  'settings.voice.page.field.ttsInputModeSummarized': '摘要',
   'settings.openchamber.visual.section.colorMode': '颜色模式',
   'settings.openchamber.visual.section.mobileLayout': '移动端布局',
   'settings.openchamber.visual.option.mobileLayout.default': '旧版',

@@ -62,6 +62,13 @@ module is imported on first request, not at server startup.
 
 ## Known limitations
 
+- OpenCode's free models (`opencode/big-pickle`, `*-free`) work without a
+  token only through OpenCode's own server — direct calls are rejected, and
+  piggybacking on their subsidized infra is out of bounds by design. Every
+  resolution step therefore requires a usable auth entry for the provider:
+  a session on an unauthenticated `opencode` provider falls through to the
+  global scan (or a clean 404 on a vanilla setup with no logins).
+
 - Anthropic OAuth (Claude Pro/Max) entries are not supported — OpenCode itself
   keeps those outside `auth.json` in this generation; only `type: api` keys
   work for Anthropic.

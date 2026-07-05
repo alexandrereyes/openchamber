@@ -1489,6 +1489,7 @@
   'settings.voice.page.field.ttsInputMode': 'TTS 輸入模式',
   'settings.voice.page.field.ttsInputModeSanitized': '清理後文字',
   'settings.voice.page.field.ttsInputModeRaw': '原始 Markdown',
+  'settings.voice.page.field.ttsInputModeSummarized': '摘要',
   'settings.openchamber.visual.section.colorMode': '顏色模式',
   'settings.openchamber.visual.section.localization': '在地化',
   'settings.openchamber.visual.section.spacingAndLayout': '間距與佈局',

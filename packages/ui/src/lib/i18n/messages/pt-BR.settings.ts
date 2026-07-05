@@ -1573,6 +1573,7 @@ export const settingsDict = {
   "settings.voice.page.field.ttsInputMode": "Modo de entrada TTS",
   "settings.voice.page.field.ttsInputModeSanitized": "Texto limpo",
   "settings.voice.page.field.ttsInputModeRaw": "Markdown bruto",
+  "settings.voice.page.field.ttsInputModeSummarized": "resumido",
   "settings.openchamber.visual.section.colorMode": "Modo de cor",
   "settings.openchamber.visual.section.mobileLayout": "Layout móvel",
   "settings.openchamber.visual.option.mobileLayout.default": "Anterior",

@@ -138,6 +138,31 @@ describe('resolveSmallModel', () => {
     expect(result).toEqual({ providerID: 'google', modelID: 'gemini-2.5-flash', source: 'family-scan' });
   });
 
+  it('never uses a session provider without a login (opencode free models)', () => {
+    // Vanilla setups default the picker to opencode/big-pickle with no
+    // opencode token — those free models only work through OpenCode itself
+    // and must never be called directly, so the session context is ignored.
+    const result = resolveSmallModel({
+      auth: { openai: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 60_000 } },
+      catalog,
+      configSmallModel: null,
+      preferredProviderID: 'opencode',
+      preferredModelID: 'big-pickle',
+    });
+    expect(result).toEqual({ providerID: 'openai', modelID: 'gpt-5.4-mini', source: 'codex-small' });
+  });
+
+  it('resolves nothing on a vanilla setup with no logins at all', () => {
+    const result = resolveSmallModel({
+      auth: {},
+      catalog,
+      configSmallModel: null,
+      preferredProviderID: 'opencode',
+      preferredModelID: 'big-pickle',
+    });
+    expect(result).toBeNull();
+  });
+
   it('falls back to the session model instead of scanning other providers', () => {
     const result = resolveSmallModel({
       auth: {
