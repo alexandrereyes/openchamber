@@ -2346,7 +2346,11 @@ export function MobileApp({ apis }: MobileAppProps) {
   }, [clearError, error]);
 
   React.useEffect(() => {
-    if (!isNativeMobileApp || isConnected || !getRuntimeApiBaseUrl()) {
+    // Native: only while an instance is selected and reconnecting. Browser: the
+    // runtime is same-origin (no explicit base URL), so any not-connected spell
+    // counts — the splash holds until this fires, then the error screen shows.
+    const waitingOnConnection = !isConnected && (isNativeMobileApp ? Boolean(getRuntimeApiBaseUrl()) : true);
+    if (!waitingOnConnection) {
       setShowConnectionRecovery(false);
       return;
     }
@@ -2384,7 +2388,7 @@ export function MobileApp({ apis }: MobileAppProps) {
   if (!fontsReady) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-background text-foreground">
-        <OpenChamberLogo width={96} height={96} isAnimated />
+        <OpenChamberLogo width={120} height={120} isAnimated />
       </main>
     );
   }
@@ -2396,7 +2400,7 @@ export function MobileApp({ apis }: MobileAppProps) {
       return (
         <main className="flex min-h-dvh items-center justify-center bg-background px-6 text-center text-foreground">
           <div className="flex max-w-sm flex-col items-center gap-4">
-            <OpenChamberLogo width={96} height={96} isAnimated={!showConnectionRecovery} />
+            <OpenChamberLogo width={120} height={120} isAnimated={!showConnectionRecovery} />
             {showConnectionRecovery ? (
               <>
                 <div className="space-y-2">
@@ -2425,7 +2429,7 @@ export function MobileApp({ apis }: MobileAppProps) {
     if (autoConnectPhase !== 'done') {
       return (
         <main className="flex min-h-dvh items-center justify-center bg-background text-foreground">
-          <OpenChamberLogo width={96} height={96} isAnimated />
+          <OpenChamberLogo width={120} height={120} isAnimated />
         </main>
       );
     }
@@ -2433,6 +2437,16 @@ export function MobileApp({ apis }: MobileAppProps) {
   }
 
   if (!isConnected && !isReconnecting) {
+    // Browser: the initial connect takes a beat — hold the logo splash instead
+    // of flashing the unreachable-server error while it resolves. The error
+    // only shows once the recovery delay has expired (genuinely unreachable).
+    if (!showConnectionRecovery) {
+      return (
+        <main className="flex min-h-dvh items-center justify-center bg-background text-foreground">
+          <OpenChamberLogo width={120} height={120} isAnimated />
+        </main>
+      );
+    }
     return (
       <main className="flex min-h-dvh items-center justify-center bg-background px-6 text-center text-foreground">
         <div className="max-w-sm space-y-3">
