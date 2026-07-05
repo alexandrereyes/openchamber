@@ -16,11 +16,25 @@ other runtime API.
 
 - `index.js` — orchestration: `generateSmallModelText()` / `describeSmallModel()`.
 - `resolve.js` — model selection, mirroring OpenCode's `getSmallModel` chain:
+  0. OpenChamber's own settings override (Settings → Sessions → Small Model):
+     when `smallModelUseDefault` is `false`, `smallModelOverride`
+     (`provider/model`) outranks everything below. Sanitized in
+     `settings-helpers.js` (server), `persistence.ts` (client), and
+     `bridge-settings-runtime.ts` (VS Code).
   1. `small_model` from the merged OpenCode config layers (`provider/model`).
-  2. Family-priority scan (`gemini-flash` → `gpt-nano` → `claude-haiku`) over
-     providers that have a usable auth entry, newest `release_date` first.
+  2. Family-priority scan (`gemini-flash` → `gpt-nano` → `claude-haiku`)
+     **within the session's provider first** (`preferredProviderID`, like
+     OpenCode resolves within the current provider), then over the other
+     providers with a usable auth entry, newest `release_date` first.
   3. GitHub Copilot hidden utility models (`gpt-*-nano/mini`) — these never
-     appear in the catalog, so they are the fallback, not part of the scan.
+     appear in the catalog, so they participate as the `gpt-nano` family entry
+     and as a final utility fallback.
+  4. Last resort: the session's own model (`preferredModelID`) when no small
+     model resolves anywhere — costlier, but always valid.
+- Input clamp: the prompt is truncated to the resolved model's catalog
+  `limit.context` (minus an output reserve, ~4 chars/token estimate;
+  conservative default when the model is not in the catalog). Truncation is
+  reported as `inputTruncated: true` in the response.
 - `call.js` — wire formats and per-provider auth, replicating OpenCode's
   plugin auth loaders:
   - **GitHub Copilot**: OpenAI-compatible `/chat/completions` on

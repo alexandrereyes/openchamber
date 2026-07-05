@@ -7,7 +7,9 @@ import { getAuthEntryForProvider } from './resolve.js';
 // opencode repo). auth.json credentials never leave this process.
 
 const REQUEST_TIMEOUT_MS = 60_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 600;
+// Generous default: thinking models that can't be switched off (DeepSeek,
+// Qwen, …) spend part of this budget on reasoning before the actual answer.
+const DEFAULT_MAX_OUTPUT_TOKENS = 4_000;
 
 const USER_AGENT = 'opencode/1.0 openchamber';
 
@@ -99,7 +101,7 @@ const ensureFreshOpenaiOauth = async (entry) => {
 // Wire formats
 // ---------------------------------------------------------------------------
 
-const callOpenaiCompatible = async ({ baseURL, headers, modelID, prompt, system, maxOutputTokens, providerLabel }) => {
+const callOpenaiCompatible = async ({ baseURL, headers, modelID, prompt, system, maxOutputTokens, providerLabel, extraBody }) => {
   const trimmedBase = baseURL.replace(/\/+$/, '');
   const response = await fetch(`${trimmedBase}/chat/completions`, {
     method: 'POST',
@@ -116,6 +118,7 @@ const callOpenaiCompatible = async ({ baseURL, headers, modelID, prompt, system,
       ],
       max_tokens: maxOutputTokens,
       stream: false,
+      ...(extraBody || {}),
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
@@ -123,8 +126,27 @@ const callOpenaiCompatible = async ({ baseURL, headers, modelID, prompt, system,
     throw await httpError(response, providerLabel);
   }
   const payload = await response.json();
-  const text = payload?.choices?.[0]?.message?.content;
-  if (typeof text !== 'string') {
+  const message = payload?.choices?.[0]?.message;
+
+  // Providers disagree on the content shape: plain string, an array of
+  // typed parts, or (thinking models) an empty content with the budget spent
+  // on reasoning_content.
+  let text = '';
+  if (typeof message?.content === 'string') {
+    text = message.content;
+  } else if (Array.isArray(message?.content)) {
+    text = message.content
+      .map((part) => (typeof part?.text === 'string' ? part.text : ''))
+      .join('');
+  }
+  if (!text.trim() && typeof message?.reasoning_content === 'string' && message.reasoning_content.trim()) {
+    const finishReason = payload?.choices?.[0]?.finish_reason;
+    throw new Error(
+      `${providerLabel} spent the output budget on reasoning and returned no answer`
+      + (finishReason ? ` (finish_reason: ${finishReason})` : ''),
+    );
+  }
+  if (!text.trim()) {
     throw new Error(`${providerLabel} returned no message content`);
   }
   return text;
@@ -173,7 +195,9 @@ const callGoogle = async ({ apiKey, modelID, prompt, system, maxOutputTokens }) 
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-      generationConfig: { maxOutputTokens },
+      // thinkingBudget 0 switches Gemini Flash thinking off; Flash is the only
+      // family the small-model resolver picks for Google.
+      generationConfig: { maxOutputTokens, thinkingConfig: { thinkingBudget: 0 } },
     }),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
@@ -329,6 +353,20 @@ export async function callSmallModel({ auth, catalog, providerID, modelID, promp
   if (!baseURL) {
     throw new Error(`Provider "${providerID}" has no known API base URL`);
   }
+
+  // Thinking models burn the output budget on reasoning and leave content
+  // empty — disable thinking where a wire-format switch exists (mirrors
+  // OpenCode's smallOptions/variants special cases). There is NO universal
+  // parameter: unknown body fields 400 on some providers, so this stays an
+  // explicit allowlist. Models without a switch (DeepSeek, Qwen, Kimi, …)
+  // just get the generous output budget.
+  const lowerModel = modelID.toLowerCase();
+  const supportsThinkingToggle = providerID.includes('zai')
+    || providerID.includes('zhipu')
+    || lowerModel.includes('glm')
+    || lowerModel.includes('minimax-m3');
+  const extraBody = supportsThinkingToggle ? { thinking: { type: 'disabled' } } : undefined;
+
   return callOpenaiCompatible({
     baseURL,
     headers: { Authorization: `Bearer ${apiKey}` },
@@ -337,5 +375,6 @@ export async function callSmallModel({ auth, catalog, providerID, modelID, promp
     system,
     maxOutputTokens: tokens,
     providerLabel: provider?.name || providerID,
+    extraBody,
   });
 }

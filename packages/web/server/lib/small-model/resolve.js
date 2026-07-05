@@ -55,34 +55,69 @@ const pickByFamily = (models, family) => {
   return matches[0];
 };
 
-export function resolveSmallModel({ auth, catalog, configSmallModel }) {
+// Small-model candidates within ONE provider, by family priority. Copilot and
+// ChatGPT-plan OpenAI have fixed small models that never appear in the
+// catalog; everyone else is scanned through the catalog families.
+const pickWithinProvider = (providerID, auth, catalog, family) => {
+  if (providerID === 'openai' && auth.openai?.type === 'oauth') {
+    return family === 'gpt-nano'
+      ? { providerID, modelID: OPENAI_OAUTH_SMALL_MODEL, source: 'codex-small' }
+      : null;
+  }
+  if (providerID === 'github-copilot') {
+    return family === 'gpt-nano'
+      ? { providerID, modelID: COPILOT_UTILITY_MODELS[0], source: 'copilot-utility' }
+      : null;
+  }
+  const provider = getCatalogProvider(catalog, providerID);
+  if (!provider || !provider.models || typeof provider.models !== 'object') return null;
+  const model = pickByFamily(provider.models, family);
+  return model?.id ? { providerID, modelID: model.id, source: 'family-scan' } : null;
+};
+
+export function resolveSmallModel({ auth, catalog, settingsSmallModel, configSmallModel, preferredProviderID, preferredModelID }) {
+  // OpenChamber's own setting (Settings → Sessions → Small Model override)
+  // outranks everything, including the OpenCode config.
+  const fromSettings = parseModelRef(settingsSmallModel);
+  if (fromSettings) {
+    return { ...fromSettings, source: 'settings' };
+  }
+
   const explicit = parseModelRef(configSmallModel);
   if (explicit) {
     return { ...explicit, source: 'config' };
   }
 
-  const authedProviders = Object.keys(auth || {}).filter((providerID) =>
-    isUsableAuthEntry(auth[providerID]));
-
-  for (const family of FAMILY_PRIORITY) {
-    for (const providerID of authedProviders) {
-      if (providerID === 'openai' && auth.openai?.type === 'oauth') {
-        if (family === 'gpt-nano') {
-          return { providerID, modelID: OPENAI_OAUTH_SMALL_MODEL, source: 'codex-small' };
-        }
-        continue;
-      }
-      const provider = getCatalogProvider(catalog, providerID);
-      if (!provider || !provider.models || typeof provider.models !== 'object') continue;
-      const model = pickByFamily(provider.models, family);
-      if (model?.id) {
-        return { providerID, modelID: model.id, source: 'family-scan' };
-      }
+  // Like OpenCode: when the caller has a session context, the utility call
+  // stays on the session's provider. Scan its families for a small model,
+  // otherwise run on the session's own model — never silently switch to a
+  // different provider's subscription.
+  const preferred = typeof preferredProviderID === 'string' && preferredProviderID
+    ? preferredProviderID
+    : null;
+  if (preferred && isUsableAuthEntry(getAuthEntryForProvider(auth, preferred))) {
+    for (const family of FAMILY_PRIORITY) {
+      const match = pickWithinProvider(preferred, auth, catalog, family);
+      if (match) return match;
+    }
+    if (typeof preferredModelID === 'string' && preferredModelID) {
+      return { providerID: preferred, modelID: preferredModelID, source: 'session-model' };
     }
   }
 
-  // Copilot's small models are hidden utility models that never appear in the
-  // catalog, so the family scan above can't find them.
+  // No session context (or its provider has no usable login): scan all
+  // authenticated providers by family priority.
+  const authedProviders = Object.keys(auth || {}).filter((providerID) =>
+    providerID !== preferred && isUsableAuthEntry(auth[providerID]));
+
+  for (const family of FAMILY_PRIORITY) {
+    for (const providerID of authedProviders) {
+      const match = pickWithinProvider(providerID, auth, catalog, family);
+      if (match) return match;
+    }
+  }
+
+  // Copilot's utility fallback for legacy auth aliases the loop above missed.
   const copilotEntry = getAuthEntryForProvider(auth, 'github-copilot');
   if (isUsableAuthEntry(copilotEntry)) {
     return {

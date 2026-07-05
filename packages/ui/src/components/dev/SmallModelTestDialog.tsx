@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Icon } from '@/components/icon/Icon';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
+import { useConfigStore } from '@/stores/useConfigStore';
 import { useI18n } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
@@ -31,6 +32,8 @@ type SmallModelTestDialogProps = {
 export const SmallModelTestDialog: React.FC<SmallModelTestDialogProps> = ({ open, onOpenChange }) => {
   const { t } = useI18n();
   const { currentTheme } = useThemeSystem();
+  const currentProviderId = useConfigStore((state) => state.currentProviderId);
+  const currentModelId = useConfigStore((state) => state.currentModelId);
   const [prompt, setPrompt] = React.useState('');
   const [isRunning, setIsRunning] = React.useState(false);
   const [result, setResult] = React.useState<SmallModelResult | null>(null);
@@ -46,7 +49,11 @@ export const SmallModelTestDialog: React.FC<SmallModelTestDialogProps> = ({ open
       const response = await runtimeFetch('/api/small-model/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: trimmed }),
+        body: JSON.stringify({
+          prompt: trimmed,
+          ...(currentProviderId ? { preferredProviderID: currentProviderId } : {}),
+          ...(currentModelId ? { preferredModelID: currentModelId } : {}),
+        }),
       });
       const payload = await response.json().catch(() => null) as (SmallModelResult & { error?: string }) | null;
       if (!response.ok || !payload || typeof payload.text !== 'string') {
@@ -59,7 +66,7 @@ export const SmallModelTestDialog: React.FC<SmallModelTestDialogProps> = ({ open
     } finally {
       setIsRunning(false);
     }
-  }, [prompt, isRunning]);
+  }, [prompt, isRunning, currentProviderId, currentModelId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

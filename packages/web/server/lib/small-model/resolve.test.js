@@ -57,6 +57,17 @@ describe('isUsableAuthEntry', () => {
 });
 
 describe('resolveSmallModel', () => {
+  it('gives the OpenChamber settings override top priority', () => {
+    const result = resolveSmallModel({
+      auth: { anthropic: { type: 'api', key: 'sk-x' } },
+      catalog,
+      settingsSmallModel: 'anthropic/claude-haiku-4-5',
+      configSmallModel: 'openai/gpt-4o-mini',
+      preferredProviderID: 'anthropic',
+    });
+    expect(result).toEqual({ providerID: 'anthropic', modelID: 'claude-haiku-4-5', source: 'settings' });
+  });
+
   it('prefers the configured small_model', () => {
     const result = resolveSmallModel({
       auth: { anthropic: { type: 'api', key: 'sk-x' } },
@@ -102,5 +113,60 @@ describe('resolveSmallModel', () => {
 
   it('returns null when nothing is authenticated', () => {
     expect(resolveSmallModel({ auth: {}, catalog, configSmallModel: null })).toBeNull();
+  });
+
+  it('prefers the session provider over other authenticated providers', () => {
+    const result = resolveSmallModel({
+      auth: {
+        google: { type: 'api', key: 'g-key' },
+        anthropic: { type: 'api', key: 'sk-x' },
+      },
+      catalog,
+      configSmallModel: null,
+      preferredProviderID: 'anthropic',
+    });
+    expect(result).toEqual({ providerID: 'anthropic', modelID: 'claude-haiku-4-5', source: 'family-scan' });
+  });
+
+  it('ignores a preferred provider without a usable login', () => {
+    const result = resolveSmallModel({
+      auth: { google: { type: 'api', key: 'g-key' } },
+      catalog,
+      configSmallModel: null,
+      preferredProviderID: 'anthropic',
+    });
+    expect(result).toEqual({ providerID: 'google', modelID: 'gemini-2.5-flash', source: 'family-scan' });
+  });
+
+  it('falls back to the session model instead of scanning other providers', () => {
+    const result = resolveSmallModel({
+      auth: {
+        'opencode-go': { type: 'api', key: 'oc-key' },
+        openai: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 60_000 },
+      },
+      catalog: {
+        'opencode-go': {
+          id: 'opencode-go',
+          models: {
+            'deepseek-v4-flash': { id: 'deepseek-v4-flash', family: 'deepseek-flash', release_date: '2026-01-01' },
+          },
+        },
+      },
+      configSmallModel: null,
+      preferredProviderID: 'opencode-go',
+      preferredModelID: 'deepseek-v4-flash',
+    });
+    expect(result).toEqual({ providerID: 'opencode-go', modelID: 'deepseek-v4-flash', source: 'session-model' });
+  });
+
+  it('falls back to the session model itself when nothing resolves', () => {
+    const result = resolveSmallModel({
+      auth: { mistral: { type: 'api', key: 'm-key' } },
+      catalog,
+      configSmallModel: null,
+      preferredProviderID: 'mistral',
+      preferredModelID: 'mistral-large-latest',
+    });
+    expect(result).toEqual({ providerID: 'mistral', modelID: 'mistral-large-latest', source: 'session-model' });
   });
 });
