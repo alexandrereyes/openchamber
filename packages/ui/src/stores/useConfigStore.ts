@@ -1008,7 +1008,7 @@ interface ConfigStore {
     sttLocalModel: string;
     sttLanguage: string;
     showMessageTTSButtons: boolean;
-    ttsInputMode: 'sanitized' | 'raw';
+    ttsInputMode: 'sanitized' | 'raw' | 'summarized';
     // Summarization settings
     summarizeMessageTTS: boolean;
     summarizeVoiceConversation: boolean;
@@ -1034,7 +1034,7 @@ interface ConfigStore {
     setSttLocalModel: (model: string) => void;
     setSttLanguage: (lang: string) => void;
     setShowMessageTTSButtons: (show: boolean) => void;
-    setTtsInputMode: (mode: 'sanitized' | 'raw') => void;
+    setTtsInputMode: (mode: 'sanitized' | 'raw' | 'summarized') => void;
     setSummarizeMessageTTS: (enabled: boolean) => void;
     setSummarizeVoiceConversation: (enabled: boolean) => void;
     setSummarizeCharacterThreshold: (threshold: number) => void;
@@ -1303,6 +1303,7 @@ export const useConfigStore = create<ConfigStore>()(
                     if (typeof window !== 'undefined') {
                         const saved = localStorage.getItem('ttsInputMode');
                         if (saved === 'raw') return 'raw' as const;
+                        if (saved === 'summarized') return 'summarized' as const;
                     }
                     return 'sanitized' as const;
                 })(),
@@ -2930,7 +2931,7 @@ export const useConfigStore = create<ConfigStore>()(
                     }
                 },
 
-                setTtsInputMode: (mode: 'sanitized' | 'raw') => {
+                setTtsInputMode: (mode: 'sanitized' | 'raw' | 'summarized') => {
                     set({ ttsInputMode: mode });
                     if (typeof window !== 'undefined') {
                         localStorage.setItem('ttsInputMode', mode);

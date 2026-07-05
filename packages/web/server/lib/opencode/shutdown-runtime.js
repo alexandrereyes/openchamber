@@ -8,6 +8,7 @@ export const createGracefulShutdownRuntime = (dependencies) => {
     syncToHmrState,
     openCodeWatcherRuntime,
     sessionRuntime,
+    sessionAssistRuntime,
     scheduledTasksRuntime,
     getHealthCheckInterval,
     clearHealthCheckInterval,
@@ -43,6 +44,7 @@ export const createGracefulShutdownRuntime = (dependencies) => {
 
     openCodeWatcherRuntime.stop();
     sessionRuntime.dispose();
+    sessionAssistRuntime?.stop?.();
     scheduledTasksRuntime?.stop?.();
 
     const healthCheckInterval = getHealthCheckInterval();
