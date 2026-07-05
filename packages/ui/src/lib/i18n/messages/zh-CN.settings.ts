@@ -1657,6 +1657,8 @@ export const settingsDict = {
   'settings.openchamber.visual.field.userMessageRenderingAria': '用户消息渲染：{option}',
   'settings.openchamber.visual.field.mermaidRenderingAria': 'Mermaid 渲染：{option}',
   'settings.openchamber.visual.field.diffLayoutAria': '差异布局：{option}',
+  'settings.openchamber.visual.field.sessionAssist': '生成会话回顾与建议',
+  'settings.openchamber.visual.field.sessionAssistAria': '代理完成后生成回顾和建议回复',
   'settings.openchamber.visual.field.showReasoningTracesAria': '显示推理轨迹',
   'settings.openchamber.visual.field.showReasoningTraces': '显示推理轨迹',
   'settings.openchamber.visual.field.collapsibleThinkingBlocksAria': '启用可折叠推理块',

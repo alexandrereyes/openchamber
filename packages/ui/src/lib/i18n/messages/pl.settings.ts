@@ -974,6 +974,8 @@ export const settingsDict = {
   'settings.openchamber.visual.field.showDotfilesAria': 'Pokaż pliki ukryte',
   'settings.openchamber.visual.field.showExpandedBashToolsAria': 'Pokaż rozwinięte narzędzia bash',
   'settings.openchamber.visual.field.showExpandedEditToolsAria': 'Pokaż rozwinięte narzędzia edycji',
+  'settings.openchamber.visual.field.sessionAssist': 'Generuj podsumowanie i sugestię sesji',
+  'settings.openchamber.visual.field.sessionAssistAria': 'Generuj podsumowanie i sugerowaną odpowiedź po zakończeniu pracy agenta',
   'settings.openchamber.visual.field.showReasoningTraces': 'Pokaż ślady rozumowania',
   'settings.openchamber.visual.field.showReasoningTracesAria': 'Pokaż ślady rozumowania',
   'settings.openchamber.visual.field.collapsibleThinkingBlocks': 'Włącz zwijalne bloki rozumowania',

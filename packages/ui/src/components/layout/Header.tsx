@@ -34,7 +34,6 @@ import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { ContextUsageDisplay } from '@/components/ui/ContextUsageDisplay';
 import { WindowsWindowControls } from '@/components/desktop/WindowsWindowControls';
 import { UpdateDialog } from '@/components/ui/UpdateDialog';
-import { SmallModelTestDialog } from '@/components/dev/SmallModelTestDialog';
 import { useDeviceInfo, useTabletStandalonePwaRuntime } from '@/lib/device';
 import { cn, hasModifier } from '@/lib/utils';
 import { McpDropdownContent } from '@/components/mcp/McpDropdown';
@@ -866,8 +865,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [currentInstanceLabel, setCurrentInstanceLabel] = React.useState('Local');
   const [currentInstanceIsLocal, setCurrentInstanceIsLocal] = React.useState(true);
   const [remoteUpdateDialogOpen, setRemoteUpdateDialogOpen] = React.useState(false);
-  const [smallModelTestOpen, setSmallModelTestOpen] = React.useState(false);
-  const openSmallModelTest = React.useCallback(() => setSmallModelTestOpen(true), []);
   const [remoteUpdateInfo, setRemoteUpdateInfo] = React.useState<UpdateInfo | null>(null);
   const [remoteUpdateChecking, setRemoteUpdateChecking] = React.useState(false);
   const [remoteUpdateError, setRemoteUpdateError] = React.useState<string | null>(null);
@@ -2087,12 +2084,6 @@ export const Header: React.FC<HeaderProps> = ({
         timeFormatPreference={timeFormatPreference}
       />
       <HeaderIconActionButton
-        title={t('header.actions.smallModelTest')}
-        ariaLabel={t('header.actions.smallModelTest')}
-        onClick={openSmallModelTest}
-        Icon={'flask'}
-      />
-      <HeaderIconActionButton
         title={t('header.actions.terminalPanelWithShortcut', { shortcut: shortcutLabel('toggle_terminal') })}
         ariaLabel={t('header.actions.toggleTerminalPanelAria')}
         onClick={toggleBottomTerminal}
@@ -2669,7 +2660,6 @@ export const Header: React.FC<HeaderProps> = ({
       >
         {isMobile ? renderMobile() : renderDesktop()}
       </header>
-      <SmallModelTestDialog open={smallModelTestOpen} onOpenChange={setSmallModelTestOpen} />
       <UpdateDialog
         open={remoteUpdateDialogOpen}
         onOpenChange={setRemoteUpdateDialogOpen}

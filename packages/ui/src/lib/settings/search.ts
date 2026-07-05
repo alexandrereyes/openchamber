@@ -167,6 +167,12 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['streaming', 'sse', 'websocket'],
   },
   {
+    id: 'chat.session-assist',
+    page: 'chat',
+    titleKey: 'settings.openchamber.visual.field.sessionAssist',
+    keywords: ['recap', 'suggestion', 'assist', 'small model', 'summary'],
+  },
+  {
     id: 'chat.reasoning-traces',
     page: 'chat',
     titleKey: 'settings.openchamber.visual.field.showReasoningTraces',

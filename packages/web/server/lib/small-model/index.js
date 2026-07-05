@@ -61,7 +61,7 @@ const readConfiguredSmallModel = (workingDirectory) => {
  * Generates text with the user's small model, resolved and authenticated
  * entirely server-side from the OpenCode config and auth store.
  */
-export async function generateSmallModelText({ prompt, system, maxOutputTokens, model, directory, preferredProviderID, preferredModelID }) {
+export async function generateSmallModelText({ prompt, system, maxOutputTokens, model, directory, preferredProviderID, preferredModelID, restrictToPreferredProvider = false }) {
   if (typeof prompt !== 'string' || !prompt.trim()) {
     throw Object.assign(new Error('prompt is required'), { statusCode: 400 });
   }
@@ -84,6 +84,19 @@ export async function generateSmallModelText({ prompt, system, maxOutputTokens, 
   if (!resolved) {
     throw Object.assign(
       new Error('No small model available — no authenticated provider has a suitable model'),
+      { statusCode: 404 },
+    );
+  }
+
+  // Callers with a session context can forbid silently switching providers:
+  // an explicit user choice (settings override, opencode config, request
+  // model) is always allowed, anything else must stay on the session's
+  // provider.
+  if (restrictToPreferredProvider
+    && !['settings', 'config', 'request'].includes(resolved.source)
+    && resolved.providerID !== preferredProviderID) {
+    throw Object.assign(
+      new Error('No small model available within the session provider'),
       { statusCode: 404 },
     );
   }

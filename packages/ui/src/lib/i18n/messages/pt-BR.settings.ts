@@ -1657,6 +1657,8 @@ export const settingsDict = {
   "settings.openchamber.visual.field.userMessageRenderingAria": "Renderizado de mensagens do usuário: {option}",
   "settings.openchamber.visual.field.mermaidRenderingAria": "Renderizado de Mermaid: {option}",
   "settings.openchamber.visual.field.diffLayoutAria": "Layout de comparação: {option}",
+  "settings.openchamber.visual.field.sessionAssist": "Gerar resumo e sugestão da sessão",
+  "settings.openchamber.visual.field.sessionAssistAria": "Gerar um resumo e uma resposta sugerida quando o agente termina",
   "settings.openchamber.visual.field.showReasoningTracesAria": "Mostrar rastros de raciocínio",
   "settings.openchamber.visual.field.showReasoningTraces": "Mostrar rastros de raciocínio",
   "settings.openchamber.visual.field.collapsibleThinkingBlocksAria": "Habilitar blocos de raciocínio recolhíveis",

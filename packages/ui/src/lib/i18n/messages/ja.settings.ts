@@ -1690,6 +1690,8 @@ export const settingsDict = {
   'settings.openchamber.visual.field.userMessageRenderingAria': 'ユーザーメッセージ表示: {option}',
   'settings.openchamber.visual.field.mermaidRenderingAria': 'Mermaid 表示: {option}',
   'settings.openchamber.visual.field.diffLayoutAria': 'Diff レイアウト: {option}',
+  'settings.openchamber.visual.field.sessionAssist': 'セッションの要約と提案を生成',
+  'settings.openchamber.visual.field.sessionAssistAria': 'エージェントの完了後に要約と返信の提案を生成します',
   'settings.openchamber.visual.field.showReasoningTracesAria': '推論トレースを表示',
   'settings.openchamber.visual.field.showReasoningTraces': '推論トレースを表示',
   'settings.openchamber.visual.field.collapsibleThinkingBlocksAria': '折りたたみ可能な推論ブロックを有効化',

@@ -1657,6 +1657,8 @@ export const settingsDict = {
   "settings.openchamber.visual.field.userMessageRenderingAria": "Відображення повідомлень користувача: {option}",
   "settings.openchamber.visual.field.mermaidRenderingAria": "Візуалізація Mermaid: {option}",
   "settings.openchamber.visual.field.diffLayoutAria": "Компонування diff: {option}",
+  "settings.openchamber.visual.field.sessionAssist": "Генерувати підсумок і пропозицію для сесії",
+  "settings.openchamber.visual.field.sessionAssistAria": "Генерувати підсумок і запропоновану відповідь після завершення роботи агента",
   "settings.openchamber.visual.field.showReasoningTracesAria": "Показати сліди міркувань",
   "settings.openchamber.visual.field.showReasoningTraces": "Показати сліди міркувань",
   "settings.openchamber.visual.field.collapsibleThinkingBlocksAria": "Увімкнути згортальні блоки міркувань",

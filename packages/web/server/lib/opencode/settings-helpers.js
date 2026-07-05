@@ -245,6 +245,9 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.showReasoningTraces === 'boolean') {
       result.showReasoningTraces = candidate.showReasoningTraces;
     }
+    if (typeof candidate.sessionAssistEnabled === 'boolean') {
+      result.sessionAssistEnabled = candidate.sessionAssistEnabled;
+    }
     if (typeof candidate.collapsibleThinkingBlocks === 'boolean') {
       result.collapsibleThinkingBlocks = candidate.collapsibleThinkingBlocks;
     }
