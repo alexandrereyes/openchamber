@@ -1519,6 +1519,7 @@ export const dict = {
   'chat.scrollToBottom.aria': 'Faire défiler vers le bas',
   'chat.promptNavigator.aria': 'Navigation des prompts',
   'chat.promptNavigator.goToPrompt': 'Aller au prompt {number}',
+  'chat.promptNavigator.currentPrompt': 'Prompt actuel',
   'chat.timeline.relative.justNow': 'à l’instant',
   'chat.timeline.relative.minutesAgo': 'il y a {count} min',
   'chat.timeline.relative.hoursAgo': 'il y a {count} h',

@@ -1708,6 +1708,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.scrollToBottom.aria': '맨 아래로 스크롤',
   'chat.promptNavigator.aria': '프롬프트 탐색',
   'chat.promptNavigator.goToPrompt': '프롬프트 {number}(으)로 이동',
+  'chat.promptNavigator.currentPrompt': '현재 프롬프트',
   'chat.timeline.relative.justNow': '방금 전',
   'chat.timeline.relative.minutesAgo': '{count}분 전',
   'chat.timeline.relative.hoursAgo': '{count}시간 전',

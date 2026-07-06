@@ -1684,6 +1684,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.scrollToBottom.aria": "Ir ao final",
   "chat.promptNavigator.aria": "Navegação de prompts",
   "chat.promptNavigator.goToPrompt": "Ir para o prompt {number}",
+  "chat.promptNavigator.currentPrompt": "Prompt atual",
   "chat.timeline.relative.justNow": "agora mesmo",
   "chat.timeline.relative.minutesAgo": "há {count}m",
   "chat.timeline.relative.hoursAgo": "há {count}h",
