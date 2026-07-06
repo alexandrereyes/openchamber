@@ -1338,6 +1338,7 @@ export const dict = {
   'helpDialog.item.createNewSession': 'Créer une nouvelle session',
   'helpDialog.item.createNewWorktreeDraft': 'Créer un nouveau brouillon d\'worktree',
   'helpDialog.item.focusChatInput': 'Concentration sur la saisie du chat',
+  'helpDialog.item.togglePromptNavigator': 'Afficher ou masquer le navigateur de prompts',
   'helpDialog.item.abortActiveRun': 'Abandonner l’exécution active (double pression)',
   'helpDialog.item.toggleRightSidebar': 'Basculer la barre latérale droite',
   'helpDialog.item.openRightSidebarGitTab': 'Ouvrir l\'onglet Git de la barre latérale droite',

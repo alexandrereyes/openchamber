@@ -945,6 +945,7 @@ export const settingsDict = {
   "settings.openchamber.keyboardShortcuts.action.open_model_selector.label": "Відкрити вибір моделі",
   "settings.openchamber.keyboardShortcuts.action.expand_input.label": "Розгорнути введення",
   "settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label": "Відкрити хронологію розмови",
+  "settings.openchamber.keyboardShortcuts.action.toggle_prompt_navigator.label": "Показати або приховати навігатор промптів",
   "settings.projects.sidebar.total": "Усього {count}",
   "settings.projects.sidebar.actions.addProject": "Додати проєкт",
   "settings.projects.page.empty.noProjects": "Немає доступних проєктів.",

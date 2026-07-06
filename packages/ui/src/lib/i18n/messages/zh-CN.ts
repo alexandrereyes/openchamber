@@ -1477,6 +1477,7 @@ export const dict: Record<I18nKey, string> = {
   'helpDialog.item.createNewSession': '创建新会话',
   'helpDialog.item.createNewWorktreeDraft': '创建新工作树草稿',
   'helpDialog.item.focusChatInput': '聚焦聊天输入框',
+  'helpDialog.item.togglePromptNavigator': '显示或隐藏提示词导航',
   'helpDialog.item.abortActiveRun': '中止当前运行（双击）',
   'helpDialog.item.toggleRightSidebar': '切换右侧边栏',
   'helpDialog.item.openRightSidebarGitTab': '打开右侧边栏 Git 标签',

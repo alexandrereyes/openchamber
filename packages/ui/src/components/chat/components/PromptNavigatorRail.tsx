@@ -3,6 +3,7 @@ import type { Part } from '@opencode-ai/sdk/v2';
 
 import { useDeviceInfo } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
+import { useUIStore } from '@/stores/useUIStore';
 import { cn } from '@/lib/utils';
 import { getMessagePreview } from '../lib/messagePreview';
 
@@ -55,6 +56,8 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
 }) => {
     const { t } = useI18n();
     const { screenWidth } = useDeviceInfo();
+    const isPromptNavigatorPanelOpen = useUIStore((state) => state.isPromptNavigatorPanelOpen);
+    const setPromptNavigatorPanelOpen = useUIStore((state) => state.setPromptNavigatorPanelOpen);
     const [isHoverOpen, setIsHoverOpen] = React.useState(false);
     const closeTimeoutRef = React.useRef<number | null>(null);
 
@@ -92,7 +95,10 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
     const handleSelectPrompt = React.useCallback((turnId: string) => {
         onSelectTurn(turnId);
         setIsHoverOpen(false);
-    }, [onSelectTurn]);
+        setPromptNavigatorPanelOpen(false);
+    }, [onSelectTurn, setPromptNavigatorPanelOpen]);
+
+    const isPanelOpen = isPromptNavigatorPanelOpen || isHoverOpen;
 
     if (prompts.length === 0) {
         return null;
@@ -152,7 +158,7 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
                     })}
                 </div>
 
-                {isHoverOpen ? (
+                {isPanelOpen ? (
                     <div
                         className={cn(
                             'absolute right-full top-1/2 z-30 mr-3 w-[min(18rem,calc(100vw-5rem))] -translate-y-1/2',

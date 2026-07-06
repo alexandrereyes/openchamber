@@ -945,6 +945,7 @@ export const settingsDict = {
   "settings.openchamber.keyboardShortcuts.action.open_model_selector.label": "Abrir selector de modelo",
   "settings.openchamber.keyboardShortcuts.action.expand_input.label": "Expandir entrada",
   "settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label": "Abrir línea de tiempo de conversación",
+  "settings.openchamber.keyboardShortcuts.action.toggle_prompt_navigator.label": "Mostrar u ocultar navegador de prompts",
   "settings.projects.sidebar.total": "Total {count}",
   "settings.projects.sidebar.actions.addProject": "Añadir proyecto",
   "settings.projects.page.empty.noProjects": "No hay proyectos disponibles.",

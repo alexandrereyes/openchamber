@@ -945,6 +945,7 @@ export const settingsDict = {
   'settings.openchamber.keyboardShortcuts.action.open_model_selector.label': '打开模型选择器',
   'settings.openchamber.keyboardShortcuts.action.expand_input.label': '展开输入框',
   'settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label': '打开对话时间线',
+  'settings.openchamber.keyboardShortcuts.action.toggle_prompt_navigator.label': '显示或隐藏提示词导航',
   'settings.projects.sidebar.total': '总计 {count}',
   'settings.projects.sidebar.actions.addProject': '添加项目',
   'settings.projects.page.empty.noProjects': '暂无项目。',

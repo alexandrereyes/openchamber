@@ -2123,6 +2123,7 @@ export const dict: Record<I18nKey, string> = {
   'helpDialog.item.cycleTheme': 'Przełącz motyw (Jasny → Ciemny → Systemowy)',
   'helpDialog.item.cycleThinkingVariant': 'Przełącz wariant myślenia (skrót globalny)',
   'helpDialog.item.focusChatInput': 'Ustaw fokus na polu czatu',
+  'helpDialog.item.togglePromptNavigator': 'Przełącz nawigator promptów',
   'helpDialog.item.navigateModels': 'Nawiguj po modelach (w selektorze)',
   'helpDialog.item.newWindow': 'Nowe okno (tylko desktop)',
   'helpDialog.item.openCommandPalette': 'Otwórz paletę poleceń',

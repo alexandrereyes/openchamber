@@ -759,6 +759,12 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
         && timelineController.turnIds.length >= 2;
 
     React.useEffect(() => {
+        if (!showPromptNavigator) {
+            useUIStore.getState().setPromptNavigatorPanelOpen(false);
+        }
+    }, [showPromptNavigator]);
+
+    React.useEffect(() => {
         if (typeof window === 'undefined' || !currentSessionId) return;
 
         const handleForceScrollBottom = (event: Event) => {

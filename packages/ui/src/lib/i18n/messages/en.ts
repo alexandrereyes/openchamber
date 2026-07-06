@@ -1511,6 +1511,7 @@ export const dict = {
   'helpDialog.item.createNewSession': 'Create New Session',
   'helpDialog.item.createNewWorktreeDraft': 'Create New Worktree Draft',
   'helpDialog.item.focusChatInput': 'Focus Chat Input',
+  'helpDialog.item.togglePromptNavigator': 'Toggle Prompt Navigator',
   'helpDialog.item.abortActiveRun': 'Abort active run (double press)',
   'helpDialog.item.toggleRightSidebar': 'Toggle Right Sidebar',
   'helpDialog.item.openRightSidebarGitTab': 'Open Right Sidebar Git Tab',

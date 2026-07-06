@@ -1507,6 +1507,7 @@ export const dict: Record<I18nKey, string> = {
   'helpDialog.item.createNewSession': '新しいセッションを作成',
   'helpDialog.item.createNewWorktreeDraft': '新しいワークツリー下書きを作成',
   'helpDialog.item.focusChatInput': 'チャット入力にフォーカス',
+  'helpDialog.item.togglePromptNavigator': 'プロンプトナビゲーターの表示切替',
   'helpDialog.item.abortActiveRun': 'アクティブな実行を中止（ダブルプレス）',
   'helpDialog.item.toggleRightSidebar': '右サイドバーの切り替え',
   'helpDialog.item.openRightSidebarGitTab': '右サイドバーのGitタブを開く',

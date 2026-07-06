@@ -1489,6 +1489,7 @@ export const dict: Record<I18nKey, string> = {
   "helpDialog.item.createNewSession": "Crear nueva sesión",
   "helpDialog.item.createNewWorktreeDraft": "Crear nuevo borrador de worktree",
   "helpDialog.item.focusChatInput": "Enfocar entrada de chat",
+  "helpDialog.item.togglePromptNavigator": "Mostrar u ocultar navegador de prompts",
   "helpDialog.item.abortActiveRun": "Detener ejecución activa (doble presionar)",
   "helpDialog.item.toggleRightSidebar": "Mostrar u ocultar barra lateral derecha",
   "helpDialog.item.openRightSidebarGitTab": "Abrir pestaña de Git en barra lateral derecha",

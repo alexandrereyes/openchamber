@@ -862,6 +862,7 @@ export const settingsDict = {
   'settings.openchamber.keyboardShortcuts.action.open_model_selector.label': '開啟模型選擇器',
   'settings.openchamber.keyboardShortcuts.action.expand_input.label': '展開輸入方塊',
   'settings.openchamber.keyboardShortcuts.action.open_timeline_dialog.label': '開啟對話時間軸',
+  'settings.openchamber.keyboardShortcuts.action.toggle_prompt_navigator.label': '顯示或隱藏提示詞導覽',
   'settings.projects.sidebar.total': '總計 {count}',
   'settings.projects.sidebar.actions.addProject': '新增專案',
   'settings.projects.page.empty.noProjects': '暫無專案。',

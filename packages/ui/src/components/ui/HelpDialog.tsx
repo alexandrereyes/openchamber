@@ -115,6 +115,12 @@ export const HelpDialog: React.FC = () => {
         },
         { id: 'focus_input', descriptionKey: "helpDialog.item.focusChatInput", icon: "text", keys: '' },
         {
+          id: 'toggle_prompt_navigator',
+          descriptionKey: "helpDialog.item.togglePromptNavigator",
+          icon: "list-unordered",
+          keys: '',
+        },
+        {
           id: 'abort_run',
           descriptionKey: "helpDialog.item.abortActiveRun",
           icon: "close-circle",
