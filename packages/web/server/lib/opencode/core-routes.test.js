@@ -1,9 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 import { registerAuthAndAccessRoutes, registerCommonRequestMiddleware, registerServerStatusRoutes } from './core-routes.js';
 
 describe('core-routes', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('should call gracefulShutdown with exitProcess: true on /api/system/shutdown', async () => {
     const app = express();
     let shutdownOpts = null;
@@ -223,6 +227,151 @@ describe('core-routes', () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  const createPairingRouteApp = (overrides = {}) => {
+    const app = express();
+    const dependencies = {
+      express,
+      tunnelAuthController: {
+        classifyRequestScope: () => 'local',
+        requireTunnelSession: vi.fn(),
+        getTunnelSessionFromRequest: vi.fn(),
+        clearTunnelSessionCookie: vi.fn(),
+        exchangeBootstrapToken: vi.fn(),
+      },
+      uiAuthController: {
+        resolveAuthContext: vi.fn(async () => ({ type: 'session', token: 'session-token' })),
+        requireAuth: vi.fn((_req, _res, next) => next()),
+        requireSessionAuth: vi.fn((_req, _res, next) => next()),
+        handleSessionStatus: vi.fn(),
+        handleSessionCreate: vi.fn(),
+        handleUrlAuthToken: vi.fn(),
+        handlePasskeyStatus: vi.fn(),
+        handlePasskeyAuthenticationOptions: vi.fn(),
+        handlePasskeyAuthenticationVerify: vi.fn(),
+        handlePasskeyRegistrationOptions: vi.fn(),
+        handlePasskeyRegistrationVerify: vi.fn(),
+        handlePasskeyList: vi.fn(),
+        handlePasskeyRevoke: vi.fn(),
+        handleResetAuth: vi.fn(),
+      },
+      remoteClientAuthRuntime: {
+        listClients: vi.fn(async () => []),
+        createClient: vi.fn(),
+        revokeClient: vi.fn(),
+        purgeRevokedClients: vi.fn(),
+      },
+      clientPairingRuntime: {
+        createPairingSession: vi.fn(async () => ({ pairing: { id: 'pair_1', secret: 'secret', expiresAt: '2099-01-01T00:00:00.000Z', fingerprint: 'ABCD-1234' } })),
+        cancelPairingSession: vi.fn(async () => ({ cancelled: true })),
+        redeemPairingSession: vi.fn(async () => ({
+          pairing: { fingerprint: 'ABCD-1234' },
+          client: { id: 'client-1', label: 'Phone', authMethod: 'pairing' },
+          token: 'oc_client_token',
+        })),
+      },
+      readSettingsFromDiskMigrated: vi.fn(async () => ({})),
+      normalizeTunnelSessionTtlMs: vi.fn(),
+      ...overrides,
+    };
+    registerAuthAndAccessRoutes(app, dependencies);
+    return { app, dependencies };
+  };
+
+  it('creates pairing sessions behind owner auth and returns no-store payload data', async () => {
+    const { app, dependencies } = createPairingRouteApp();
+
+    const response = await request(app)
+      .post('/api/client-auth/pairing/sessions')
+      .set('Host', 'runtime.example')
+      .send({ label: 'Pair phone', allowedClientKinds: ['mobile'] })
+      .expect(201);
+
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body.pairing).toMatchObject({ id: 'pair_1', secret: 'secret' });
+    expect(response.body.server.candidates).toEqual([{ type: 'lan', url: 'http://runtime.example', priority: 10 }]);
+    expect(dependencies.clientPairingRuntime.createPairingSession).toHaveBeenCalledWith({
+      label: 'Pair phone',
+      allowedClientKinds: ['mobile'],
+      createdByClientId: null,
+    });
+  });
+
+  it('requires owner auth before creating or cancelling pairing sessions', async () => {
+    const { app, dependencies } = createPairingRouteApp({
+      uiAuthController: {
+        resolveAuthContext: vi.fn(async () => null),
+        requireAuth: vi.fn((_req, res) => res.status(401).json({ error: 'Unauthorized' })),
+        requireSessionAuth: vi.fn((_req, res) => res.status(401).json({ error: 'Unauthorized' })),
+      },
+    });
+
+    await request(app).post('/api/client-auth/pairing/sessions').send({}).expect(401);
+    await request(app).delete('/api/client-auth/pairing/sessions/pair_1').expect(401);
+    expect(dependencies.clientPairingRuntime.createPairingSession).not.toHaveBeenCalled();
+    expect(dependencies.clientPairingRuntime.cancelPairingSession).not.toHaveBeenCalled();
+  });
+
+  it('redeems pairing sessions with no-store response and generic errors', async () => {
+    const { app, dependencies } = createPairingRouteApp();
+
+    const response = await request(app)
+      .post('/api/client-auth/pairing/redeem')
+      .set('Host', 'runtime.example')
+      .send({ pairingId: 'pair_1', secret: 'secret', clientKind: 'mobile', deviceName: 'Phone' })
+      .expect(200);
+
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body).toMatchObject({
+      ok: true,
+      server: { label: 'OpenChamber', url: 'http://runtime.example', fingerprint: 'ABCD-1234' },
+      client: { id: 'client-1', authMethod: 'pairing' },
+      clientToken: 'oc_client_token',
+    });
+    expect(dependencies.clientPairingRuntime.redeemPairingSession).toHaveBeenCalledWith(expect.objectContaining({
+      pairingId: 'pair_1',
+      secret: 'secret',
+      clientKind: 'mobile',
+      deviceName: 'Phone',
+    }));
+
+    dependencies.clientPairingRuntime.redeemPairingSession.mockRejectedValueOnce(new Error('Invalid or expired pairing session'));
+    await request(app)
+      .post('/api/client-auth/pairing/redeem')
+      .send({ pairingId: 'pair_2', secret: 'wrong' })
+      .expect(400, { error: 'Invalid or expired pairing session' });
+  });
+
+  it('rate limits pairing redeem attempts by trusted req.ip and pairingId, then resets after the window', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const { app, dependencies } = createPairingRouteApp();
+    dependencies.clientPairingRuntime.redeemPairingSession.mockRejectedValue(new Error('Invalid or expired pairing session'));
+
+    for (let index = 0; index < 10; index += 1) {
+      await request(app)
+        .post('/api/client-auth/pairing/redeem')
+        .set('X-Forwarded-For', `203.0.113.${index}`)
+        .send({ pairingId: 'pair_rate', secret: `wrong-${index}` })
+        .expect(400, { error: 'Invalid or expired pairing session' });
+    }
+
+    const locked = await request(app)
+      .post('/api/client-auth/pairing/redeem')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .send({ pairingId: 'pair_rate', secret: 'wrong-locked' })
+      .expect(429, { error: 'Invalid or expired pairing session' });
+    expect(locked.headers['retry-after']).toBe('300');
+    expect(dependencies.clientPairingRuntime.redeemPairingSession).toHaveBeenCalledTimes(10);
+
+    vi.setSystemTime(new Date('2026-01-01T00:05:01Z'));
+    await request(app)
+      .post('/api/client-auth/pairing/redeem')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .send({ pairingId: 'pair_rate', secret: 'wrong-after-reset' })
+      .expect(400, { error: 'Invalid or expired pairing session' });
+    expect(dependencies.clientPairingRuntime.redeemPairingSession).toHaveBeenCalledTimes(11);
   });
 
   it('should let preview proxy credentials reach preview proxy validation', async () => {

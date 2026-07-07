@@ -18,6 +18,7 @@ import { SecureStorage } from '@aparajita/capacitor-secure-storage';
 import React from 'react';
 
 import { useI18n } from '@/lib/i18n';
+import type { PairingConnectionPayload, PairingEndpointCandidate } from '@/lib/connectionPayload';
 import { isCapacitorApp } from '@/lib/platform';
 import { switchRuntimeEndpoint } from '@/lib/runtime-switch';
 
@@ -61,6 +62,13 @@ type MobileSessionStatus = {
   authenticated?: boolean;
   disabled?: boolean;
   scope?: string;
+};
+
+type PairingRedeemResponse = {
+  ok?: boolean;
+  clientToken?: unknown;
+  client?: { label?: unknown } | null;
+  server?: { label?: unknown; url?: unknown } | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -477,6 +485,33 @@ export const validateMobileConnectionSession = async (input: {
   return !(status && status.disabled !== true && status.authenticated === false);
 };
 
+const normalizePairingCandidates = (candidates: PairingEndpointCandidate[]): PairingEndpointCandidate[] => (
+  candidates
+    .map((candidate) => {
+      try {
+        return { ...candidate, url: normalizeConnectionUrl(candidate.url) };
+      } catch {
+        return null;
+      }
+    })
+    .filter((candidate): candidate is PairingEndpointCandidate => Boolean(candidate?.url))
+    .sort((left, right) => {
+      const priorityDelta = (left.priority ?? 100) - (right.priority ?? 100);
+      if (priorityDelta !== 0) return priorityDelta;
+      const leftHttps = left.url.startsWith('https://') ? 0 : 1;
+      const rightHttps = right.url.startsWith('https://') ? 0 : 1;
+      return leftHttps - rightHttps;
+    })
+);
+
+const choosePairingEndpoint = async (payload: PairingConnectionPayload): Promise<string | null> => {
+  for (const candidate of normalizePairingCandidates(payload.candidates)) {
+    const health = await requestWithTimeout(`${candidate.url}/health`, { method: 'GET' });
+    if (health?.ok) return candidate.url;
+  }
+  return null;
+};
+
 // ---------------------------------------------------------------------------
 // Shared connection controller
 // ---------------------------------------------------------------------------
@@ -488,6 +523,7 @@ export type UseMobileConnection = {
   error: string | null;
   pendingConnection: MobilePendingConnection | null;
   connect: (input: MobileConnectInput) => Promise<void>;
+  redeemPairingConnection: (payload: PairingConnectionPayload) => Promise<void>;
   submitPassword: (password: string) => Promise<void>;
   cancelPassword: () => void;
   saveConnection: (input: MobileConnectInput) => Promise<MobileSavedConnection | null>;
@@ -500,23 +536,23 @@ export type UseMobileConnection = {
 export const useMobileConnection = (onConnected: () => void): UseMobileConnection => {
   const { t } = useI18n();
   const [connections, setConnections] = React.useState<MobileSavedConnection[]>(() => readConnections());
-  const [busyOperation, setBusyOperation] = React.useState<'connect' | 'password' | null>(null);
+  const [busyOperation, setBusyOperation] = React.useState<'connect' | 'password' | 'pairing' | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [pendingConnection, setPendingConnection] = React.useState<MobilePendingConnection | null>(null);
   const connectionsRef = React.useRef(connections);
-  const busyRef = React.useRef<'connect' | 'password' | null>(null);
+  const busyRef = React.useRef<'connect' | 'password' | 'pairing' | null>(null);
 
   const applyConnections = React.useCallback((next: MobileSavedConnection[]) => {
     connectionsRef.current = next;
     setConnections(next);
   }, []);
 
-  const beginBusy = React.useCallback((operation: 'connect' | 'password') => {
+  const beginBusy = React.useCallback((operation: 'connect' | 'password' | 'pairing') => {
     busyRef.current = operation;
     setBusyOperation(operation);
   }, []);
 
-  const endBusy = React.useCallback((operation: 'connect' | 'password') => {
+  const endBusy = React.useCallback((operation: 'connect' | 'password' | 'pairing') => {
     if (busyRef.current !== operation) return;
     busyRef.current = null;
     setBusyOperation(null);
@@ -614,6 +650,59 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
     }
   }, [beginBusy, endBusy, onConnected, persistMetadata, t]);
 
+  const redeemPairingConnection = React.useCallback(async (payload: PairingConnectionPayload) => {
+    if (busyRef.current === 'pairing') return;
+    setError(null);
+    beginBusy('pairing');
+    try {
+      const url = await choosePairingEndpoint(payload);
+      if (!url) {
+        setError(t('mobile.connect.error.unreachable'));
+        return;
+      }
+      const response = await requestWithTimeout(`${url}/api/client-auth/pairing/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          pairingId: payload.pairingId,
+          secret: payload.secret,
+          clientLabel: 'OpenChamber Mobile',
+          clientKind: 'mobile',
+          deviceName: 'OpenChamber Mobile',
+        }),
+      });
+      if (!response?.ok) {
+        setError(t('mobile.connect.error.authRequired'));
+        return;
+      }
+      const result = await response.json().catch(() => null) as PairingRedeemResponse | null;
+      const issuedToken = typeof result?.clientToken === 'string' ? result.clientToken.trim() : '';
+      if (!issuedToken) {
+        setError(t('mobile.connect.error.authRequired'));
+        return;
+      }
+      if (isCapacitorApp()) {
+        const stored = await writeSecureToken(url, issuedToken);
+        if (!stored) {
+          setError(t('mobile.connect.error.authRequired'));
+          return;
+        }
+      }
+      const label = payload.label
+        || (typeof result?.server?.label === 'string' ? result.server.label : '')
+        || (typeof result?.client?.label === 'string' ? result.client.label : '')
+        || getConnectionLabel(url);
+      persistMetadata({ label, url, clientToken: issuedToken });
+      switchRuntimeEndpoint({ apiBaseUrl: url, clientToken: issuedToken });
+      onConnected();
+    } catch (error) {
+      console.warn('[mobile-connect] pairing threw', error);
+      setError(t('mobile.connect.error.authRequired'));
+    } finally {
+      endBusy('pairing');
+    }
+  }, [beginBusy, endBusy, onConnected, persistMetadata, t]);
+
   const submitPassword = React.useCallback(async (password: string) => {
     if (!pendingConnection || !password.trim() || busyRef.current === 'password') return;
     setError(null);
@@ -696,6 +785,7 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
     error,
     pendingConnection,
     connect,
+    redeemPairingConnection,
     submitPassword,
     cancelPassword,
     saveConnection,

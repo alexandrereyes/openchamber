@@ -1729,6 +1729,58 @@ const parseConnectDeepLinkPayload = (raw) => {
   }
 };
 
+const decodeBase64UrlJson = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const json = Buffer.from(value.trim(), 'base64url').toString('utf8');
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+};
+
+const parseConnectPairingDeepLinkPayload = (raw) => {
+  if (typeof raw !== 'string') return null;
+  try {
+    const url = new URL(raw.trim());
+    if (url.protocol !== `${DEEP_LINK_PROTOCOL}:` || url.hostname !== 'connect') return null;
+    if (url.searchParams.get('v') !== '2') return null;
+    const payload = decodeBase64UrlJson(url.searchParams.get('p') || '');
+    if (!payload || payload.v !== 2 || typeof payload !== 'object') return null;
+    const pairingId = typeof payload.pairingId === 'string' ? payload.pairingId.trim() : '';
+    const secret = typeof payload.secret === 'string' ? payload.secret.trim() : '';
+    if (!pairingId || !secret) return null;
+    const candidates = Array.isArray(payload.candidates)
+      ? payload.candidates.flatMap((candidate) => {
+        if (!candidate || typeof candidate !== 'object') return [];
+        const type = candidate.type === 'lan' || candidate.type === 'tunnel' || candidate.type === 'relay'
+          ? candidate.type
+          : null;
+        const candidateUrl = normalizeHostUrl(candidate.url || '');
+        if (!type || !candidateUrl) return [];
+        const priority = Number.isFinite(candidate.priority) ? candidate.priority : 100;
+        return [{ type, url: candidateUrl, priority }];
+      })
+      : [];
+    if (candidates.length === 0) return null;
+    const expiresAt = typeof payload.expiresAt === 'string' ? payload.expiresAt.trim() : '';
+    if (expiresAt) {
+      const expiresTime = Date.parse(expiresAt);
+      if (!Number.isFinite(expiresTime) || expiresTime <= Date.now()) return null;
+    }
+    return {
+      pairingId,
+      secret,
+      label: typeof payload.label === 'string' && payload.label.trim() ? payload.label.trim() : 'OpenChamber',
+      fingerprint: typeof payload.fingerprint === 'string' && payload.fingerprint.trim() ? payload.fingerprint.trim() : '',
+      expiresAt: expiresAt || null,
+      candidates: candidates.sort((left, right) => left.priority - right.priority),
+    };
+  } catch {
+    return null;
+  }
+};
+
 const importConnectDeepLink = async (payload) => {
   if (!payload?.serverUrl || !payload?.token) return null;
   const config = readDesktopHostsConfig();
@@ -1757,6 +1809,49 @@ const importConnectDeepLink = async (payload) => {
     initialHostChoiceCompleted: true,
   });
   return id;
+};
+
+const requestJsonWithTimeout = async (url, init = {}, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const data = await response.json().catch(() => null);
+    return { ok: response.ok, status: response.status, data };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const selectPairingCandidateUrl = async (payload) => {
+  for (const candidate of payload.candidates || []) {
+    try {
+      const health = await requestJsonWithTimeout(`${candidate.url.replace(/\/+$/g, '')}/health`, { method: 'GET' }, 3500);
+      if (health.ok) return candidate.url.replace(/\/+$/g, '');
+    } catch {
+    }
+  }
+  return null;
+};
+
+const redeemConnectPairingDeepLink = async (payload, serverUrl) => {
+  const response = await requestJsonWithTimeout(`${serverUrl.replace(/\/+$/g, '')}/api/client-auth/pairing/redeem`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      pairingId: payload.pairingId,
+      secret: payload.secret,
+      clientLabel: 'OpenChamber Desktop',
+      clientKind: 'desktop',
+      deviceName: 'OpenChamber Desktop',
+    }),
+  });
+  if (!response.ok || !response.data || typeof response.data.clientToken !== 'string') return null;
+  return {
+    serverUrl,
+    token: sanitizeClientTokenForStorage(response.data.clientToken),
+    label: payload.label || response.data?.server?.label || serverUrl,
+  };
 };
 
 const switchToHostById = async (rawId) => {
@@ -1830,6 +1925,36 @@ const dispatchDeepLink = (link) => {
   if (!link) return;
   log.info('[electron] dispatching deep-link', { type: link.type, valueLen: link.value?.length || 0 });
   if (link.type === 'connect') {
+    const pairingPayload = parseConnectPairingDeepLinkPayload(link.raw);
+    if (pairingPayload) {
+      const previewUrl = pairingPayload.candidates[0]?.url || pairingPayload.label;
+      void confirmConnectDeepLink({
+        serverUrl: previewUrl,
+        token: 'pairing-v2',
+        label: pairingPayload.fingerprint ? `${pairingPayload.label} (${pairingPayload.fingerprint})` : pairingPayload.label,
+      }).then(async (confirmed) => {
+        if (!confirmed) {
+          log.info('[electron] connect pairing deep-link declined by user');
+          return;
+        }
+        const serverUrl = await selectPairingCandidateUrl(pairingPayload);
+        if (!serverUrl) {
+          log.warn('[electron] connect pairing deep-link has no reachable candidate');
+          return;
+        }
+        const importedPayload = await redeemConnectPairingDeepLink(pairingPayload, serverUrl).catch((error) => {
+          log.warn('[electron] connect pairing redeem failed:', error);
+          return null;
+        });
+        if (!importedPayload?.token) {
+          log.warn('[electron] connect pairing redeem returned no client token');
+          return;
+        }
+        const id = await importConnectDeepLink(importedPayload);
+        if (id) void switchToHostById(id);
+      });
+      return;
+    }
     const payload = parseConnectDeepLinkPayload(link.raw);
     if (!payload) {
       log.warn('[electron] invalid connect deep-link payload');

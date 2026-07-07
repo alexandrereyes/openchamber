@@ -573,6 +573,10 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
     if (/^openchamber:\/\//i.test(value.trim())) {
       const payload = parseConnectionPayload(value);
       if (payload) {
+        if ('pairing' in payload) {
+          void conn.redeemPairingConnection(payload.pairing);
+          return;
+        }
         setServerUrl(payload.url);
         if (payload.label) setConnectionName(payload.label);
         if (payload.clientToken) setClientToken(payload.clientToken);
@@ -581,7 +585,7 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
       }
     }
     setServerUrl(value);
-  }, []);
+  }, [conn]);
 
   const handleScanQr = React.useCallback(async () => {
     if (isScanning || isBusy) return;
@@ -596,6 +600,9 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
           if (result.clientToken) setClientToken(result.clientToken);
           if (result.label || result.clientToken) setAdvancedOpen(true);
           await conn.connect({ url: result.url, clientToken: result.clientToken, label: result.label });
+          break;
+        case 'pairing':
+          await conn.redeemPairingConnection(result.pairing);
           break;
         case 'permission-denied':
           conn.setError(t('mobile.connect.scan.permissionDenied'));
@@ -841,6 +848,9 @@ const MobileInstancesSurface: React.FC<{
           if (result.label) setLabel(result.label);
           if (result.clientToken) setClientToken(result.clientToken);
           break;
+        case 'pairing':
+          await conn.redeemPairingConnection(result.pairing);
+          break;
         case 'permission-denied':
           setError(t('mobile.connect.scan.permissionDenied'));
           break;
@@ -860,7 +870,7 @@ const MobileInstancesSurface: React.FC<{
     } finally {
       setIsScanning(false);
     }
-  }, [isScanning, setError, t]);
+  }, [conn, isScanning, setError, t]);
 
   const handlePasswordSubmit = React.useCallback((event: React.FormEvent) => {
     event.preventDefault();

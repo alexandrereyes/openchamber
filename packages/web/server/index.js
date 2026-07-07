@@ -87,6 +87,7 @@ import { createNotificationTemplateRuntime } from './lib/notifications/template-
 import { createGracefulShutdownRuntime } from './lib/opencode/shutdown-runtime.js';
 import { createProjectConfigRuntime } from './lib/projects/project-config.js';
 import { createRemoteClientAuthRuntime } from './lib/client-auth/remote-clients.js';
+import { createClientPairingRuntime } from './lib/client-auth/pairing.js';
 import { createPreviewProxyRuntime } from './lib/preview/proxy-runtime.js';
 import { attachRealtimeProxy } from './lib/realtime-proxy.js';
 import { createProxyMiddleware, responseInterceptor } from 'http-proxy-middleware';
@@ -281,6 +282,7 @@ const SETTINGS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'settings.json');
 const PUSH_SUBSCRIPTIONS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'push-subscriptions.json');
 const APNS_TOKENS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'apns-tokens.json');
 const REMOTE_CLIENTS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'remote-clients.json');
+const CLIENT_PAIRING_SESSIONS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'client-pairing-sessions.json');
 const CLOUDFLARE_MANAGED_REMOTE_TUNNELS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'cloudflare-managed-remote-tunnels.json');
 const CLOUDFLARE_LEGACY_NAMED_TUNNELS_FILE_PATH = path.join(OPENCHAMBER_DATA_DIR, 'cloudflare-named-tunnels.json');
 const CLOUDFLARE_MANAGED_REMOTE_TUNNELS_VERSION = 1;
@@ -871,6 +873,13 @@ const remoteClientAuthRuntime = createRemoteClientAuthRuntime({
   crypto,
   storePath: REMOTE_CLIENTS_FILE_PATH,
 });
+const clientPairingRuntime = createClientPairingRuntime({
+  fsPromises,
+  path,
+  crypto,
+  storePath: CLIENT_PAIRING_SESSIONS_FILE_PATH,
+  remoteClientAuthRuntime,
+});
 const featureRoutesRuntime = createFeatureRoutesRuntime({
   clientReloadDelayMs: CLIENT_RELOAD_DELAY_MS,
 });
@@ -1242,6 +1251,7 @@ async function main(options = {}) {
     uiPassword,
     tunnelAuthController,
     remoteClientAuthRuntime,
+    clientPairingRuntime,
     readSettingsFromDiskMigrated,
     normalizeTunnelSessionTtlMs,
     sayTTSCapability,

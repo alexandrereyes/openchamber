@@ -358,9 +358,13 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     tunnelAuthController,
     uiAuthController,
     remoteClientAuthRuntime,
+    clientPairingRuntime,
     readSettingsFromDiskMigrated,
     normalizeTunnelSessionTtlMs,
   } = dependencies;
+  const PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
+  const PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS = 10;
+  const pairingRedeemAttempts = new Map();
 
   const runWithUiAuth = async (req, res, next, handler, options = {}) => {
     try {
@@ -438,6 +442,74 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     if (!clientId) return null;
     const clients = await remoteClientAuthRuntime.listClients();
     return clients.find((client) => client.id === clientId) || null;
+  };
+
+  const requestOrigin = (req) => {
+    const forwardedProto = typeof req.headers?.['x-forwarded-proto'] === 'string'
+      ? req.headers['x-forwarded-proto'].split(',')[0].trim()
+      : '';
+    const protocol = forwardedProto || (req.socket?.encrypted ? 'https' : 'http');
+    const host = typeof req.headers?.host === 'string' ? req.headers.host.trim() : '';
+    if (!host) return null;
+    return `${protocol}://${host}`;
+  };
+
+  const requestIp = (req) => {
+    // Express resolves req.ip according to its configured trust proxy setting.
+    // Do not trust raw X-Forwarded-For here; clients can spoof it on public/tunnel paths.
+    return req.ip || req.socket?.remoteAddress || 'unknown';
+  };
+
+  const pairingIdFromRequest = (req) => {
+    const raw = typeof req.body?.pairingId === 'string' ? req.body.pairingId.trim() : '';
+    return raw || 'missing';
+  };
+
+  const checkPairingRedeemRateLimit = (req) => {
+    const now = Date.now();
+    const key = `${requestIp(req)}:${pairingIdFromRequest(req)}`;
+    for (const [entryKey, entry] of pairingRedeemAttempts.entries()) {
+      if (!entry || now - entry.firstAttemptAt >= PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS) {
+        pairingRedeemAttempts.delete(entryKey);
+      }
+    }
+    const entry = pairingRedeemAttempts.get(key);
+    if (!entry) {
+      pairingRedeemAttempts.set(key, { count: 1, firstAttemptAt: now });
+      return { allowed: true, remaining: PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS - 1, reset: Math.ceil((now + PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS) / 1000) };
+    }
+    const reset = Math.ceil((entry.firstAttemptAt + PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS) / 1000);
+    if (entry.count >= PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS) {
+      return {
+        allowed: false,
+        remaining: 0,
+        reset,
+        retryAfter: Math.max(1, Math.ceil((entry.firstAttemptAt + PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS - now) / 1000)),
+      };
+    }
+    entry.count += 1;
+    return { allowed: true, remaining: PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS - entry.count, reset };
+  };
+
+  const clearPairingRedeemRateLimit = (req) => {
+    pairingRedeemAttempts.delete(`${requestIp(req)}:${pairingIdFromRequest(req)}`);
+  };
+
+  const pairingServerCandidates = (req) => {
+    const origin = requestOrigin(req);
+    if (!origin) return [];
+    let type = 'lan';
+    try {
+      const parsed = new URL(origin);
+      type = parsed.protocol === 'https:' ? 'tunnel' : 'lan';
+    } catch {
+    }
+    return [{ type, url: origin, priority: 10 }];
+  };
+
+  const sendPairingRedeemError = (res, error) => {
+    const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+    res.status(statusCode).json({ error: 'Invalid or expired pairing session' });
   };
 
   const requireApiAuth = async (req, res, next) => {
@@ -628,6 +700,76 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
       const result = await remoteClientAuthRuntime.purgeRevokedClients();
       res.json(result);
     }, { sessionOnly: true });
+  });
+
+  app.post('/api/client-auth/pairing/sessions', express.json({ limit: '64kb' }), async (req, res, next) => {
+    await runWithClientCreateAuth(req, res, next, async (authContext) => {
+      const result = await clientPairingRuntime.createPairingSession({
+        label: req.body?.label,
+        allowedClientKinds: req.body?.allowedClientKinds,
+        createdByClientId: clientIdFromAuthContext(authContext),
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(201).json({
+        ...result,
+        server: {
+          label: 'OpenChamber',
+          candidates: pairingServerCandidates(req),
+        },
+      });
+    });
+  });
+
+  app.delete('/api/client-auth/pairing/sessions/:id', async (req, res, next) => {
+    await runWithClientCreateAuth(req, res, next, async () => {
+      const result = await clientPairingRuntime.cancelPairingSession(req.params?.id);
+      if (!result.cancelled) {
+        return res.status(404).json({ cancelled: false, error: 'Pairing session not found' });
+      }
+      res.json(result);
+    });
+  });
+
+  app.post('/api/client-auth/pairing/redeem', express.json({ limit: '64kb' }), async (req, res, next) => {
+    try {
+      const rateLimit = checkPairingRedeemRateLimit(req);
+      res.setHeader('X-RateLimit-Limit', PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS);
+      res.setHeader('X-RateLimit-Remaining', rateLimit.remaining);
+      res.setHeader('X-RateLimit-Reset', rateLimit.reset);
+      if (!rateLimit.allowed) {
+        res.setHeader('Retry-After', rateLimit.retryAfter);
+        return res.status(429).json({ error: 'Invalid or expired pairing session' });
+      }
+      const result = await clientPairingRuntime.redeemPairingSession({
+        pairingId: req.body?.pairingId,
+        secret: req.body?.secret,
+        clientLabel: req.body?.clientLabel,
+        clientKind: req.body?.clientKind,
+        deviceName: req.body?.deviceName,
+        devicePlatform: req.body?.devicePlatform,
+        deviceModel: req.body?.deviceModel,
+        appVersion: req.body?.appVersion,
+        dedupeKey: req.body?.dedupeKey,
+      });
+      clearPairingRedeemRateLimit(req);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({
+        ok: true,
+        server: {
+          label: 'OpenChamber',
+          url: requestOrigin(req),
+          fingerprint: result.pairing?.fingerprint || null,
+        },
+        client: result.client,
+        clientToken: result.token,
+      });
+    } catch (error) {
+      if (error?.message === 'Invalid or expired pairing session') {
+        sendPairingRedeemError(res, error);
+        return;
+      }
+      next(error);
+    }
   });
 
   app.get('/connect', async (req, res) => {

@@ -25,6 +25,15 @@ const normalizeOptionalString = (value) => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const normalizeMetadata = (client) => ({
+  authMethod: normalizeOptionalString(client.authMethod),
+  pairingId: normalizeOptionalString(client.pairingId),
+  deviceName: normalizeOptionalString(client.deviceName),
+  devicePlatform: normalizeOptionalString(client.devicePlatform),
+  deviceModel: normalizeOptionalString(client.deviceModel),
+  appVersion: normalizeOptionalString(client.appVersion),
+});
+
 const safeJsonParse = (raw) => {
   try {
     return JSON.parse(raw);
@@ -77,6 +86,7 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
           expiresAt: normalizeTimestamp(client.expiresAt),
           clientKind: normalizeOptionalString(client.clientKind),
           dedupeKey: normalizeOptionalString(client.dedupeKey),
+          ...normalizeMetadata(client),
         }))
         .filter((client) => client.tokenHash.length > 0)
       : [],
@@ -108,6 +118,12 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
     revokedAt: client.revokedAt,
     expiresAt: client.expiresAt,
     clientKind: client.clientKind,
+    authMethod: client.authMethod,
+    pairingId: client.pairingId,
+    deviceName: client.deviceName,
+    devicePlatform: client.devicePlatform,
+    deviceModel: client.deviceModel,
+    appVersion: client.appVersion,
   });
 
   const listClients = async () => {
@@ -117,7 +133,18 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
     });
   };
 
-  const createClient = async ({ label, expiresAt, clientKind, dedupeKey } = {}) => {
+  const createClient = async ({
+    label,
+    expiresAt,
+    clientKind,
+    dedupeKey,
+    authMethod,
+    pairingId,
+    deviceName,
+    devicePlatform,
+    deviceModel,
+    appVersion,
+  } = {}) => {
     return withStoreMutation(async () => {
       const store = await readStore();
       const normalizedDedupeKey = normalizeOptionalString(dedupeKey);
@@ -132,6 +159,12 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
         expiresAt: normalizeTimestamp(expiresAt),
         clientKind: normalizeOptionalString(clientKind),
         dedupeKey: normalizedDedupeKey,
+        authMethod: normalizeOptionalString(authMethod),
+        pairingId: normalizeOptionalString(pairingId),
+        deviceName: normalizeOptionalString(deviceName),
+        devicePlatform: normalizeOptionalString(devicePlatform),
+        deviceModel: normalizeOptionalString(deviceModel),
+        appVersion: normalizeOptionalString(appVersion),
       };
       if (normalizedDedupeKey) {
         store.clients = store.clients.filter((entry) => entry.dedupeKey !== normalizedDedupeKey);
