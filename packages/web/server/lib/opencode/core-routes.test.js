@@ -343,10 +343,11 @@ describe('core-routes', () => {
       .expect(400, { error: 'Invalid or expired pairing session' });
   });
 
-  it('rate limits pairing redeem attempts by trusted req.ip and pairingId, then resets after the window', async () => {
+  it('rate limits pairing redeem attempts by socket address and pairingId, then resets after the window', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     const { app, dependencies } = createPairingRouteApp();
+    app.set('trust proxy', true);
     dependencies.clientPairingRuntime.redeemPairingSession.mockRejectedValue(new Error('Invalid or expired pairing session'));
 
     for (let index = 0; index < 10; index += 1) {

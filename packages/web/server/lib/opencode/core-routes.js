@@ -455,9 +455,9 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
   };
 
   const requestIp = (req) => {
-    // Express resolves req.ip according to its configured trust proxy setting.
-    // Do not trust raw X-Forwarded-For here; clients can spoof it on public/tunnel paths.
-    return req.ip || req.socket?.remoteAddress || 'unknown';
+    // Do not use req.ip here: Express rewrites it from X-Forwarded-For when
+    // trust proxy is enabled, and redeem is unauthenticated before this limit.
+    return req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
   };
 
   const pairingIdFromRequest = (req) => {
