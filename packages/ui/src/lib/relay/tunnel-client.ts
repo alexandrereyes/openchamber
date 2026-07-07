@@ -478,18 +478,18 @@ export const createRelayTunnelClient = (options: RelayTunnelClientOptions): Rela
       if (settled || generation !== attemptGeneration) return;
       const data = event.data;
       if (typeof data === 'string') {
-        if (cryptoChannel) {
-          failAttemptLocal(new Error('plaintext frame on established channel'));
-          return;
-        }
         recvChain = recvChain
           .then(async () => {
-            if (settled || generation !== attemptGeneration || cryptoChannel) return;
+            if (settled || generation !== attemptGeneration) return;
+            // Post-establish text frames go through the handshake too: the host
+            // re-answers retried hellos with duplicate `ready` frames, which the
+            // handshake ignores; anything else fails closed there.
             const action = await handshake.handleText(data);
             if (action.type === 'established') {
+              if (cryptoChannel) return;
               establish(action.channel);
             } else if (action.type === 'fail') {
-              failAttemptLocal(new Error(action.reason));
+              failAttemptLocal(new Error(`relay handshake failed: ${action.reason}`));
             }
           })
           .catch((error: unknown) => {

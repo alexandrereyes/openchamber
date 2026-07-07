@@ -149,12 +149,14 @@ export const createTunnelHost = ({ connectionId, getLocalPort, sendFrame, getBuf
     return headers;
   };
 
+  // Synthetic responses never ship an empty body: `reason` states explicitly
+  // that the relay host (not the upstream server) produced this response.
   const syntheticResponse = async (streamId, status, message) => {
     await sendJson(TunnelFrameType.HttpResponse, streamId, {
       status,
       headers: { 'content-type': 'application/json' },
     });
-    await send(encodeTunnelFrame(TunnelFrameType.HttpBody, streamId, encodeJsonPayload({ error: message })));
+    await send(encodeTunnelFrame(TunnelFrameType.HttpBody, streamId, encodeJsonPayload({ error: message, reason: message, source: 'relay-tunnel-host' })));
     await send(encodeTunnelFrame(TunnelFrameType.StreamEnd, streamId, new Uint8Array(0)));
   };
 

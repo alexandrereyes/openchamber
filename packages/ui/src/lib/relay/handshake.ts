@@ -110,6 +110,11 @@ export const createClientHandshake = async (hostEncPubJwk: JsonWebKey): Promise<
     },
     async handleText(raw: string): Promise<HandshakeAction> {
       if (established) {
+        // The host answers every retried `hello` with `ready`, so a duplicate
+        // `ready` after establishment is protocol-legal (first-connect latency
+        // exceeding the hello retry interval). Any other plaintext fails closed.
+        const message = parseHandshakeMessage(raw);
+        if (message?.t === 'ready') return { type: 'ignore' };
         return failClosed('plaintext frame on established channel');
       }
       const message = parseHandshakeMessage(raw);

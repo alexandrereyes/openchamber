@@ -103,6 +103,8 @@ export const startRelayHost = ({ relayUrl, identity, localPort, getLocalPort, on
     let processing = Promise.resolve();
 
     const failChannel = (closeCode, reason) => {
+      // connectionId + reason only — never payload contents.
+      logger.warn(`[Relay] data channel failed connectionId=${connectionId} reason=${reason ?? 'unknown'}`);
       teardownDataSocket(connectionId, closeCode, reason);
     };
 

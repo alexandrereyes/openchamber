@@ -58,6 +58,12 @@ describe('relay E2EE handshake', () => {
     expect(retry).toEqual({ type: 'send-text', text: first.replyText as string });
   });
 
+  test('client ignores a duplicate ready after establishment (host re-answers retried hellos)', async () => {
+    const { client } = await runFullHandshake();
+    const action = await client.handleText(JSON.stringify({ t: 'ready', v: 1 }));
+    expect(action.type).toBe('ignore');
+  });
+
   test('hello with a different key after establishment fails with rekey mismatch (1008)', async () => {
     const host = await createHostIdentity();
     const firstClient = await createClientHandshake(host.publicJwk);

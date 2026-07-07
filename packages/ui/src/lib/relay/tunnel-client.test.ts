@@ -78,6 +78,10 @@ class FakeEndpoint implements TunnelWireSocket {
 type MiniHostOptions = {
   silent?: boolean;
   onConnect?: () => void;
+  // Delay handling of the first inbound text frame: with a delay longer than
+  // the client's helloRetryMs this reproduces the first-connect race where the
+  // client retries `hello` and the host answers every retry with `ready`.
+  firstHelloDelayMs?: number;
 };
 
 // A minimal host responder wired to one endpoint. Answers a few routes so the
@@ -186,10 +190,15 @@ const attachMiniHost = (endpoint: FakeEndpoint, hostPrivateKey: CryptoKey, optio
     }
   };
 
+  let firstHelloDelayed = false;
   endpoint.onmessage = (event) => {
     const data = event.data;
     recvChain = recvChain.then(async () => {
       if (typeof data === 'string') {
+        if (options.firstHelloDelayMs && !firstHelloDelayed) {
+          firstHelloDelayed = true;
+          await new Promise((resolve) => setTimeout(resolve, options.firstHelloDelayMs));
+        }
         const action = await handshake.handleText(data);
         if (action.type === 'established') {
           encryptor = action.channel.encryptor;
@@ -213,11 +222,17 @@ const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(
 
 const setupClient = async (
   hostOptions: MiniHostOptions = {},
-): Promise<{ client: RelayTunnelClient; connectionCount: () => number; killWire: () => void }> => {
+): Promise<{
+  client: RelayTunnelClient;
+  connectionCount: () => number;
+  killWire: () => void;
+  sendTextToClient: (text: string) => void;
+}> => {
   const hostKeyPair = await generateEcdhKeyPair();
   const hostPubJwk = await exportPublicKeyJwk(hostKeyPair.publicKey);
   let count = 0;
   let lastClientEndpoint: FakeEndpoint | null = null;
+  let lastHostEndpoint: FakeEndpoint | null = null;
   const client = createRelayTunnelClient({
     relayUrl: 'wss://relay.test/ws',
     serverId: 'server-1',
@@ -234,12 +249,18 @@ const setupClient = async (
       clientEndpoint.peer = hostEndpoint;
       hostEndpoint.peer = clientEndpoint;
       lastClientEndpoint = clientEndpoint;
+      lastHostEndpoint = hostEndpoint;
       attachMiniHost(hostEndpoint, hostKeyPair.privateKey, hostOptions);
       queueMicrotask(() => clientEndpoint.onopen?.());
       return clientEndpoint;
     },
   });
-  return { client, connectionCount: () => count, killWire: () => lastClientEndpoint?.close(1006, 'killed') };
+  return {
+    client,
+    connectionCount: () => count,
+    killWire: () => lastClientEndpoint?.close(1006, 'killed'),
+    sendTextToClient: (text: string) => lastHostEndpoint?.send(text),
+  };
 };
 
 let openClients: RelayTunnelClient[] = [];
@@ -354,6 +375,46 @@ describe('createRelayTunnelClient', () => {
     expect(connectionCount()).toBeGreaterThan(1);
     const status = client.getStatus();
     expect(['reconnecting', 'connecting', 'connected', 'error']).toContain(status.state);
+  });
+
+  test('survives duplicate ready frames from a slow first handshake (first-request 500 regression)', async () => {
+    // firstHelloDelayMs > helloRetryMs (20ms): the client retries `hello`
+    // several times, and the host answers every retry with `ready`. The
+    // duplicate `ready` frames arrive after the client established and must
+    // NOT reset the channel or fail the first in-flight request.
+    const { client, connectionCount, sendTextToClient } = await setupClient({ firstHelloDelayMs: 70 });
+    track(client);
+    // First request in flight with a streamed response...
+    const response = await client.fetch('/stream');
+    const reader = response.body!.getReader();
+    await reader.read();
+    // ...when a straggler duplicate `ready` (the host's answer to a retried
+    // hello) lands on the established channel. Real-world timing: the retry
+    // answer crosses the relay ~helloRetryMs after the first `ready`.
+    sendTextToClient(JSON.stringify({ t: 'ready', v: 1 }));
+    const chunks: string[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(textDecoder.decode(value));
+    }
+    expect(chunks.join('')).toContain('chunk');
+    expect(connectionCount()).toBe(1);
+    expect(client.getStatus().state).toBe('connected');
+    const again = await client.fetch('/health');
+    expect(again.status).toBe(200);
+    expect(connectionCount()).toBe(1);
+  });
+
+  test('fails closed on non-ready plaintext after establishment', async () => {
+    const { client, connectionCount, sendTextToClient } = await setupClient();
+    track(client);
+    await client.fetch('/health');
+    expect(connectionCount()).toBe(1);
+    sendTextToClient('{"anything":"plaintext"}');
+    // The channel must reset (fail closed) and the client reconnect a new wire.
+    await wait(150);
+    expect(connectionCount()).toBeGreaterThan(1);
   });
 
   test('publishes status transitions to subscribers', async () => {

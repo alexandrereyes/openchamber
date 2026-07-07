@@ -180,7 +180,11 @@ const runScriptedClient = async ({ relayUrl, serverId, hostEncPubJwk }) => {
     }));
   });
 
-  ws.on('message', async (data, isBinary) => {
+  // Serialize message handling: an async ws handler runs per-message tasks
+  // concurrently, letting StreamEnd overtake HttpBody and trip the decryptor's
+  // strict counter ordering (the production tunnel client chains decrypts).
+  let processing = Promise.resolve();
+  const handleMessage = async (data, isBinary) => {
     if (!isBinary) {
       const msg = JSON.parse(data.toString('utf8'));
       if (msg.t === 'ready') {
@@ -219,6 +223,9 @@ const runScriptedClient = async ({ relayUrl, serverId, hostEncPubJwk }) => {
       resolveDone({ status: responseStatus, body: JSON.parse(new TextDecoder().decode(body)) });
       ws.close();
     }
+  };
+  ws.on('message', (data, isBinary) => {
+    processing = processing.then(() => handleMessage(data, isBinary));
   });
 
   return done;

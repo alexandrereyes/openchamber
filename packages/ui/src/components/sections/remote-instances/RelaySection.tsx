@@ -174,7 +174,12 @@ export const RelaySection: React.FC = () => {
         throw new Error('Malformed offer response');
       }
       setOfferUrl(result.url);
-      setOfferQrDataUrl(await QRCode.toDataURL(result.url, { width: 192, margin: 1 }));
+      // Relay offers are ~500 chars (encryption key JWK + token) — far denser than
+      // direct-pairing QRs. Low ECC + a large render keep the modules big enough for
+      // a phone camera to lock onto from a desktop screen.
+      setOfferQrDataUrl(
+        await QRCode.toDataURL(result.url, { width: 384, margin: 2, errorCorrectionLevel: 'L' }),
+      );
       setPairLabel('');
     } catch (err) {
       toast.error(t('settings.remoteInstances.relay.toast.offerFailed'), {
@@ -262,7 +267,7 @@ export const RelaySection: React.FC = () => {
               ) : null}
               {offerUrl ? (
                 <div className="flex flex-col gap-3 rounded-md border border-[var(--interactive-border)] p-2 sm:flex-row">
-                  {offerQrDataUrl ? <img src={offerQrDataUrl} alt={t('settings.remoteInstances.relay.pair.qrAlt')} className="size-48 self-start" /> : null}
+                  {offerQrDataUrl ? <img src={offerQrDataUrl} alt={t('settings.remoteInstances.relay.pair.qrAlt')} className="size-72 self-start" /> : null}
                   <div className="min-w-0 flex-1 space-y-2">
                     <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.relay.pair.linkLabel')}</p>
                     <code className="block select-all break-all typography-code text-foreground">{offerUrl}</code>
