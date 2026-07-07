@@ -310,6 +310,7 @@ interface MessengerState {
   removeProjectChannel: (projectId: string, projectPath: string) => Promise<void>;
   startOnboarding: (type: MessengerType) => void;
   nextOnboardingStep: () => void;
+  prevOnboardingStep: () => void;
   finishOnboarding: () => void;
 }
 
@@ -1249,6 +1250,11 @@ export const useMessengerStore = create<MessengerState>()(
       nextOnboardingStep: () => {
         const step = get().onboardingStep;
         if (step !== null) set({ onboardingStep: step + 1 });
+      },
+
+      prevOnboardingStep: () => {
+        const step = get().onboardingStep;
+        if (step !== null && step > 0) set({ onboardingStep: step - 1 });
       },
 
       finishOnboarding: () => {

@@ -1,3 +1,5 @@
+import { discordIntegrationI18n } from './discord-integration.i18n';
+
 export const settingsDict = {
   'settings.appearance.language.label': '言語',
   'settings.appearance.language.description': 'インターフェース言語を選択します。',
@@ -43,6 +45,7 @@ export const settingsDict = {
   'settings.page.skills.title': 'スキル',
   'settings.page.skillsCatalog.title': 'スキルカタログ',
   'settings.page.git.title': 'Git',
+  'settings.page.integrations.title': '連携',
   'settings.page.appearance.title': '外観',
   'settings.page.chat.title': 'チャット',
   'settings.page.shortcuts.title': 'ショートカット',
@@ -1817,4 +1820,5 @@ export const settingsDict = {
   'settings.openchamber.visual.field.followUpBehaviorDescription': 'エージェントが応答している間にフォローアップメッセージで Enter を押したときの動作を選択します。',
   'settings.openchamber.visual.option.followUpBehavior.steer.label': 'ステア',
   'settings.openchamber.visual.option.followUpBehavior.queue.label': 'キュー',
+  ...discordIntegrationI18n.en,
 } as const;

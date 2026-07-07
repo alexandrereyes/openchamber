@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   RiDiscordLine,
   RiCheckLine,
@@ -32,6 +32,9 @@ import { useProjectsStore } from '@/stores/useProjectsStore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
 import { cn } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
+import { DiscordOnboardingWizard } from './DiscordOnboardingWizard';
+import { DiscordCommandsButton } from './DiscordCommandPalette';
 
 interface MessengerMeta {
   name: string;
@@ -105,28 +108,65 @@ function StatusBadge({ status }: { status: MessengerConnection['status'] }) {
   );
 }
 
-function ChecklistItem({
+function InteractiveChecklistItem({
   done,
   label,
   hint,
+  actionLabel,
+  onAction,
+  active,
 }: {
   done: boolean;
   label: string;
   hint?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  active?: boolean;
 }) {
-  return (
-    <li className="flex items-start gap-2">
+  const content = (
+    <>
       {done ? (
-        <RiCheckboxCircleFill className="size-4 shrink-0 text-green-500" />
+        <RiCheckboxCircleFill className="size-4 shrink-0 text-[var(--status-success)]" />
       ) : (
         <RiCheckboxBlankCircleLine className="size-4 shrink-0 text-muted-foreground" />
       )}
-      <div className="text-xs">
+      <div className="min-w-0 flex-1 text-xs">
         <span className={cn(done ? 'text-foreground' : 'text-muted-foreground')}>{label}</span>
         {hint ? <span className="text-muted-foreground"> — {hint}</span> : null}
       </div>
-    </li>
+      {!done && actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onAction();
+          }}
+          className="shrink-0 rounded px-2 py-0.5 text-[10px] font-medium text-primary bg-primary/10 hover:bg-primary/20"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+    </>
   );
+
+  if (!done && onAction) {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={onAction}
+          className={cn(
+            'flex w-full items-start gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[var(--interactive-hover)]/40',
+            active && 'bg-[var(--interactive-selection)]/30',
+          )}
+        >
+          {content}
+        </button>
+      </li>
+    );
+  }
+
+  return <li className="flex items-start gap-2 px-1 py-0.5">{content}</li>;
 }
 
 function formatRelative(ts: number | null | undefined): string {
@@ -992,6 +1032,11 @@ function DiscordAdvancedSettings({ conn }: { conn: MessengerConnection }) {
 }
 
 function ConnectionCard({ conn }: { conn: MessengerConnection }) {
+  const { t } = useI18n();
+  const onboardingStep = useMessengerStore((s) => s.onboardingStep);
+  const onboardingType = useMessengerStore((s) => s.onboardingType);
+  const showWizard = onboardingStep !== null && onboardingType === 'discord';
+
   const updateConnection = useMessengerStore((s) => s.updateConnection);
   const testConnection = useMessengerStore((s) => s.testConnection);
   const removeConnection = useMessengerStore((s) => s.removeConnection);
@@ -1001,7 +1046,25 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
   const sendTestMessage = useMessengerStore((s) => s.sendTestMessage);
   const sendSyncSummary = useMessengerStore((s) => s.sendSyncSummary);
   const saveDiscordConfig = useMessengerStore((s) => s.saveDiscordConfig);
+  const startDiscordListener = useMessengerStore((s) => s.startDiscordListener);
   const projects = useProjectsStore((s) => s.projects);
+
+  const tokenSectionRef = useRef<HTMLDivElement>(null);
+  const guildSectionRef = useRef<HTMLDivElement>(null);
+  const testSectionRef = useRef<HTMLDivElement>(null);
+  const advancedSectionRef = useRef<HTMLDivElement>(null);
+
+  const scrollToSection = (section: 'token' | 'guild' | 'channel' | 'test' | 'advanced') => {
+    const ref =
+      section === 'token'
+        ? tokenSectionRef
+        : section === 'guild' || section === 'channel'
+          ? guildSectionRef
+          : section === 'test'
+            ? testSectionRef
+            : advancedSectionRef;
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
 
   const meta = MESSENGER_META[conn.type];
   const Icon = meta.icon;
@@ -1017,7 +1080,10 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
   const hasToken = Boolean(token);
   const hasTarget = Boolean(target);
   const isConnected = conn.status === 'connected';
-  const setupComplete = hasToken && hasTarget && isConnected;
+  const chatEnabled =
+    conn.bridgeEnabled !== false &&
+    Boolean(conn.discordListenerRunning && conn.discordListenerConnected);
+  const setupComplete = hasToken && hasTarget && isConnected && chatEnabled;
 
   // Auto-save Discord config to server-side settings.json on mount so that
   // the server-side auto-start on reboot picks it up. Runs when the
@@ -1087,6 +1153,7 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <DiscordCommandsButton />
           <button
             type="button"
             onClick={() => testConnection(conn.type)}
@@ -1115,39 +1182,57 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
         </div>
       )}
 
+      {/* Onboarding wizard — shown during first-time setup */}
+      {showWizard && (
+        <DiscordOnboardingWizard conn={conn} onScrollToSection={scrollToSection} />
+      )}
+
       {/* Setup checklist */}
-      <div className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2">
+      <div
+        className="rounded-md border border-border/60 bg-muted/30 p-3 space-y-2"
+        data-settings-item="integrations.discord.checklist"
+      >
         <div className="flex items-center justify-between">
           <div className="text-xs font-medium text-foreground flex items-center gap-1.5">
             <RiInformationLine className="size-3.5 text-primary" />
-            Setup
+            {t('settings.integrations.discord.checklist.title')}
           </div>
           {setupComplete && (
-            <span className="text-[10px] font-medium text-green-600 dark:text-green-400">
-              All set ✓
+            <span className="text-[10px] font-medium text-[var(--status-success)]">
+              {t('settings.integrations.discord.checklist.allSet')}
             </span>
           )}
         </div>
         <ul className="space-y-1">
-          <ChecklistItem
+          <InteractiveChecklistItem
             done={hasToken}
-            label="1. Add bot token"
-            hint={hasToken ? undefined : 'paste the token below'}
+            label={t('settings.integrations.discord.checklist.step1')}
+            hint={hasToken ? undefined : t('settings.integrations.discord.checklist.action.addToken')}
+            actionLabel={hasToken ? undefined : t('settings.integrations.discord.checklist.action.addToken')}
+            onAction={hasToken ? undefined : () => scrollToSection('token')}
           />
-          <ChecklistItem
+          <InteractiveChecklistItem
             done={isConnected}
-            label="2. Verify token"
+            label={t('settings.integrations.discord.checklist.step2')}
             hint={
               !hasToken
                 ? undefined
                 : isConnected
-                  ? `connected as ${conn.discordBotUsername ?? 'bot'} — ${conn.discordGuilds?.length ?? 0} server${(conn.discordGuilds?.length ?? 0) === 1 ? '' : 's'}`
-                  : 'click "Verify token" above'
+                  ? `${conn.discordBotUsername ?? 'bot'} — ${conn.discordGuilds?.length ?? 0} server${(conn.discordGuilds?.length ?? 0) === 1 ? '' : 's'}`
+                  : undefined
+            }
+            actionLabel={
+              hasToken && !isConnected
+                ? t('settings.integrations.discord.checklist.action.verify')
+                : undefined
+            }
+            onAction={
+              hasToken && !isConnected ? () => void testConnection(conn.type) : undefined
             }
           />
-          <ChecklistItem
+          <InteractiveChecklistItem
             done={hasTarget || Boolean(conn.discordGuildId)}
-            label="3. Add Server ID (or single channel ID)"
+            label={t('settings.integrations.discord.checklist.step3')}
             hint={
               hasTarget
                 ? conn.discordChannelName
@@ -1155,16 +1240,59 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
                   : conn.defaultChannelId
                 : conn.discordGuildId
                   ? `${conn.guildName ?? conn.discordGuildId} · ${conn.discordGuildChannels?.length ?? 0} channel${(conn.discordGuildChannels?.length ?? 0) === 1 ? '' : 's'}`
-                  : 'see the field below'
+                  : undefined
+            }
+            actionLabel={
+              !hasTarget && !conn.discordGuildId
+                ? t('settings.integrations.discord.checklist.action.configure')
+                : undefined
+            }
+            onAction={
+              !hasTarget && !conn.discordGuildId ? () => scrollToSection('guild') : undefined
             }
           />
-          <ChecklistItem
+          <InteractiveChecklistItem
             done={Boolean(conn.lastSyncAt)}
-            label="4. Send a test message"
+            label={t('settings.integrations.discord.checklist.step4')}
             hint={
-              conn.lastSyncAt
-                ? `last activity ${formatRelative(conn.lastSyncAt)}`
-                : 'use the "Send test message" button'
+              conn.lastSyncAt ? `last activity ${formatRelative(conn.lastSyncAt)}` : undefined
+            }
+            actionLabel={
+              !conn.lastSyncAt && hasToken && (hasTarget || conn.discordGuildId)
+                ? t('settings.integrations.discord.checklist.action.test')
+                : undefined
+            }
+            onAction={
+              !conn.lastSyncAt && hasToken && (hasTarget || conn.discordGuildId)
+                ? () => {
+                    scrollToSection('test');
+                    void sendTestMessage(conn.type);
+                  }
+                : undefined
+            }
+          />
+          <InteractiveChecklistItem
+            done={chatEnabled}
+            label={t('settings.integrations.discord.checklist.step5')}
+            hint={
+              chatEnabled
+                ? 'bridge on · listener live'
+                : conn.bridgeEnabled === false
+                  ? 'bridge off'
+                  : 'listener stopped'
+            }
+            actionLabel={
+              !chatEnabled ? t('settings.integrations.discord.checklist.action.enableChat') : undefined
+            }
+            onAction={
+              !chatEnabled
+                ? () => {
+                    scrollToSection('advanced');
+                    updateConnection('discord', { bridgeEnabled: true });
+                    setTimeout(() => saveDiscordConfig(), 0);
+                    void startDiscordListener();
+                  }
+                : undefined
             }
           />
         </ul>
@@ -1182,7 +1310,7 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
 
       {/* Step 1: Token */}
       {!token ? (
-        <div className="space-y-2">
+        <div ref={tokenSectionRef} className="space-y-2">
           <div className="text-xs font-medium text-foreground">{meta.tokenLabel}</div>
           <div className="text-[11px] text-muted-foreground leading-snug">{meta.tokenHelp}</div>
           <div className="flex gap-2">
@@ -1218,7 +1346,7 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-2 text-xs">
+        <div ref={tokenSectionRef} className="flex items-center gap-2 text-xs">
           <RiCheckLine className="size-3 text-green-500" />
           <span className="text-muted-foreground">Token configured</span>
           <button
@@ -1312,7 +1440,10 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
           Rendered as soon as the token is saved so users see the option
           before verify succeeds (resolve-guild itself surfaces bad-token errors). */}
       {token && (
-        <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs space-y-2">
+        <div
+          ref={guildSectionRef}
+          className="rounded-md border border-primary/20 bg-primary/5 p-3 text-xs space-y-2"
+        >
           <div className="font-medium text-foreground flex items-center gap-1.5">
             <RiDiscordLine className="size-3.5 text-[#5865F2]" />
             Server (Guild) ID
@@ -1473,7 +1604,10 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
       {/* Step 3: Action buttons - the visible "what next" call to action.
           For Discord, server-id alone also unlocks the CTA (Sync now works with just guildId). */}
       {hasToken && (hasTarget || conn.discordGuildId) && (
-        <div className="space-y-2 rounded-md border border-primary/20 bg-primary/5 p-3">
+        <div
+          ref={testSectionRef}
+          className="space-y-2 rounded-md border border-primary/20 bg-primary/5 p-3"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -1531,7 +1665,11 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
           project mappings. Hidden by default behind a checkbox to keep the
           main setup flow simple; the listener/bridge still auto-start in the
           background regardless of whether this section is expanded. */}
-      {hasToken && <DiscordAdvancedSettings conn={conn} />}
+      {hasToken && (
+        <div ref={advancedSectionRef}>
+          <DiscordAdvancedSettings conn={conn} />
+        </div>
+      )}
     </div>
   );
 }
