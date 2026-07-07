@@ -75,8 +75,7 @@ const isWsOpenPayload = (parsed) =>
   Boolean(parsed && typeof parsed === 'object'
     && typeof parsed.path === 'string'
     && typeof parsed.query === 'string'
-    && (parsed.protocols === undefined || Array.isArray(parsed.protocols))
-    && (parsed.origin === undefined || typeof parsed.origin === 'string'));
+    && (parsed.protocols === undefined || Array.isArray(parsed.protocols)));
 
 const isWsClosePayload = (parsed) => Boolean(parsed && typeof parsed === 'object');
 
@@ -304,11 +303,17 @@ export const createTunnelHost = ({ connectionId, getLocalPort, sendFrame, getBuf
     }
 
     const url = `ws://127.0.0.1:${getLocalPort()}${open.path}${open.query ? `?${open.query}` : ''}`;
-    // The `ws` client sends no Origin; forward the client's real origin so the
-    // server's WS origin check accepts this loopback dial (it rejects no-origin
-    // upgrades). The request is already authenticated by the tunneled oc_url_token.
-    const dialHeaders = { 'x-openchamber-relay-connection': connectionId };
-    if (open.origin) dialHeaders.origin = open.origin;
+    // Present the loopback origin we're actually dialing. The server derives this
+    // as a trusted same-origin candidate from the Host header (127.0.0.1:<port>),
+    // so the WS origin check passes reliably for every client platform. We do NOT
+    // use the client's window.location.origin: it's unreliable in WKWebView (empty
+    // or "null" for custom schemes), and the `ws` client sends no Origin at all
+    // otherwise — a no-origin upgrade is rejected 403. The request itself is still
+    // authenticated by the tunneled oc_url_token, not by this origin.
+    const dialHeaders = {
+      'x-openchamber-relay-connection': connectionId,
+      origin: `http://127.0.0.1:${getLocalPort()}`,
+    };
     let socket;
     try {
       socket = new WebSocket(url, open.protocols, {
