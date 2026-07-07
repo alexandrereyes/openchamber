@@ -165,20 +165,19 @@ export class DictationClient {
             };
 
             socket.onerror = () => {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timeout);
-                    this.connectPromise = null;
-                    reject(new Error('Dictation connection failed'));
-                }
+                // The socket always fires onclose right after onerror carrying the
+                // real reason (e.g. "Unexpected server response: 403"); let onclose
+                // settle so that reason is surfaced instead of a generic "failed".
+                // The connect timeout is the fallback if no onclose arrives.
             };
 
-            socket.onclose = () => {
+            socket.onclose = (event) => {
                 if (!settled) {
                     settled = true;
                     clearTimeout(timeout);
                     this.connectPromise = null;
-                    reject(new Error('Dictation connection closed'));
+                    const detail = event?.reason ? `: ${event.reason}` : '';
+                    reject(new Error(`Dictation connection failed${detail}`));
                     return;
                 }
                 if (this.socket === socket) {
