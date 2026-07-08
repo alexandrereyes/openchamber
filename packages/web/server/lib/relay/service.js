@@ -19,17 +19,31 @@ import { bytesToBase64Url } from './e2ee.js';
 
 export const DEFAULT_RELAY_URL = 'wss://relay.openchamber.dev/ws';
 
+const isValidRelayUrl = (value) => {
+  if (typeof value !== 'string') return false;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'ws:' || url.protocol === 'wss:';
+  } catch {
+    return false;
+  }
+};
+
 const normalizeRelayUrl = (value) => {
   if (typeof value !== 'string') return DEFAULT_RELAY_URL;
   const trimmed = value.trim();
-  if (!trimmed) return DEFAULT_RELAY_URL;
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== 'ws:' && url.protocol !== 'wss:') return DEFAULT_RELAY_URL;
-    return trimmed;
-  } catch {
-    return DEFAULT_RELAY_URL;
-  }
+  if (!trimmed || !isValidRelayUrl(trimmed)) return DEFAULT_RELAY_URL;
+  return trimmed;
+};
+
+// A deployment can pin the relay endpoint via env (e.g. a self-hosted relay on
+// your own Cloudflare account/domain). When set and valid it overrides the
+// stored setting entirely, so the host connection, the pairing offer, and the
+// status all point at it — clients then inherit it from the offer automatically.
+const envRelayUrlOverride = () => {
+  const raw = process.env.OPENCHAMBER_RELAY_URL;
+  if (typeof raw !== 'string' || !raw.trim() || !isValidRelayUrl(raw)) return null;
+  return raw.trim();
 };
 
 /**
@@ -60,9 +74,13 @@ export const createRelayService = ({
   const readConfig = async () => {
     const settings = await readSettingsFromDiskMigrated();
     const stored = settings?.privateRelay;
+    const override = envRelayUrlOverride();
     return {
       enabled: stored?.enabled === true,
-      relayUrl: normalizeRelayUrl(stored?.relayUrl),
+      relayUrl: override ?? normalizeRelayUrl(stored?.relayUrl),
+      // True when the endpoint is pinned by OPENCHAMBER_RELAY_URL (a self-hosted
+      // relay); the stored setting is ignored while it is set.
+      relayUrlLocked: override !== null,
     };
   };
 
@@ -116,6 +134,8 @@ export const createRelayService = ({
       state: hostClient ? live.state : 'disabled',
       serverId: identity.serverId,
       connectedClients: live.connectedClients,
+      relayUrl: config.relayUrl,
+      relayUrlLocked: config.relayUrlLocked,
       ...(live.lastError ? { lastError: live.lastError } : {}),
     };
   };
