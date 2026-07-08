@@ -32,7 +32,7 @@ import { resolveProjectForDirectory, resolveProjectForSessionDirectory } from '@
 import { clampPercent, formatQuotaResetLabel, formatQuotaValueLabel, formatWindowLabel, QUOTA_PROVIDERS, resolveUsageTone } from '@/lib/quota';
 import { getDisplayModelName } from '@/lib/quota/model-families';
 import { runtimeFetch } from '@/lib/runtime-fetch';
-import { getRuntimeApiBaseUrl, getRuntimeKey, subscribeRuntimeEndpointChanged, switchRuntimeEndpoint } from '@/lib/runtime-switch';
+import { getRuntimeApiBaseUrl, subscribeRuntimeEndpointChanged, switchRuntimeEndpoint } from '@/lib/runtime-switch';
 import { sessionEvents } from '@/lib/sessionEvents';
 import { cn } from '@/lib/utils';
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -58,9 +58,9 @@ import { MobileFilesSurface } from './MobileFilesSurface';
 import { MobileSessionsSheet } from './MobileSessionsSheet';
 import { MobileSurfaceShell } from './MobileSurfaceShell';
 import { DedicatedMobileAppProvider, type MobileAppActions } from './mobileAppContext';
-import { autoConnectLastInstance, isSameConnectionUrl, relayConnectionRuntimeKey, useMobileConnection, validateActiveRuntimeSession } from './mobileConnections';
+import { autoConnectLastInstance, connectionDisplayUrl, isActiveRuntimeConnection, reprobeActiveConnection, useMobileConnection } from './mobileConnections';
 import { isQrScanSupported, parseConnectionPayload, scanConnectionQr } from './mobileQrScan';
-import { resetAppForRuntimeEndpointChange } from './runtimeEndpointReset';
+import { reconnectAppForTransportSwitch, resetAppForRuntimeEndpointChange } from './runtimeEndpointReset';
 import { useAppFontEffects } from './useAppFontEffects';
 import { useFontsReady } from './useFontsReady';
 import { useDeepLinkHandlers, useDeepLinkSource } from './deepLinkNavigation';
@@ -437,6 +437,20 @@ const useNativeMobileLifecycle = (onResume: () => void): void => {
       onResume();
     };
 
+    // Belt-and-suspenders resume detection. Capacitor's `appStateChange` is the
+    // primary signal, but on iOS it can be missed after a long suspend, so the
+    // webview's own `visibilitychange` is a second trigger — either one flips
+    // wasInactiveRef and fires onResume exactly once per background→foreground.
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        wasInactiveRef.current = true;
+        return;
+      }
+      resumeAfterInactive();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    cleanup.push(() => document.removeEventListener('visibilitychange', handleVisibility));
+
     void import('@capacitor/app').then(async ({ App }) => {
       if (disposed) return;
       const state = await App.addListener('appStateChange', ({ isActive }) => {
@@ -516,12 +530,6 @@ const mobileInputKeyboardProps = {
 } as const;
 
 const NATIVE_RESUME_SYNC_EVENT_THROTTLE_MS = 1_000;
-
-const getRuntimeClientToken = (): string => {
-  if (typeof window === 'undefined') return '';
-  const token = (window as typeof window & { __OPENCHAMBER_CLIENT_TOKEN__?: string }).__OPENCHAMBER_CLIENT_TOKEN__;
-  return typeof token === 'string' ? token.trim() : '';
-};
 
 const getProjectLabel = (path: string): string => {
   const normalized = normalizePath(path);
@@ -652,7 +660,7 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
               <div className="min-w-0 text-left">
                 <p className="truncate typography-ui-label text-foreground">{pendingConnection.label}</p>
                 <p className="truncate typography-small text-muted-foreground">
-                  {pendingConnection.relay ? t('mobile.connect.relay.badge') : pendingConnection.url}
+                  {pendingConnection.candidates.some((c) => c.kind === 'direct') ? connectionDisplayUrl(pendingConnection) : t('mobile.connect.relay.badge')}
                 </p>
               </div>
             </div>
@@ -777,7 +785,7 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
                   key={connection.id}
                   type="button"
                   className="flex min-h-14 w-full items-center gap-3 border-b border-border/60 px-3.5 py-2.5 text-left last:border-b-0 hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
-                  onClick={() => void conn.connect({ url: connection.url, clientToken: connection.clientToken, label: connection.label, relay: connection.relay })}
+                  onClick={() => void conn.connect({ id: connection.id, candidates: connection.candidates, clientToken: connection.clientToken, label: connection.label })}
                 >
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-[12px] bg-interactive-hover text-foreground">
                     <Icon name="server" className="size-[18px]" />
@@ -785,7 +793,7 @@ const MobileConnectionWelcome: React.FC<{ onConnected: () => void }> = ({ onConn
                   <span className="min-w-0 flex-1">
                     <span className="block truncate typography-ui-label text-foreground">{connection.label}</span>
                     <span className="block truncate typography-small text-muted-foreground">
-                      {connection.mode === 'relay' ? t('mobile.connect.relay.badge') : connection.url}
+                      {connection.candidates.some((c) => c.kind === 'direct') ? connectionDisplayUrl(connection) : t('mobile.connect.relay.badge')}
                     </span>
                   </span>
                   <Icon name="arrow-right-s" className="size-5 text-muted-foreground" />
@@ -897,11 +905,7 @@ const MobileInstancesSurface: React.FC<{
     if (editingId === id) resetForm();
     void removeConnection(id).then((removed) => {
       if (!removed) return;
-      // Relay entries have no reachable URL — the runtime key is their identity.
-      const isActive = removed.relay
-        ? getRuntimeKey() === relayConnectionRuntimeKey(removed.relay)
-        : isSameConnectionUrl(removed.url, getRuntimeApiBaseUrl());
-      if (isActive) {
+      if (isActiveRuntimeConnection(removed)) {
         onActiveConnectionDeleted();
       }
     });
@@ -921,7 +925,7 @@ const MobileInstancesSurface: React.FC<{
               <div className="min-w-0">
                 <p className="truncate typography-ui-label text-foreground">{pendingConnection.label}</p>
                 <p className="truncate typography-small text-muted-foreground">
-                  {pendingConnection.relay ? t('mobile.connect.relay.badge') : pendingConnection.url}
+                  {pendingConnection.candidates.some((c) => c.kind === 'direct') ? connectionDisplayUrl(pendingConnection) : t('mobile.connect.relay.badge')}
                 </p>
               </div>
             </div>
@@ -967,7 +971,7 @@ const MobileInstancesSurface: React.FC<{
                     <button
                       type="button"
                       className="flex min-w-0 flex-1 items-center gap-3 px-3.5 py-3 text-left transition-colors active:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary disabled:opacity-60"
-                      onClick={() => void connect({ url: connection.url, clientToken: connection.clientToken, label: connection.label, relay: connection.relay })}
+                      onClick={() => void connect({ id: connection.id, candidates: connection.candidates, clientToken: connection.clientToken, label: connection.label })}
                       disabled={isBusy || confirming}
                     >
                       <span className="flex size-9 shrink-0 items-center justify-center rounded-[12px] bg-interactive-hover text-foreground">
@@ -976,7 +980,7 @@ const MobileInstancesSurface: React.FC<{
                       <span className="min-w-0 flex-1">
                         <span className="block truncate typography-ui-label text-foreground">{connection.label}</span>
                         <span className="block truncate typography-small text-muted-foreground">
-                          {connection.mode === 'relay' ? t('mobile.connect.relay.badge') : connection.url}
+                          {connection.candidates.some((c) => c.kind === 'direct') ? connectionDisplayUrl(connection) : t('mobile.connect.relay.badge')}
                         </span>
                       </span>
                     </button>
@@ -992,14 +996,14 @@ const MobileInstancesSurface: React.FC<{
                           <Icon name="delete-bin" className="size-[18px]" />
                           <span className="typography-ui-label">{t('mobile.instances.delete')}</span>
                         </button>
-                      ) : connection.mode === 'relay' ? null : (
+                      ) : !connection.candidates.some((c) => c.kind === 'direct') ? null : (
                         <button
                           type="button"
                           aria-label={t('mobile.instances.edit')}
                           className="flex size-9 items-center justify-center rounded-full text-muted-foreground transition-colors active:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           onClick={() => {
                             setEditingId(connection.id);
-                            setUrl(connection.url);
+                            setUrl(connectionDisplayUrl(connection));
                             setLabel(connection.label);
                             setClientToken(connection.clientToken || '');
                             setError(null);
@@ -2212,6 +2216,10 @@ export function MobileApp({ apis }: MobileAppProps) {
   // splash so we don't flash the connect screen; 'done' means we either connected or
   // exhausted the attempt (then the connect screen shows).
   const [autoConnectPhase, setAutoConnectPhase] = React.useState<'pending' | 'attempting' | 'done'>('pending');
+  // Bumped to force a re-render (and thus a fresh `sdk` prop for SyncProvider)
+  // after a same-device transport swap — reconnects the sync layer in place with
+  // no remount. The value itself is unused; only the re-render matters.
+  const [, bumpTransportSwitch] = React.useReducer((count: number) => count + 1, 0);
   const isNativeMobileApp = React.useMemo(() => isCapacitorMobileApp(), []);
   const lastNativeResumeSyncEventAtRef = React.useRef(0);
   const nativeResumeValidationSeqRef = React.useRef(0);
@@ -2222,13 +2230,19 @@ export function MobileApp({ apis }: MobileAppProps) {
     const validationSeq = nativeResumeValidationSeqRef.current + 1;
     nativeResumeValidationSeqRef.current = validationSeq;
 
-    void validateActiveRuntimeSession({ url: apiBaseUrl, clientToken: getRuntimeClientToken() }).then((isValid) => {
+    // Re-probe the active device's transports on resume: the network may have
+    // changed while the app slept, so hot-switch LAN⇄relay if a better transport
+    // is now reachable — no re-pairing. A 'switched' outcome already fired the
+    // runtime-endpoint-changed subscription (which re-bootstraps the app), so we
+    // only refresh in place when the transport is 'unchanged'.
+    void reprobeActiveConnection().then((outcome) => {
       if (nativeResumeValidationSeqRef.current !== validationSeq) return;
-      if (!isValid) {
+      if (outcome === 'unreachable' || outcome === 'no-connection') {
         switchRuntimeEndpoint({ apiBaseUrl: '', clientToken: null, runtimeKey: 'mobile-disconnected' });
         setConnectionEpoch((value) => value + 1);
         return;
       }
+      if (outcome === 'switched') return;
 
       void initializeApp();
       void refreshGitHubAuthStatus(apis.github, { force: true });
@@ -2257,6 +2271,23 @@ export function MobileApp({ apis }: MobileAppProps) {
   // stale. The SyncProvider is keyed by runtimeEndpointEpoch so it remounts too.
   React.useEffect(() => {
     return subscribeRuntimeEndpointChanged((detail) => {
+      // A LAN⇄relay swap for the SAME device keeps the runtime key stable. Treat
+      // that as a transport-only change: rebind the sync layer to the new
+      // transport but keep the user's session/connection state — no reconnecting
+      // screen, no bounce back to the draft. Only a real instance switch (key
+      // change) does the full reset.
+      const sameDevice = Boolean(detail.runtimeKey) && detail.runtimeKey === detail.previousRuntimeKey;
+      if (sameDevice) {
+        // Transport-only swap for the same device: rebind the SDK to the new
+        // transport and force a re-render so SyncProvider receives the new `sdk`
+        // prop. Its event-pipeline + bootstrap effects (keyed on `sdk`) then
+        // reconnect over the new transport WITHOUT remounting — so the message
+        // pagination refs, the open session, and the whole view are preserved.
+        // No key bump, no flash, no bounce to the draft.
+        reconnectAppForTransportSwitch();
+        bumpTransportSwitch();
+        return;
+      }
       resetAppForRuntimeEndpointChange(detail);
       setRuntimeEndpointEpoch((epoch) => epoch + 1);
       setConnectionEpoch((epoch) => epoch + 1);
