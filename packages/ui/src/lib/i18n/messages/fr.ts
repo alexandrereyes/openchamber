@@ -2448,6 +2448,8 @@ export const dict = {
   'sortableTabsStrip.aria.tabs': 'Onglets',
   'openChamberLogo.aria.logo': 'Logo OpenChamber',
   'markdownRenderer.table.actions.copyTitle': 'Copier le tableau',
+  'markdownRenderer.code.actions.enableWrapTitle': 'Activer le retour à la ligne',
+  'markdownRenderer.code.actions.disableWrapTitle': 'Désactiver le retour à la ligne',
   'markdownRenderer.table.actions.downloadTitle': 'Télécharger le tableau',
   'markdownRenderer.table.toast.downloadedAsFormat': 'Table téléchargée sous le nom {format}',
   'markdownRenderer.mermaid.actions.copyTitle': 'Copie',
