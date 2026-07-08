@@ -11,11 +11,19 @@
 // and the browser-hosted mobile UI degrades to `unsupported` cleanly.
 
 import { parseClientConnectionPayload, parsePairingConnectionPayload, type PairingConnectionPayload } from '@/lib/connectionPayload';
+import { parseRelayOfferUrl } from '@/lib/relay/offer';
+
+import type { MobileRelayConfig } from './mobileConnections';
 
 export type MobileConnectionPayload = {
   url: string;
   clientToken?: string;
   label?: string;
+  // Present when the payload is a relay pairing offer (openchamber://connect?v=1&mode=relay#offer=...).
+  // `url` then holds the raw offer link so form fields and connect() can round-trip it.
+  relay?: MobileRelayConfig;
+  // One-time relay authorization grant from the offer. Never persisted.
+  relayGrant?: string;
 };
 
 export type MobilePairingPayload = {
@@ -116,6 +124,24 @@ export const parseConnectionPayload = (raw: string): MobileConnectionPayload | M
   if (!trimmed) return null;
 
   if (/^openchamber:\/\//i.test(trimmed)) {
+    // Relay pairing offers are a distinct format (mode=relay + fragment payload);
+    // try them first. Neither the pairing-v2 (?v=2&p=...) nor the legacy
+    // (?v=1&server=...&token=...) parser matches a relay offer, so the order is
+    // safe and existing payloads are untouched.
+    const offer = parseRelayOfferUrl(trimmed);
+    if (offer) {
+      return {
+        url: trimmed,
+        clientToken: offer.token,
+        label: offer.label,
+        relay: {
+          relayUrl: offer.relayUrl,
+          serverId: offer.serverId,
+          hostEncPubJwk: offer.hostEncPubJwk,
+        },
+        relayGrant: offer.grant,
+      };
+    }
     const pairing = parsePairingConnectionPayload(trimmed);
     if (pairing) return { pairing };
     const legacy = parseClientConnectionPayload(trimmed);
