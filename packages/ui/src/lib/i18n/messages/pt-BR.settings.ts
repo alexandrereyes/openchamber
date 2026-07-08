@@ -1,3 +1,5 @@
+import { discordIntegrationI18n } from './discord-integration.i18n';
+
 export const settingsDict = {
   "settings.appearance.language.label": "Idioma",
   "settings.appearance.language.description": "Escolha o idioma da interface.",
@@ -1818,4 +1820,5 @@ export const settingsDict = {
   "settings.openchamber.visual.field.followUpBehaviorDescription": "Choose what happens when you press Enter on a follow-up message while the agent is still responding.",
   "settings.openchamber.visual.option.followUpBehavior.steer.label": "Steer",
   "settings.openchamber.visual.option.followUpBehavior.queue.label": "Queue",
+  ...discordIntegrationI18n.en,
 } as const;

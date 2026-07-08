@@ -760,6 +760,22 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['background', 'push'],
     isAvailable: (ctx) => ctx.isWeb && !ctx.isDesktop && !ctx.isVSCode,
   },
+  {
+    id: 'integrations.discord.wizard',
+    page: 'integrations',
+    titleKey: 'settings.integrations.discord.wizard.title',
+    descriptionKey: 'settings.integrations.discord.wizard.step1.description',
+    keywords: ['discord', 'bot', 'token', 'onboarding', 'setup'],
+    isAvailable: (ctx) => !ctx.isVSCode,
+  },
+  {
+    id: 'integrations.discord.commands',
+    page: 'integrations',
+    titleKey: 'settings.integrations.discord.commands.title',
+    descriptionKey: 'settings.integrations.discord.commands.description',
+    keywords: ['discord', 'slash', 'commands', 'help', 'status', 'schedule'],
+    isAvailable: (ctx) => !ctx.isVSCode,
+  },
 ] as const;
 
 interface BuildSettingsSearchResultsOptions {
