@@ -15,6 +15,7 @@
 // unlock guarantees the token is actually persisted (no fire-and-forget).
 
 import { SecureStorage } from '@aparajita/capacitor-secure-storage';
+import { Capacitor } from '@capacitor/core';
 import React from 'react';
 
 import { useI18n } from '@/lib/i18n';
@@ -50,6 +51,17 @@ const getMobileDeviceId = (): string => {
 
 // Server-side client dedupe key for this device (shared across pairing + login).
 const mobileClientDedupeKey = (): string => `mobile:${getMobileDeviceId()}`;
+
+// Display-only device metadata shown in the server's device list ("iOS",
+// "Android"). Capacitor knows the native platform; no extra plugin needed.
+const mobileDevicePlatform = (): string | undefined => {
+  try {
+    const platform = Capacitor.getPlatform();
+    return platform === 'ios' || platform === 'android' ? platform : undefined;
+  } catch {
+    return undefined;
+  }
+};
 const MOBILE_CONNECTIONS_LIMIT = 12;
 const MOBILE_CONNECT_TIMEOUT_MS = 8000;
 const MOBILE_NATIVE_HTTP_TIMEOUT_MS = 2500;
@@ -1113,6 +1125,7 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
         clientLabel: 'OpenChamber Mobile',
         clientKind: 'mobile',
         deviceName: 'OpenChamber Mobile',
+        devicePlatform: mobileDevicePlatform(),
         // Re-pairing this same phone reuses its one device record instead of
         // adding a duplicate row on the server.
         dedupeKey: mobileClientDedupeKey(),
@@ -1189,7 +1202,7 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         // Same dedupe key as pairing: re-authenticating after a token expires
         // reuses this phone's existing device record instead of duplicating it.
-        body: JSON.stringify({ password, trustDevice: true, issueClientToken: true, clientLabel: 'OpenChamber Mobile', clientKind: 'mobile', dedupeKey: mobileClientDedupeKey() }),
+        body: JSON.stringify({ password, trustDevice: true, issueClientToken: true, clientLabel: 'OpenChamber Mobile', clientKind: 'mobile', devicePlatform: mobileDevicePlatform(), dedupeKey: mobileClientDedupeKey() }),
       };
       logConnect('password:start', { transport: chosen.kind });
       const response = chosen.kind === 'relay'

@@ -25,6 +25,7 @@ import { useDesktopSshStore } from '@/stores/useDesktopSshStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { toast } from '@/components/ui';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Radio } from '@/components/ui/radio';
 import { Icon } from "@/components/icon/Icon";
 import { cn } from '@/lib/utils';
 import { copyTextToClipboard } from '@/lib/clipboard';
@@ -63,6 +64,31 @@ const randomPort = (): number => {
 const isPortInUseError = (error: unknown): boolean => {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
   return message.includes('address already in use') || message.includes('eaddrinuse') || message.includes('port already in use');
+};
+
+// Platform this desktop reports about itself when redeeming a pairing link —
+// display-only metadata for the issuing server's device list.
+const desktopPlatformName = (): string | undefined => {
+  if (typeof navigator === 'undefined') return undefined;
+  const ua = (navigator.userAgent || '').toLowerCase();
+  if (ua.includes('mac')) return 'macos';
+  if (ua.includes('win')) return 'windows';
+  if (ua.includes('linux')) return 'linux';
+  return undefined;
+};
+
+// Friendly label for a device's self-reported platform in the device list.
+const devicePlatformLabel = (platform?: string | null): string | null => {
+  switch ((platform || '').toLowerCase()) {
+    case 'ios': return 'iOS';
+    case 'android': return 'Android';
+    case 'macos':
+    case 'darwin': return 'macOS';
+    case 'windows':
+    case 'win32': return 'Windows';
+    case 'linux': return 'Linux';
+    default: return null;
+  }
 };
 
 const phaseLabelKey = (phase?: string): I18nKey => {
@@ -419,7 +445,7 @@ export const RemoteInstancesPage: React.FC = () => {
   const [addDeviceOpen, setAddDeviceOpen] = React.useState(false);
   const [addDevicePhase, setAddDevicePhase] = React.useState<'configure' | 'result'>('configure');
   const [addDeviceCreating, setAddDeviceCreating] = React.useState(false);
-  const [addDeviceTransport, setAddDeviceTransport] = React.useState<'local' | 'lan' | 'relay'>('lan');
+  const [addDeviceTransport, setAddDeviceTransport] = React.useState<'local' | 'lan' | 'relay'>('relay');
   const [addDeviceFallback, setAddDeviceFallback] = React.useState(true);
   const [transportOptions, setTransportOptions] = React.useState<{ localUrl: string | null; lanUrl: string | null; relayAvailable: boolean } | null>(null);
   const revokedClientCount = React.useMemo(() => remoteClients.filter((client) => Boolean(client.revokedAt)).length, [remoteClients]);
@@ -509,6 +535,7 @@ export const RemoteInstancesPage: React.FC = () => {
       clientLabel: payload.label || 'OpenChamber Desktop',
       clientKind: 'desktop',
       deviceName: 'OpenChamber Desktop',
+      devicePlatform: desktopPlatformName(),
       ...(installId ? { dedupeKey: `desktop:${installId}` } : {}),
     });
     const redeemInit: RequestInit = {
@@ -600,7 +627,9 @@ export const RemoteInstancesPage: React.FC = () => {
           : host);
         await persistDirectHosts(nextHosts, directDefaultHostId);
       } else {
-        await persistDirectHosts([{ id: makeId(), label: payload.label || t('settings.remoteInstances.clientAuth.addDevice.transport.relay'), url: displayUrl, clientToken: token, relay }, ...directHosts], directDefaultHostId);
+        // payload.label is normally the issuing server's hostname; the pseudo-URL
+        // is only a last-resort display name.
+        await persistDirectHosts([{ id: makeId(), label: payload.label || displayUrl, url: displayUrl, clientToken: token, relay }, ...directHosts], directDefaultHostId);
       }
     } else {
       const { url, token } = redeemed;
@@ -764,7 +793,9 @@ export const RemoteInstancesPage: React.FC = () => {
     setAddDeviceOpen(true);
     const opts = await resolveTransportOptions();
     setTransportOptions(opts);
-    setAddDeviceTransport(opts.lanUrl ? 'lan' : opts.localUrl ? 'local' : 'relay');
+    // "Anywhere" (relay, with home-network preference) is the right default for
+    // most people; fall back to narrower options only when relay is unavailable.
+    setAddDeviceTransport(opts.relayAvailable ? 'relay' : opts.lanUrl ? 'lan' : 'local');
   }, [resolveTransportOptions]);
 
   const createPairingLink = React.useCallback(async () => {
@@ -1334,6 +1365,11 @@ export const RemoteInstancesPage: React.FC = () => {
                                 client.revokedAt ? 'bg-muted-foreground/20' : isOnline ? 'bg-[var(--status-success)]' : 'bg-muted-foreground/30',
                               )} />
                               <p className="typography-ui-label text-foreground truncate">{client.label}</p>
+                              {devicePlatformLabel(client.devicePlatform) ? (
+                                <span className="typography-micro text-muted-foreground bg-muted px-1 rounded shrink-0 leading-none pb-px border border-border/50">
+                                  {devicePlatformLabel(client.devicePlatform)}
+                                </span>
+                              ) : null}
                               {isLocalDesktopClient ? (
                                 <span className="typography-micro text-muted-foreground bg-muted px-1 rounded flex-shrink-0 leading-none pb-px border border-border/50">
                                   {t('settings.remoteInstances.clientAuth.state.thisDevice')}
@@ -1506,7 +1542,9 @@ export const RemoteInstancesPage: React.FC = () => {
           <DialogContent className={addDevicePhase === 'result' ? 'sm:max-w-lg' : 'sm:max-w-md'}>
             <DialogHeader>
               <DialogTitle>{addDevicePhase === 'result' ? t('settings.remoteInstances.clientAuth.qrDialogTitle') : t('settings.remoteInstances.clientAuth.actions.addDevice')}</DialogTitle>
-              <DialogDescription>{t('settings.remoteInstances.clientAuth.qrScanHint')}</DialogDescription>
+              {/* Configure phase: what this dialog will produce. Result phase: what
+                  to do with the QR code that is now on screen. */}
+              <DialogDescription>{addDevicePhase === 'result' ? t('settings.remoteInstances.clientAuth.qrScanHint') : t('settings.remoteInstances.clientAuth.addDevice.subtitle')}</DialogDescription>
             </DialogHeader>
             {addDevicePhase === 'configure' ? (
               <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void createPairingLink(); }}>
@@ -1519,24 +1557,37 @@ export const RemoteInstancesPage: React.FC = () => {
                 />
                 <div className="space-y-1.5">
                   <p className="typography-ui-label text-foreground">{t('settings.remoteInstances.clientAuth.addDevice.transportLabel')}</p>
-                  <div className="flex flex-wrap gap-1">
+                  {/* Ordered by how likely a first-time user is to want each option;
+                      "Anywhere" is the default. Every option explains its outcome in
+                      plain words — "relay" appears only inside the description. */}
+                  <div role="radiogroup" aria-label={t('settings.remoteInstances.clientAuth.addDevice.transportLabel')} className="space-y-1.5">
                     {([
-                      { key: 'local' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.local'), available: Boolean(transportOptions?.localUrl) },
-                      { key: 'lan' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.lan'), available: Boolean(transportOptions?.lanUrl) },
-                      { key: 'relay' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.relay'), available: Boolean(transportOptions?.relayAvailable) },
-                    ]).map((option) => (
-                      <Button
-                        key={option.key}
-                        type="button"
-                        variant="outline"
-                        size="xs"
-                        disabled={!option.available}
-                        onClick={() => setAddDeviceTransport(option.key)}
-                        className={cn('!font-normal', addDeviceTransport === option.key ? 'border-[var(--primary-base)] bg-[var(--primary-base)]/10 text-[var(--primary-base)]' : 'text-foreground')}
-                      >
-                        {option.label}
-                      </Button>
-                    ))}
+                      { key: 'relay' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.relay'), hint: t('settings.remoteInstances.clientAuth.addDevice.transport.relayHint'), available: Boolean(transportOptions?.relayAvailable) },
+                      { key: 'lan' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.lan'), hint: t('settings.remoteInstances.clientAuth.addDevice.transport.lanHint'), available: Boolean(transportOptions?.lanUrl) },
+                      { key: 'local' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.local'), hint: t('settings.remoteInstances.clientAuth.addDevice.transport.localHint'), available: Boolean(transportOptions?.localUrl) },
+                    ]).map((option) => {
+                      const selected = addDeviceTransport === option.key;
+                      return (
+                        <div
+                          key={option.key}
+                          className={cn('flex items-start gap-2 py-0.5', option.available ? 'cursor-pointer' : 'opacity-45')}
+                          onClick={() => { if (option.available) setAddDeviceTransport(option.key); }}
+                          role="presentation"
+                        >
+                          <Radio
+                            checked={selected}
+                            disabled={!option.available}
+                            onChange={() => setAddDeviceTransport(option.key)}
+                            ariaLabel={option.label}
+                            className="mt-0.5"
+                          />
+                          <div className="min-w-0">
+                            <p className={cn('typography-ui-label font-normal', selected ? 'text-foreground' : 'text-foreground/70')}>{option.label}</p>
+                            <p className="typography-meta text-muted-foreground">{option.hint}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                   {addDeviceTransport === 'lan' ? (
                     <label className="flex w-fit cursor-pointer items-center gap-2 pt-1">

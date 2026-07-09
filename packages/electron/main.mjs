@@ -494,6 +494,23 @@ const writeSettingsRoot = async (root) => writeJsonFile(settingsFilePath(), root
 // the client dedupe key on remote hosts so re-authenticating (e.g. after a login
 // session expires) reuses the same "OpenChamber Desktop" record instead of
 // piling up a new one each time. Different desktops get different ids.
+// Display-only device metadata shown in a server's device list ("macOS",
+// app version). Never used for auth decisions.
+const desktopDeviceMetadata = () => {
+  const platformMap = { darwin: 'macos', win32: 'windows', linux: 'linux' };
+  const devicePlatform = platformMap[process.platform];
+  let appVersion;
+  try {
+    appVersion = app.getVersion();
+  } catch {
+    appVersion = undefined;
+  }
+  return {
+    ...(devicePlatform ? { devicePlatform } : {}),
+    ...(appVersion ? { appVersion } : {}),
+  };
+};
+
 const getOrCreateDesktopInstallId = async () => {
   const existing = readSettingsRoot().desktopInstallId;
   if (typeof existing === 'string' && existing.trim()) return existing.trim();
@@ -1629,8 +1646,8 @@ const loginRemoteAndIssueClientToken = async ({ url, password, trustDevice, requ
   // uses the fixed desktop-local identity; remote uses this install's id with a
   // regular 'desktop' kind.
   const clientIdentity = isLocalRuntimeUrl(baseUrl)
-    ? { clientKind: LOCAL_DESKTOP_CLIENT_KIND, dedupeKey: LOCAL_DESKTOP_CLIENT_DEDUPE_KEY }
-    : { clientKind: REMOTE_DESKTOP_CLIENT_KIND, dedupeKey: `desktop:${await getOrCreateDesktopInstallId()}` };
+    ? { clientKind: LOCAL_DESKTOP_CLIENT_KIND, dedupeKey: LOCAL_DESKTOP_CLIENT_DEDUPE_KEY, ...desktopDeviceMetadata() }
+    : { clientKind: REMOTE_DESKTOP_CLIENT_KIND, dedupeKey: `desktop:${await getOrCreateDesktopInstallId()}`, ...desktopDeviceMetadata() };
 
   const loginResponse = await fetch(new URL('/auth/session', `${baseUrl}/`).toString(), {
     method: 'POST',
@@ -1872,6 +1889,8 @@ const redeemConnectPairingDeepLink = async (payload, serverUrl) => {
       clientLabel: 'OpenChamber Desktop',
       clientKind: 'desktop',
       deviceName: 'OpenChamber Desktop',
+      ...desktopDeviceMetadata(),
+      dedupeKey: `desktop:${await getOrCreateDesktopInstallId()}`,
     }),
   });
   if (!response.ok || !response.data || typeof response.data.clientToken !== 'string') return null;
