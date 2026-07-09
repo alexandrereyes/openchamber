@@ -26,6 +26,7 @@ import { useDesktopSshStore } from '@/stores/useDesktopSshStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { toast } from '@/components/ui';
 import { Icon } from "@/components/icon/Icon";
+import { cn } from '@/lib/utils';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import { useI18n, type I18nKey } from '@/lib/i18n';
@@ -247,6 +248,15 @@ const getRuntimePort = (): number | null => {
   }
 };
 
+const isLoopbackUrl = (value: string): boolean => {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  } catch {
+    return false;
+  }
+};
+
 const resolvePairingServerUrl = async (): Promise<string> => {
   const fallback = normalizeHostUrl(getRuntimeApiBaseUrl()) || window.location.origin;
   if (!isDesktopShell() || !isDesktopLocalOriginActive()) {
@@ -395,11 +405,18 @@ export const RemoteInstancesPage: React.FC = () => {
   const [remoteClients, setRemoteClients] = React.useState<RemoteClientRecord[]>([]);
   const [remoteClientsLoading, setRemoteClientsLoading] = React.useState(false);
   const [remoteClientLabel, setRemoteClientLabel] = React.useState('');
-  const [createdRemoteClientToken, setCreatedRemoteClientToken] = React.useState<string | null>(null);
   const [remoteClientError, setRemoteClientError] = React.useState<string | null>(null);
   const [pairingUrl, setPairingUrl] = React.useState<string | null>(null);
   const [pairingQrDataUrl, setPairingQrDataUrl] = React.useState<string | null>(null);
-  const [pairingQrDialogOpen, setPairingQrDialogOpen] = React.useState(false);
+  const [pairingCopied, setPairingCopied] = React.useState(false);
+  // "Add a device" dialog: a configure phase (name + transport + fallback) then a
+  // result phase (QR + link). The QR only ever shows inside this dialog.
+  const [addDeviceOpen, setAddDeviceOpen] = React.useState(false);
+  const [addDevicePhase, setAddDevicePhase] = React.useState<'configure' | 'result'>('configure');
+  const [addDeviceCreating, setAddDeviceCreating] = React.useState(false);
+  const [addDeviceTransport, setAddDeviceTransport] = React.useState<'local' | 'lan' | 'relay'>('lan');
+  const [addDeviceFallback, setAddDeviceFallback] = React.useState(true);
+  const [transportOptions, setTransportOptions] = React.useState<{ localUrl: string | null; lanUrl: string | null; relayAvailable: boolean } | null>(null);
   const revokedClientCount = React.useMemo(() => remoteClients.filter((client) => Boolean(client.revokedAt)).length, [remoteClients]);
   const [sshAddDialogOpen, setSshAddDialogOpen] = React.useState(false);
   const [sshCommandDraft, setSshCommandDraft] = React.useState('ssh user@example.com');
@@ -632,31 +649,66 @@ export const RemoteInstancesPage: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [clientAuth, loadRemoteClients]);
 
-  const createRemoteClient = React.useCallback(async () => {
-    if (!clientAuth) return;
-    setRemoteClientError(null);
+  // Available direct transports for the create dialog. `resolvePairingServerUrl`
+  // returns a LAN/reachable URL on desktop (when LAN access is on) or the origin
+  // on web — a non-loopback result is offered as "Local network".
+  const resolveTransportOptions = React.useCallback(async (): Promise<{ localUrl: string | null; lanUrl: string | null; relayAvailable: boolean }> => {
+    const port = getRuntimePort();
+    const localUrl = port ? `http://127.0.0.1:${port}` : (isLoopbackUrl(window.location.origin) ? window.location.origin : null);
+    let lanUrl: string | null = null;
     try {
-      const result = await clientAuth.createClient({ label: remoteClientLabel.trim() || undefined });
-      setCreatedRemoteClientToken(result.token);
-      setRemoteClientLabel('');
-      await loadRemoteClients();
-    } catch (err) {
-      setRemoteClientError(err instanceof Error ? err.message : String(err));
+      const resolved = normalizeHostUrl(await resolvePairingServerUrl());
+      lanUrl = resolved && !isLoopbackUrl(resolved) ? resolved : null;
+    } catch {
+      // keep null
     }
-  }, [clientAuth, loadRemoteClients, remoteClientLabel]);
+    return { localUrl, lanUrl, relayAvailable: true };
+  }, []);
+
+  const openAddDevice = React.useCallback(async () => {
+    setRemoteClientError(null);
+    setPairingUrl(null);
+    setPairingQrDataUrl(null);
+    setPairingCopied(false);
+    setAddDevicePhase('configure');
+    setAddDeviceFallback(true);
+    setAddDeviceOpen(true);
+    const opts = await resolveTransportOptions();
+    setTransportOptions(opts);
+    setAddDeviceTransport(opts.lanUrl ? 'lan' : opts.localUrl ? 'local' : 'relay');
+  }, [resolveTransportOptions]);
 
   const createPairingLink = React.useCallback(async () => {
-    if (!clientAuth?.createPairingSession) return;
+    if (!clientAuth?.createPairingSession || !transportOptions) return;
     setRemoteClientError(null);
+    setAddDeviceCreating(true);
     try {
-      const serverUrl = await resolvePairingServerUrl();
       const label = remoteClientLabel.trim() || undefined;
-      // The server advertises `serverUrl` as the direct candidate and folds in a
-      // relay candidate when its relay host is enabled — one link, both transports.
+      // Map the chosen transport (+ fallback) to the per-link candidate request.
+      let serverUrl: string | undefined;
+      let includeRelay: boolean;
+      let includeDirect = true;
+      if (addDeviceTransport === 'local') {
+        serverUrl = transportOptions.localUrl ?? undefined;
+        includeRelay = false;
+      } else if (addDeviceTransport === 'lan') {
+        serverUrl = transportOptions.lanUrl ?? undefined;
+        includeRelay = addDeviceFallback;
+      } else if (addDeviceFallback && transportOptions.lanUrl) {
+        // Relay, but prefer the local network when available: carry both.
+        serverUrl = transportOptions.lanUrl;
+        includeRelay = true;
+      } else {
+        // Relay only.
+        includeDirect = false;
+        includeRelay = true;
+      }
       const { pairing, server } = await clientAuth.createPairingSession({
         label,
         allowedClientKinds: ['mobile', 'desktop'],
         serverUrl,
+        includeRelay,
+        includeDirect,
       });
       const payload = buildPairingConnectionPayload({
         pairingId: pairing.id,
@@ -669,15 +721,26 @@ export const RemoteInstancesPage: React.FC = () => {
       const encoded = encodePairingConnectionPayload(payload);
       setPairingUrl(encoded);
       // Pairing payloads are dense (multiple transport candidates + the relay
-      // E2EE key), so render at high resolution with low error-correction — a
-      // small/default QR of this density is unscannable by a phone camera.
+      // E2EE key), so render at high resolution with low error-correction.
       setPairingQrDataUrl(await QRCode.toDataURL(encoded, { width: 1024, margin: 2, errorCorrectionLevel: 'L' }));
-      setRemoteClientLabel('');
-      await loadRemoteClients();
+      setPairingCopied(false);
+      setAddDevicePhase('result');
+      await loadRemoteClients({ silent: true });
     } catch (err) {
       setRemoteClientError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAddDeviceCreating(false);
     }
-  }, [clientAuth, loadRemoteClients, remoteClientLabel]);
+  }, [clientAuth, transportOptions, addDeviceTransport, addDeviceFallback, remoteClientLabel, loadRemoteClients]);
+
+  const handleCopyPairing = React.useCallback(() => {
+    if (!pairingUrl) return;
+    void copyTextToClipboard(pairingUrl).then((result) => {
+      if (!result.ok) return;
+      setPairingCopied(true);
+      window.setTimeout(() => setPairingCopied(false), 2000);
+    });
+  }, [pairingUrl]);
 
   const revokeRemoteClient = React.useCallback(async (client: RemoteClientRecord) => {
     if (!clientAuth) return;
@@ -1114,43 +1177,12 @@ export const RemoteInstancesPage: React.FC = () => {
               <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.description')}</p>
             </div>
             <section className="px-2 pb-2 pt-0 space-y-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Input className="h-8" value={remoteClientLabel} onChange={(event) => setRemoteClientLabel(event.target.value)} placeholder={t('settings.remoteInstances.clientAuth.field.labelPlaceholder')} />
-                <Button type="button" variant="outline" size="xs" className="!font-normal" onClick={() => void createRemoteClient()}>
-                  {t('settings.remoteInstances.clientAuth.actions.create')}
-                </Button>
-                <Button type="button" size="xs" className="!font-normal" onClick={() => void createPairingLink()}>
-                  {t('settings.remoteInstances.clientAuth.actions.pair')}
+              <div>
+                <Button type="button" size="xs" className="!font-normal" onClick={() => void openAddDevice()}>
+                  <Icon name="add" className="h-3.5 w-3.5" />
+                  {t('settings.remoteInstances.clientAuth.actions.addDevice')}
                 </Button>
               </div>
-              {pairingUrl ? (
-                <div className="flex flex-col items-center gap-3 rounded-md border border-[var(--interactive-border)] p-3">
-                  {pairingQrDataUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => setPairingQrDialogOpen(true)}
-                      className="rounded-md bg-white p-3 transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary-base)]"
-                      aria-label={t('settings.remoteInstances.clientAuth.qrEnlarge')}
-                    >
-                      <img src={pairingQrDataUrl} alt={t('settings.remoteInstances.clientAuth.qrAlt')} className="h-auto w-full max-w-[260px]" />
-                    </button>
-                  ) : null}
-                  <div className="w-full min-w-0 space-y-2">
-                    <p className="typography-meta text-center text-muted-foreground">{t('settings.remoteInstances.clientAuth.qrScanHint')}</p>
-                    <code className="block select-all break-all typography-code text-foreground">{pairingUrl}</code>
-                    <Button type="button" variant="outline" size="xs" className="!font-normal" onClick={() => void copyTextToClipboard(pairingUrl)}>
-                      <Icon name="file-copy" className="h-3.5 w-3.5" />
-                      {t('settings.common.actions.copyAll')}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              {createdRemoteClientToken ? (
-                <div className="space-y-1 rounded-md border border-[var(--interactive-border)] p-2">
-                  <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.createdToken')}</p>
-                  <code className="block select-all break-all typography-code text-foreground">{createdRemoteClientToken}</code>
-                </div>
-              ) : null}
               <div className="space-y-1">
                 {revokedClientCount > 0 ? (
                   <div className="flex justify-end">
@@ -1338,21 +1370,82 @@ export const RemoteInstancesPage: React.FC = () => {
           </DialogContent>
         </Dialog> : null}
 
-        <Dialog open={pairingQrDialogOpen} onOpenChange={setPairingQrDialogOpen}>
+        <Dialog open={addDeviceOpen} onOpenChange={setAddDeviceOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>{t('settings.remoteInstances.clientAuth.qrDialogTitle')}</DialogTitle>
+              <DialogTitle>{addDevicePhase === 'result' ? t('settings.remoteInstances.clientAuth.qrDialogTitle') : t('settings.remoteInstances.clientAuth.actions.addDevice')}</DialogTitle>
               <DialogDescription>{t('settings.remoteInstances.clientAuth.qrScanHint')}</DialogDescription>
             </DialogHeader>
-            {pairingQrDataUrl ? (
-              <div className="flex justify-center py-2">
-                <img
-                  src={pairingQrDataUrl}
-                  alt={t('settings.remoteInstances.clientAuth.qrAlt')}
-                  className="w-full max-w-sm rounded-md bg-white p-4"
+            {addDevicePhase === 'configure' ? (
+              <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void createPairingLink(); }}>
+                <Input
+                  className="h-8"
+                  value={remoteClientLabel}
+                  onChange={(event) => setRemoteClientLabel(event.target.value)}
+                  placeholder={t('settings.remoteInstances.clientAuth.field.labelPlaceholder')}
+                  autoFocus
                 />
+                <div className="space-y-1.5">
+                  <p className="typography-ui-label text-foreground">{t('settings.remoteInstances.clientAuth.addDevice.transportLabel')}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {([
+                      { key: 'local' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.local'), available: Boolean(transportOptions?.localUrl) },
+                      { key: 'lan' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.lan'), available: Boolean(transportOptions?.lanUrl) },
+                      { key: 'relay' as const, label: t('settings.remoteInstances.clientAuth.addDevice.transport.relay'), available: Boolean(transportOptions?.relayAvailable) },
+                    ]).map((option) => (
+                      <Button
+                        key={option.key}
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        disabled={!option.available}
+                        onClick={() => setAddDeviceTransport(option.key)}
+                        className={cn('!font-normal', addDeviceTransport === option.key ? 'border-[var(--primary-base)] bg-[var(--primary-base)]/10 text-[var(--primary-base)]' : 'text-foreground')}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                  {addDeviceTransport === 'lan' ? (
+                    <label className="flex w-fit cursor-pointer items-center gap-2 pt-1">
+                      <Switch checked={addDeviceFallback} onCheckedChange={(checked) => setAddDeviceFallback(Boolean(checked))} />
+                      <span className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.addDevice.fallback.relay')}</span>
+                    </label>
+                  ) : null}
+                  {addDeviceTransport === 'relay' && transportOptions?.lanUrl ? (
+                    <label className="flex w-fit cursor-pointer items-center gap-2 pt-1">
+                      <Switch checked={addDeviceFallback} onCheckedChange={(checked) => setAddDeviceFallback(Boolean(checked))} />
+                      <span className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.addDevice.fallback.preferLocal')}</span>
+                    </label>
+                  ) : null}
+                </div>
+                {remoteClientError ? <p className="typography-meta text-[var(--status-error)]">{remoteClientError}</p> : null}
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" size="xs" className="!font-normal" onClick={() => setAddDeviceOpen(false)} disabled={addDeviceCreating}>{t('settings.common.actions.cancel')}</Button>
+                  <Button type="submit" size="xs" className="!font-normal" disabled={addDeviceCreating || !transportOptions}>{t('settings.remoteInstances.clientAuth.addDevice.create')}</Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-3">
+                {pairingQrDataUrl ? (
+                  <div className="flex justify-center">
+                    <img src={pairingQrDataUrl} alt={t('settings.remoteInstances.clientAuth.qrAlt')} className="w-full max-w-[280px] rounded-md bg-white p-4" />
+                  </div>
+                ) : null}
+                {pairingUrl ? (
+                  <div className="flex items-center gap-2 rounded-md border border-[var(--interactive-border)] p-2">
+                    <code className="min-w-0 flex-1 truncate typography-code text-muted-foreground">{pairingUrl}</code>
+                    <Button type="button" variant="outline" size="xs" className="!font-normal shrink-0" onClick={handleCopyPairing}>
+                      <Icon name={pairingCopied ? 'check' : 'file-copy'} className={cn('h-3.5 w-3.5', pairingCopied && 'text-[var(--status-success)]')} />
+                      {pairingCopied ? t('settings.remoteInstances.clientAuth.actions.copied') : t('settings.common.actions.copyAll')}
+                    </Button>
+                  </div>
+                ) : null}
+                <div className="flex justify-end">
+                  <Button type="button" size="xs" className="!font-normal" onClick={() => setAddDeviceOpen(false)}>{t('settings.remoteInstances.clientAuth.addDevice.done')}</Button>
+                </div>
               </div>
-            ) : null}
+            )}
           </DialogContent>
         </Dialog>
 
