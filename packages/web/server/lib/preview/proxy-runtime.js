@@ -1381,7 +1381,6 @@ export const createPreviewProxyRuntime = ({
   };
 
   // Drop only CSP directives that prevent framing or the injected preview bridge.
-  // Preview targets are restricted to loopback dev servers.
   const stripFrameBustingHeaders = (headers, bridgeNonce) => {
     if (!headers || typeof headers !== 'object') {
       return;
@@ -1406,6 +1405,28 @@ export const createPreviewProxyRuntime = ({
           headers[key] = Array.isArray(original) ? rewritten : rewritten[0];
         }
       }
+    }
+  };
+
+  // responseInterceptor copies upstream headers onto `res` before our callback,
+  // so frame-busting mutations on proxyRes.headers alone never reach the client.
+  const applyFrameBustingHeadersToResponse = (res, proxyHeaders) => {
+    if (!res || typeof res.removeHeader !== 'function' || typeof res.setHeader !== 'function') {
+      return;
+    }
+
+    res.removeHeader('x-frame-options');
+
+    const cspNames = ['content-security-policy', 'content-security-policy-report-only'];
+    for (const name of cspNames) {
+      const entry = proxyHeaders
+        ? Object.entries(proxyHeaders).find(([key]) => key.toLowerCase() === name)
+        : undefined;
+      if (!entry) {
+        res.removeHeader(name);
+        continue;
+      }
+      res.setHeader(name, entry[1]);
     }
   };
 
@@ -1562,10 +1583,11 @@ export const createPreviewProxyRuntime = ({
           // Per-response nonce lets the injected bridge run under the dev
           // server's CSP without dropping its script restrictions wholesale.
           const bridgeNonce = crypto.randomBytes(16).toString('base64');
-          // Allow the dev server response to be framed inside OpenChamber even
+          // Allow the upstream response to be framed inside OpenChamber even
           // if it normally sets X-Frame-Options or a CSP frame-ancestors rule.
           // The proxy is same-origin so embedding is otherwise safe.
           stripFrameBustingHeaders(proxyRes.headers, bridgeNonce);
+          applyFrameBustingHeadersToResponse(res, proxyRes.headers);
 
           const resolved = resolveTargetFromRequest(req);
           if (!resolved.ok) {
@@ -1617,7 +1639,13 @@ export const createPreviewProxyRuntime = ({
                   }
                 : null,
             });
+            // responseInterceptor copies upstream headers onto `res` before this
+            // callback runs, so mutating proxyRes.headers alone is ignored by the
+            // client. Write the rewritten Location onto both.
             proxyRes.headers.location = rewrittenLocation;
+            if (typeof res?.setHeader === 'function') {
+              res.setHeader('location', rewrittenLocation);
+            }
           }
 
           const contentType = String(proxyRes.headers?.['content-type'] || '').toLowerCase();
