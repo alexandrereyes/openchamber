@@ -25,6 +25,7 @@ import { RelaySection } from '@/components/sections/remote-instances/RelaySectio
 import { useDesktopSshStore } from '@/stores/useDesktopSshStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { toast } from '@/components/ui';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Icon } from "@/components/icon/Icon";
 import { cn } from '@/lib/utils';
 import { copyTextToClipboard } from '@/lib/clipboard';
@@ -1371,7 +1372,7 @@ export const RemoteInstancesPage: React.FC = () => {
         </Dialog> : null}
 
         <Dialog open={addDeviceOpen} onOpenChange={setAddDeviceOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className={addDevicePhase === 'result' ? 'sm:max-w-lg' : 'sm:max-w-md'}>
             <DialogHeader>
               <DialogTitle>{addDevicePhase === 'result' ? t('settings.remoteInstances.clientAuth.qrDialogTitle') : t('settings.remoteInstances.clientAuth.actions.addDevice')}</DialogTitle>
               <DialogDescription>{t('settings.remoteInstances.clientAuth.qrScanHint')}</DialogDescription>
@@ -1408,13 +1409,13 @@ export const RemoteInstancesPage: React.FC = () => {
                   </div>
                   {addDeviceTransport === 'lan' ? (
                     <label className="flex w-fit cursor-pointer items-center gap-2 pt-1">
-                      <Switch checked={addDeviceFallback} onCheckedChange={(checked) => setAddDeviceFallback(Boolean(checked))} />
+                      <Checkbox checked={addDeviceFallback} onChange={setAddDeviceFallback} ariaLabel={t('settings.remoteInstances.clientAuth.addDevice.fallback.relay')} />
                       <span className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.addDevice.fallback.relay')}</span>
                     </label>
                   ) : null}
                   {addDeviceTransport === 'relay' && transportOptions?.lanUrl ? (
                     <label className="flex w-fit cursor-pointer items-center gap-2 pt-1">
-                      <Switch checked={addDeviceFallback} onCheckedChange={(checked) => setAddDeviceFallback(Boolean(checked))} />
+                      <Checkbox checked={addDeviceFallback} onChange={setAddDeviceFallback} ariaLabel={t('settings.remoteInstances.clientAuth.addDevice.fallback.preferLocal')} />
                       <span className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.addDevice.fallback.preferLocal')}</span>
                     </label>
                   ) : null}
@@ -1429,7 +1430,7 @@ export const RemoteInstancesPage: React.FC = () => {
               <div className="space-y-3">
                 {pairingQrDataUrl ? (
                   <div className="flex justify-center">
-                    <img src={pairingQrDataUrl} alt={t('settings.remoteInstances.clientAuth.qrAlt')} className="w-full max-w-[280px] rounded-md bg-white p-4" />
+                    <img src={pairingQrDataUrl} alt={t('settings.remoteInstances.clientAuth.qrAlt')} className="w-full max-w-[420px] rounded-md bg-white p-4" />
                   </div>
                 ) : null}
                 {pairingUrl ? (
