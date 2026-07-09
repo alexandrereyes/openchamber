@@ -1176,6 +1176,9 @@ export interface ClientAuthAPI {
   // Pairing links created but not yet redeemed (the "pending devices" list).
   listPendingPairings(): Promise<PendingPairingRecord[]>;
   cancelPairing(id: string): Promise<{ cancelled: boolean }>;
+  // Direct transports the server can be reached on, for the create-device dialog.
+  // LAN reflects the server's actual bind, independent of the UI origin.
+  getPairingTransports(): Promise<{ local: string | null; lan: string | null; relayAvailable: boolean }>;
 }
 
 export interface RuntimeAPIs {

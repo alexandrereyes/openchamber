@@ -1111,6 +1111,34 @@ async function main(options = {}) {
     || (typeof process.env.OPENCHAMBER_HOST === 'string' && process.env.OPENCHAMBER_HOST.trim().length > 0
       ? process.env.OPENCHAMBER_HOST.trim()
       : '127.0.0.1');
+
+  // Pairing transports advertised to the create-device dialog. LAN reachability is
+  // derived from the SERVER's actual bind (a wildcard bind → the machine's LAN IP;
+  // a specific non-loopback host → that host), NOT from how the UI was opened — so
+  // "Local network" works even when the UI is opened on localhost, and is absent
+  // when the server is only bound to loopback (a LAN link would not connect).
+  const resolvePairingTransports = () => {
+    const activePort = tunnelRuntimeContext.getActivePort() || port;
+    const local = `http://127.0.0.1:${activePort}`;
+    let lanHost = null;
+    if (isNetworkExposedBindHost(effectiveBindHost)) {
+      try {
+        for (const list of Object.values(os.networkInterfaces())) {
+          for (const entry of (list || [])) {
+            if (entry.family === 'IPv4' && !entry.internal) { lanHost = entry.address; break; }
+          }
+          if (lanHost) break;
+        }
+      } catch {
+        lanHost = null;
+      }
+    } else {
+      const h = String(effectiveBindHost || '').toLowerCase();
+      if (h && h !== '127.0.0.1' && h !== 'localhost' && h !== '::1') lanHost = effectiveBindHost;
+    }
+    const lan = lanHost ? `http://${lanHost.includes(':') ? `[${lanHost}]` : lanHost}:${activePort}` : null;
+    return { local, lan, relayAvailable: true };
+  };
   const uiPassword = typeof options.uiPassword === 'string'
     ? options.uiPassword
     : (typeof process.env.OPENCHAMBER_UI_PASSWORD === 'string' ? process.env.OPENCHAMBER_UI_PASSWORD : null);
@@ -1270,6 +1298,7 @@ async function main(options = {}) {
     // Re-evaluate the relay lifecycle after pairing/device changes (a revoked or
     // redeemed device can flip relay demand on or off).
     reconcileRelay: () => (relayServiceInstance ? relayServiceInstance.reconcile() : Promise.resolve()),
+    getPairingTransports: resolvePairingTransports,
     readSettingsFromDiskMigrated,
     normalizeTunnelSessionTtlMs,
     sayTTSCapability,

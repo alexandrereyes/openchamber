@@ -367,6 +367,10 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     getRelayPairingCandidate = async () => null,
     // Re-evaluate the relay lifecycle after pairing/device changes.
     reconcileRelay = async () => {},
+    // Returns { local, lan, relayAvailable } — the direct transport URLs the
+    // server can actually be reached on (LAN derived from the server bind, not
+    // the UI origin), for the create-device dialog.
+    getPairingTransports = () => ({ local: null, lan: null, relayAvailable: true }),
   } = dependencies;
   const PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
   const PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS = 10;
@@ -768,6 +772,14 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
         ...result,
         server: { label: 'OpenChamber', candidates },
       });
+    });
+  });
+
+  // Direct transports the server can be reached on (for the create-device dialog).
+  app.get('/api/client-auth/pairing/transports', async (req, res, next) => {
+    await runWithClientCreateAuth(req, res, next, async () => {
+      res.setHeader('Cache-Control', 'no-store');
+      res.json(getPairingTransports());
     });
   });
 

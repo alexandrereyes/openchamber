@@ -25,6 +25,7 @@ export const createBootstrapRuntime = (dependencies) => {
       clientPairingRuntime,
       getRelayPairingCandidate,
       reconcileRelay,
+      getPairingTransports,
       readSettingsFromDiskMigrated,
       normalizeTunnelSessionTtlMs,
       sayTTSCapability,
@@ -88,6 +89,7 @@ export const createBootstrapRuntime = (dependencies) => {
       clientPairingRuntime,
       getRelayPairingCandidate,
       reconcileRelay,
+      getPairingTransports,
       readSettingsFromDiskMigrated,
       normalizeTunnelSessionTtlMs,
     });

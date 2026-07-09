@@ -667,10 +667,19 @@ export const RemoteInstancesPage: React.FC = () => {
     return () => window.clearInterval(interval);
   }, [clientAuth, loadRemoteClients]);
 
-  // Available direct transports for the create dialog. `resolvePairingServerUrl`
-  // returns a LAN/reachable URL on desktop (when LAN access is on) or the origin
-  // on web — a non-loopback result is offered as "Local network".
+  // Available direct transports for the create dialog. The server is authoritative
+  // for LAN reachability (derived from its bind, not the UI origin), so "Local
+  // network" works even when the UI is opened on localhost. Falls back to the
+  // client-side guess if the endpoint is unavailable.
   const resolveTransportOptions = React.useCallback(async (): Promise<{ localUrl: string | null; lanUrl: string | null; relayAvailable: boolean }> => {
+    if (clientAuth?.getPairingTransports) {
+      try {
+        const transports = await clientAuth.getPairingTransports();
+        return { localUrl: transports.local, lanUrl: transports.lan, relayAvailable: transports.relayAvailable };
+      } catch {
+        // fall through to the client-side guess
+      }
+    }
     const port = getRuntimePort();
     const localUrl = port ? `http://127.0.0.1:${port}` : (isLoopbackUrl(window.location.origin) ? window.location.origin : null);
     let lanUrl: string | null = null;
@@ -681,7 +690,7 @@ export const RemoteInstancesPage: React.FC = () => {
       // keep null
     }
     return { localUrl, lanUrl, relayAvailable: true };
-  }, []);
+  }, [clientAuth]);
 
   const openAddDevice = React.useCallback(async () => {
     setRemoteClientError(null);
