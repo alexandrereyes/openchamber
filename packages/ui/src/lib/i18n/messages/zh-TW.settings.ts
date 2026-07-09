@@ -273,6 +273,8 @@
   'settings.remoteInstances.clientAuth.state.thisDevice': '此裝置',
   'settings.remoteInstances.clientAuth.state.pending': '等待連線…',
   'settings.remoteInstances.clientAuth.state.viaRelay': 'Relay',
+  'settings.remoteInstances.clientAuth.state.connectedDirect': '已連線 · 區域網路',
+  'settings.remoteInstances.clientAuth.state.connectedRelay': '已連線 · 中繼',
   'settings.remoteInstances.clientAuth.lastUsed': '上次使用：{date}',
   'settings.remoteInstances.clientAuth.neverUsed': '從未使用',
   'settings.remoteInstances.relay.title': 'OpenChamber Relay',

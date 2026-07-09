@@ -267,6 +267,8 @@ export const settingsDict = {
   'settings.remoteInstances.clientAuth.state.thisDevice': '此设备',
   'settings.remoteInstances.clientAuth.state.pending': '等待连接…',
   'settings.remoteInstances.clientAuth.state.viaRelay': 'Relay',
+  'settings.remoteInstances.clientAuth.state.connectedDirect': '已连接 · 局域网',
+  'settings.remoteInstances.clientAuth.state.connectedRelay': '已连接 · 中继',
   'settings.remoteInstances.clientAuth.lastUsed': '上次使用 {date}',
   'settings.remoteInstances.clientAuth.neverUsed': '从未使用',
   'settings.remoteInstances.relay.title': 'OpenChamber Relay',

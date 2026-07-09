@@ -267,6 +267,8 @@ export const settingsDict = {
   "settings.remoteInstances.clientAuth.state.thisDevice": "Цей пристрій",
   "settings.remoteInstances.clientAuth.state.pending": "Очікує підключення…",
   "settings.remoteInstances.clientAuth.state.viaRelay": "Relay",
+  "settings.remoteInstances.clientAuth.state.connectedDirect": "Підключено · Локальна мережа",
+  "settings.remoteInstances.clientAuth.state.connectedRelay": "Підключено · Relay",
   "settings.remoteInstances.clientAuth.lastUsed": "Останнє використання {date}",
   "settings.remoteInstances.clientAuth.neverUsed": "Ще не використовувався",
   "settings.remoteInstances.relay.title": "OpenChamber Relay",

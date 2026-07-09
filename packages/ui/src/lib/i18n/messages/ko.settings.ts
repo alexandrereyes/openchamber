@@ -267,6 +267,8 @@ export const settingsDict = {
   'settings.remoteInstances.clientAuth.state.thisDevice': '이 기기',
   'settings.remoteInstances.clientAuth.state.pending': '연결 대기 중…',
   'settings.remoteInstances.clientAuth.state.viaRelay': 'Relay',
+  'settings.remoteInstances.clientAuth.state.connectedDirect': '연결됨 · 로컬 네트워크',
+  'settings.remoteInstances.clientAuth.state.connectedRelay': '연결됨 · 릴레이',
   'settings.remoteInstances.clientAuth.lastUsed': '마지막 사용 {date}',
   'settings.remoteInstances.clientAuth.neverUsed': '사용한 적 없음',
   'settings.remoteInstances.relay.title': 'OpenChamber Relay',

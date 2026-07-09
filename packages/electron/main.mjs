@@ -154,6 +154,10 @@ const MAX_CAPTURE_PAGE_RECT_AREA = 4_000_000;
 const LOCAL_HOST_ID = 'local';
 const LOCAL_DESKTOP_CLIENT_KIND = 'desktop-local';
 const LOCAL_DESKTOP_CLIENT_DEDUPE_KEY = 'desktop-local';
+// Remote hosts get a regular 'desktop' client (NOT 'desktop-local' — that kind
+// grants whole-server device management and must never be issued to a desktop
+// connecting to someone else's server).
+const REMOTE_DESKTOP_CLIENT_KIND = 'desktop';
 const ENV_OVERRIDE_HOST_ID = '__env';
 const CHANGELOG_URL = 'https://raw.githubusercontent.com/openchamber/openchamber/main/CHANGELOG.md';
 const GITHUB_BUG_REPORT_URL = 'https://github.com/openchamber/openchamber/issues/new?template=bug_report.yml';
@@ -486,6 +490,24 @@ const mutateSettingsRoot = (mutator) => {
 
 const writeSettingsRoot = async (root) => writeJsonFile(settingsFilePath(), root);
 
+// Stable per-install identifier for this desktop, persisted in settings. Used as
+// the client dedupe key on remote hosts so re-authenticating (e.g. after a login
+// session expires) reuses the same "OpenChamber Desktop" record instead of
+// piling up a new one each time. Different desktops get different ids.
+const getOrCreateDesktopInstallId = async () => {
+  const existing = readSettingsRoot().desktopInstallId;
+  if (typeof existing === 'string' && existing.trim()) return existing.trim();
+  const generated = globalThis.crypto.randomUUID();
+  await mutateSettingsRoot((root) => {
+    // Race guard: keep an id another writer may have already persisted.
+    if (typeof root.desktopInstallId === 'string' && root.desktopInstallId.trim()) return root;
+    root.desktopInstallId = generated;
+    return root;
+  });
+  const after = readSettingsRoot().desktopInstallId;
+  return typeof after === 'string' && after.trim() ? after.trim() : generated;
+};
+
 const normalizeHostUrl = (raw) => {
   const trimmed = typeof raw === 'string' ? raw.trim() : '';
   if (!trimmed) return null;
@@ -570,20 +592,53 @@ const isLocalRuntimeUrl = (targetUrl) => {
   }
 };
 
+// A relay host is reached over the E2EE tunnel: it has no http(s) apiUrl, only a
+// { relayUrl (ws/wss), serverId, hostEncPubJwk } descriptor. The relay grant is a
+// one-time pairing artifact and is never persisted.
+const sanitizeHostRelayForStorage = (value) => {
+  if (!value || typeof value !== 'object') return null;
+  const relayUrl = typeof value.relayUrl === 'string' ? value.relayUrl.trim() : '';
+  const serverId = typeof value.serverId === 'string' ? value.serverId.trim() : '';
+  const jwk = value.hostEncPubJwk;
+  if (!relayUrl || !serverId || !jwk || typeof jwk !== 'object' || Array.isArray(jwk)) return null;
+  try {
+    const parsed = new URL(relayUrl);
+    if (parsed.protocol !== 'ws:' && parsed.protocol !== 'wss:') return null;
+  } catch {
+    return null;
+  }
+  return { relayUrl, serverId, hostEncPubJwk: jwk };
+};
+
+// Shared storage shape for a persisted host (direct or relay). Returns null for
+// entries that can't be stored (missing id, reserved 'local', or no usable
+// transport).
+const buildStoredHostEntry = (entry) => {
+  const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
+  if (!id || id === LOCAL_HOST_ID) return null;
+  const clientToken = sanitizeClientTokenForStorage(entry?.clientToken);
+  const requestHeaders = sanitizeRuntimeRequestHeaders(entry?.requestHeaders);
+  const headerFields = Object.keys(requestHeaders).length > 0 ? { requestHeaders } : {};
+  const tokenField = clientToken ? { clientToken } : {};
+  const labelRaw = typeof entry?.label === 'string' && entry.label.trim() ? entry.label.trim() : '';
+
+  const relay = sanitizeHostRelayForStorage(entry?.relay);
+  if (relay) {
+    const url = `relay://${relay.serverId}`;
+    return { id, label: labelRaw || url, url, ...tokenField, ...headerFields, relay };
+  }
+
+  const url = sanitizeHostUrlForStorage(entry?.url);
+  if (!url) return null;
+  const apiUrl = sanitizeHostUrlForStorage(entry?.apiUrl) || url;
+  return { id, label: labelRaw || url, url, apiUrl, ...tokenField, ...headerFields };
+};
+
 const readDesktopHostsConfig = () => {
   const root = readSettingsRoot();
   const hostsRaw = Array.isArray(root.desktopHosts) ? root.desktopHosts : [];
   const hosts = hostsRaw
-    .map((entry) => {
-      const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
-      const url = sanitizeHostUrlForStorage(entry?.url);
-      if (!id || id === LOCAL_HOST_ID || !url) return null;
-      const apiUrl = sanitizeHostUrlForStorage(entry?.apiUrl) || url;
-      const clientToken = sanitizeClientTokenForStorage(entry?.clientToken);
-      const requestHeaders = sanitizeRuntimeRequestHeaders(entry?.requestHeaders);
-      const label = typeof entry?.label === 'string' && entry.label.trim() ? entry.label.trim() : url;
-      return { id, label, url, apiUrl, ...(clientToken ? { clientToken } : {}), ...(Object.keys(requestHeaders).length > 0 ? { requestHeaders } : {}) };
-    })
+    .map(buildStoredHostEntry)
     .filter(Boolean);
 
   return {
@@ -599,22 +654,7 @@ const writeDesktopHostsConfig = async (config) => {
   await mutateSettingsRoot((root) => {
     root.desktopHosts = Array.isArray(config?.hosts)
       ? config.hosts
-          .map((entry) => {
-            const id = typeof entry?.id === 'string' ? entry.id.trim() : '';
-            const url = sanitizeHostUrlForStorage(entry?.url);
-            if (!id || id === LOCAL_HOST_ID || !url) return null;
-            const apiUrl = sanitizeHostUrlForStorage(entry?.apiUrl) || url;
-            const clientToken = sanitizeClientTokenForStorage(entry?.clientToken);
-            const requestHeaders = sanitizeRuntimeRequestHeaders(entry?.requestHeaders);
-            return {
-              id,
-              label: typeof entry?.label === 'string' && entry.label.trim() ? entry.label.trim() : url,
-              url,
-              apiUrl,
-              ...(clientToken ? { clientToken } : {}),
-              ...(Object.keys(requestHeaders).length > 0 ? { requestHeaders } : {}),
-            };
-          })
+          .map(buildStoredHostEntry)
           .filter(Boolean)
       : [];
     root.desktopDefaultHostId = typeof config?.defaultHostId === 'string' && config.defaultHostId.trim()
@@ -1582,6 +1622,13 @@ const loginRemoteAndIssueClientToken = async ({ url, password, trustDevice, requ
   if (!baseUrl) throw new Error('Invalid URL');
   if (!candidatePassword) throw new Error('Password is required');
 
+  // Stable client identity so re-login reuses the same device record. Local
+  // uses the fixed desktop-local identity; remote uses this install's id with a
+  // regular 'desktop' kind.
+  const clientIdentity = isLocalRuntimeUrl(baseUrl)
+    ? { clientKind: LOCAL_DESKTOP_CLIENT_KIND, dedupeKey: LOCAL_DESKTOP_CLIENT_DEDUPE_KEY }
+    : { clientKind: REMOTE_DESKTOP_CLIENT_KIND, dedupeKey: `desktop:${await getOrCreateDesktopInstallId()}` };
+
   const loginResponse = await fetch(new URL('/auth/session', `${baseUrl}/`).toString(), {
     method: 'POST',
     signal: AbortSignal.timeout(10_000),
@@ -1595,10 +1642,7 @@ const loginRemoteAndIssueClientToken = async ({ url, password, trustDevice, requ
       trustDevice: trustDevice === true,
       issueClientToken: true,
       clientLabel: 'OpenChamber Desktop',
-      ...(isLocalRuntimeUrl(baseUrl) ? {
-        clientKind: LOCAL_DESKTOP_CLIENT_KIND,
-        dedupeKey: LOCAL_DESKTOP_CLIENT_DEDUPE_KEY,
-      } : {}),
+      ...clientIdentity,
     }),
   });
   if (!loginResponse.ok) {
@@ -1626,10 +1670,7 @@ const loginRemoteAndIssueClientToken = async ({ url, password, trustDevice, requ
     },
     body: JSON.stringify({
       label: 'OpenChamber Desktop',
-      ...(isLocalRuntimeUrl(baseUrl) ? {
-        clientKind: LOCAL_DESKTOP_CLIENT_KIND,
-        dedupeKey: LOCAL_DESKTOP_CLIENT_DEDUPE_KEY,
-      } : {}),
+      ...clientIdentity,
     }),
   });
   if (!tokenResponse.ok) {
@@ -2374,6 +2415,20 @@ const openMainWindow = async () => {
   const host = config.defaultHostId && config.defaultHostId !== LOCAL_HOST_ID
     ? config.hosts.find((entry) => entry.id === config.defaultHostId)
     : null;
+  const relayHost = host && host.relay && typeof host.relay === 'object' ? host : null;
+  if (relayHost) {
+    // Relay hosts have no reachable HTTP base. Boot the LOCAL UI with the local
+    // runtime; the renderer re-opens the E2EE tunnel on startup by reading the
+    // relay descriptor + token from desktopHosts and calling
+    // switchRuntimeEndpoint({ relay }).
+    const localApiBaseUrl = state.sidecarUrl || state.apiBaseUrl || state.localOrigin || '';
+    const localToken = resolveStoredClientTokenForUrl(localApiBaseUrl, config) || state.clientToken || '';
+    return activateMainWindow(localUiUrl, state.localOrigin, state.bootOutcome, {
+      apiBaseUrl: localApiBaseUrl,
+      clientToken: localToken,
+      requestHeaders: {},
+    });
+  }
   const apiBaseUrl = host?.apiUrl || host?.url || state.sidecarUrl || state.apiBaseUrl || '';
   const clientToken = host?.clientToken || resolveStoredClientTokenForUrl(apiBaseUrl, config) || state.clientToken || '';
   const requestHeaders = sanitizeRuntimeRequestHeaders(host?.requestHeaders || {});
@@ -3667,6 +3722,9 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
 
     case 'desktop_local_client_token_get':
       return readDesktopLocalClientToken();
+
+    case 'desktop_install_id_get':
+      return getOrCreateDesktopInstallId();
 
     case 'desktop_host_probe':
       return probeHostWithTimeout(String(args.url || ''), 2_000, String(args.clientToken || ''), args.requestHeaders || {});

@@ -1804,6 +1804,8 @@ export const settingsDict = {
   'settings.remoteInstances.clientAuth.state.thisDevice': 'Cet appareil',
   'settings.remoteInstances.clientAuth.state.pending': 'En attente de connexion…',
   'settings.remoteInstances.clientAuth.state.viaRelay': 'Relay',
+  'settings.remoteInstances.clientAuth.state.connectedDirect': 'Connecté · Réseau local',
+  'settings.remoteInstances.clientAuth.state.connectedRelay': 'Connecté · Relais',
   'settings.remoteInstances.clientAuth.lastUsed': 'Dernière utilisation le {date}',
   'settings.remoteInstances.clientAuth.neverUsed': 'Jamais utilisé',
   'settings.remoteInstances.relay.title': 'OpenChamber Relay',

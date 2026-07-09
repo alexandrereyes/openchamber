@@ -1111,6 +1111,8 @@ export interface RemoteClientRecord {
   deviceName?: string | null;
   devicePlatform?: string | null;
   usesRelay?: boolean;
+  /** Transport that carried the device's most recent authenticated request. */
+  lastTransport?: 'relay' | 'direct' | null;
 }
 
 // A pairing link that has been created but not yet redeemed by a device.

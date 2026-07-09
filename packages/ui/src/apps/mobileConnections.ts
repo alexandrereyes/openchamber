@@ -27,6 +27,29 @@ import { getRuntimeApiBaseUrl, getRuntimeKey, switchRuntimeEndpoint } from '@/li
 
 const MOBILE_CONNECTIONS_STORAGE_KEY = 'openchamber.mobile.connections.v1';
 const MOBILE_SECURE_STORAGE_PREFIX = 'openchamber.mobile.';
+const MOBILE_DEVICE_ID_STORAGE_KEY = 'openchamber.mobile.deviceId';
+
+// Stable per-install identifier for this phone, persisted in localStorage. Used
+// as the client dedupe key so every way this device authenticates to a given
+// server (pairing redeem OR password re-login) collapses to ONE device record
+// instead of piling up a new row each time a token is minted. Different phones
+// get different ids; browsers never mint device tokens at all.
+const getMobileDeviceId = (): string => {
+  try {
+    const existing = window.localStorage.getItem(MOBILE_DEVICE_ID_STORAGE_KEY);
+    if (existing && existing.trim()) return existing.trim();
+    const generated = crypto.randomUUID();
+    window.localStorage.setItem(MOBILE_DEVICE_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    // localStorage unavailable — fall back to an ephemeral id (dedupe degrades to
+    // per-session, never worse than today's no-dedupe behavior).
+    return crypto.randomUUID();
+  }
+};
+
+// Server-side client dedupe key for this device (shared across pairing + login).
+const mobileClientDedupeKey = (): string => `mobile:${getMobileDeviceId()}`;
 const MOBILE_CONNECTIONS_LIMIT = 12;
 const MOBILE_CONNECT_TIMEOUT_MS = 8000;
 const MOBILE_NATIVE_HTTP_TIMEOUT_MS = 2500;
@@ -244,12 +267,22 @@ const parseRelayConfig = (value: unknown): MobileRelayConfig | null => {
 // servers the secure webview cannot fetch — then a browser-fetch fallback).
 // ---------------------------------------------------------------------------
 
+// Android logcat prints objects as "[object Object]" — serialize so device logs
+// are actually readable.
+const logDetail = (detail: Record<string, unknown>): string => {
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
+};
+
 const logConnect = (step: string, detail: Record<string, unknown> = {}): void => {
-  console.info('[mobile-connect]', step, detail);
+  console.info('[mobile-connect]', step, logDetail(detail));
 };
 
 const logStorage = (step: string, detail: Record<string, unknown> = {}): void => {
-  console.info('[mobile-storage]', step, detail);
+  console.info('[mobile-storage]', step, logDetail(detail));
 };
 
 const parseMaybeJson = (value: unknown): unknown => {
@@ -288,14 +321,14 @@ const nativeHttpRequest = async (url: string, init?: RequestInit): Promise<Mobil
       json: async () => parseMaybeJson(response.data),
     };
   } catch (error) {
-    console.warn('[mobile-connect] native-http failed', { url, error });
+    console.warn('[mobile-connect]', 'native-http failed', logDetail({ url, error: error instanceof Error ? error.message : String(error) }));
     return null;
   }
 };
 
 const browserFetchRequest = async (url: string, init?: RequestInit): Promise<MobileFetchResponse | null> => {
   const response = await fetch(url, init).catch((error) => {
-    console.warn('[mobile-connect] browser-fetch failed', { url, error });
+    console.warn('[mobile-connect]', 'browser-fetch failed', logDetail({ url, error: error instanceof Error ? error.message : String(error) }));
     return null;
   });
   if (!response) return null;
@@ -1080,6 +1113,9 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
         clientLabel: 'OpenChamber Mobile',
         clientKind: 'mobile',
         deviceName: 'OpenChamber Mobile',
+        // Re-pairing this same phone reuses its one device record instead of
+        // adding a duplicate row on the server.
+        dedupeKey: mobileClientDedupeKey(),
       });
       const redeemInit = {
         method: 'POST',
@@ -1099,9 +1135,11 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
         setError(t('mobile.connect.error.authRequired'));
         return;
       }
+      // Name the connection by the issuing server (its hostname), not the
+      // per-device pairing label — that label is the operator's name for THIS
+      // phone in their device list, not a name for the server we connect to.
       const serverLabel = typeof result?.server?.label === 'string' ? result.server.label : '';
-      const clientLabel = typeof result?.client?.label === 'string' ? result.client.label : '';
-      const label = payload.label || serverLabel || clientLabel || getConnectionLabel(connectionDisplayUrl({ candidates: deviceCandidates }));
+      const label = payload.label || serverLabel || getConnectionLabel(connectionDisplayUrl({ candidates: deviceCandidates }));
 
       // 3. Persist the device with ALL its candidates + one token, then switch to
       // whichever transport answered. Reconnect re-probes the full set so the
@@ -1149,7 +1187,9 @@ export const useMobileConnection = (onConnected: () => void): UseMobileConnectio
         method: 'POST',
         credentials: 'include' as const,
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ password, trustDevice: true, issueClientToken: true, clientLabel: 'OpenChamber Mobile' }),
+        // Same dedupe key as pairing: re-authenticating after a token expires
+        // reuses this phone's existing device record instead of duplicating it.
+        body: JSON.stringify({ password, trustDevice: true, issueClientToken: true, clientLabel: 'OpenChamber Mobile', clientKind: 'mobile', dedupeKey: mobileClientDedupeKey() }),
       };
       logConnect('password:start', { transport: chosen.kind });
       const response = chosen.kind === 'relay'

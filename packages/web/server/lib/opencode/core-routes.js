@@ -371,6 +371,9 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     // server can actually be reached on (LAN derived from the server bind, not
     // the UI origin), for the create-device dialog.
     getPairingTransports = () => ({ local: null, lan: null, relayAvailable: true }),
+    // Display name a paired device shows for THIS server (issuing machine's
+    // hostname), distinct from the per-device pairing label typed by the operator.
+    getServerLabel = () => 'OpenChamber',
   } = dependencies;
   const PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
   const PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS = 10;
@@ -708,7 +711,12 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     await runWithClientManagementAuth(req, res, next, async (authContext) => {
       if (authContext.type === 'client') {
         const client = await clientRecordFromAuthContext(authContext);
-        return res.json({ clients: client ? [client] : [] });
+        // The desktop shell's local client is the trusted operator of this
+        // server; it manages devices just like a browser UI session. Every
+        // other client token is scoped to its own record.
+        if (client?.clientKind !== 'desktop-local') {
+          return res.json({ clients: client ? [client] : [] });
+        }
       }
       const clients = await remoteClientAuthRuntime.listClients();
       res.json({ clients });
@@ -730,9 +738,14 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
   app.delete('/api/client-auth/clients/:id', async (req, res, next) => {
     await runWithClientManagementAuth(req, res, next, async (authContext) => {
       if (authContext.type === 'client') {
-        const clientId = clientIdFromAuthContext(authContext);
-        if (!clientId || clientId !== req.params?.id) {
-          return res.status(403).json({ revoked: false, error: 'Client tokens can only revoke themselves' });
+        const actingClient = await clientRecordFromAuthContext(authContext);
+        // The desktop shell's local client manages every device; other client
+        // tokens may only revoke themselves.
+        if (actingClient?.clientKind !== 'desktop-local') {
+          const clientId = clientIdFromAuthContext(authContext);
+          if (!clientId || clientId !== req.params?.id) {
+            return res.status(403).json({ revoked: false, error: 'Client tokens can only revoke themselves' });
+          }
         }
       }
       const result = await remoteClientAuthRuntime.revokeClient(req.params?.id);
@@ -745,11 +758,19 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
   });
 
   app.delete('/api/client-auth/clients', async (req, res, next) => {
-    await runWithUiAuth(req, res, next, async () => {
+    await runWithClientManagementAuth(req, res, next, async (authContext) => {
+      if (authContext.type === 'client') {
+        const actingClient = await clientRecordFromAuthContext(authContext);
+        // Purging revoked devices is a whole-server management action; only the
+        // trusted desktop shell client (or a UI session) may do it.
+        if (actingClient?.clientKind !== 'desktop-local') {
+          return res.status(403).json({ purged: 0, error: 'Client tokens cannot purge revoked devices' });
+        }
+      }
       const result = await remoteClientAuthRuntime.purgeRevokedClients();
       void reconcileRelay();
       res.json(result);
-    }, { sessionOnly: true });
+    });
   });
 
   app.post('/api/client-auth/pairing/sessions', express.json({ limit: '64kb' }), async (req, res, next) => {
@@ -770,7 +791,7 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
       res.setHeader('Cache-Control', 'no-store');
       res.status(201).json({
         ...result,
-        server: { label: 'OpenChamber', candidates },
+        server: { label: getServerLabel(), candidates },
       });
     });
   });
@@ -833,7 +854,7 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
       res.json({
         ok: true,
         server: {
-          label: 'OpenChamber',
+          label: getServerLabel(),
           url: requestOrigin(req),
           fingerprint: result.pairing?.fingerprint || null,
         },

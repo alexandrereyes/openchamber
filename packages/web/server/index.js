@@ -1299,6 +1299,17 @@ async function main(options = {}) {
     // redeemed device can flip relay demand on or off).
     reconcileRelay: () => (relayServiceInstance ? relayServiceInstance.reconcile() : Promise.resolve()),
     getPairingTransports: resolvePairingTransports,
+    // The display name a paired device shows for THIS server. Devices name the
+    // connection by the issuing machine's hostname, not the per-device pairing
+    // label typed by the operator.
+    getServerLabel: () => {
+      try {
+        const name = os.hostname();
+        return typeof name === 'string' && name.trim().length > 0 ? name.trim() : 'OpenChamber';
+      } catch {
+        return 'OpenChamber';
+      }
+    },
     readSettingsFromDiskMigrated,
     normalizeTunnelSessionTtlMs,
     sayTTSCapability,

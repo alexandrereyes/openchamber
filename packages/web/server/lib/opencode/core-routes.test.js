@@ -565,11 +565,9 @@ describe('client auth routes', () => {
 
     const listedAfterPurge = await request(app).get('/api/client-auth/clients');
     expect(listedAfterPurge.body.clients).toHaveLength(0);
-    expect(dependencies.testHooks.requireSessionAuth).toHaveBeenCalled();
-    expect(dependencies.testHooks.requireAuth).not.toHaveBeenCalled();
   });
 
-  it('allows client credentials to list and revoke only the authenticated client', async () => {
+  it('scopes non-desktop client credentials to list and revoke only themselves', async () => {
     const app = express();
     let authContext = { type: 'session' };
     const dependencies = createDependencies({
@@ -584,20 +582,57 @@ describe('client auth routes', () => {
       .post('/api/client-auth/clients')
       .send({ label: 'Other device' });
 
-    authContext = { type: 'client', clientId: current.body.client.id, client: current.body.client };
+    // A regular (non-desktop-local) client token only sees and manages itself.
+    authContext = { type: 'client', clientId: other.body.client.id, client: other.body.client };
 
     const listed = await request(app).get('/api/client-auth/clients');
     expect(listed.status).toBe(200);
-    expect(listed.body.clients).toEqual([current.body.client]);
+    expect(listed.body.clients).toEqual([other.body.client]);
 
-    const denied = await request(app).delete(`/api/client-auth/clients/${other.body.client.id}`);
+    const denied = await request(app).delete(`/api/client-auth/clients/${current.body.client.id}`);
     expect(denied.status).toBe(403);
     expect(denied.body.revoked).toBe(false);
 
-    const revoked = await request(app).delete(`/api/client-auth/clients/${current.body.client.id}`);
+    const deniedPurge = await request(app).delete('/api/client-auth/clients');
+    expect(deniedPurge.status).toBe(403);
+
+    const revoked = await request(app).delete(`/api/client-auth/clients/${other.body.client.id}`);
     expect(revoked.status).toBe(200);
     expect(revoked.body.revoked).toBe(true);
-    expect(revoked.body.client.id).toBe(current.body.client.id);
+    expect(revoked.body.client.id).toBe(other.body.client.id);
+  });
+
+  it('lets the local desktop client list and revoke every device', async () => {
+    const app = express();
+    let authContext = { type: 'session' };
+    const dependencies = createDependencies({
+      resolveAuthContext: async () => authContext,
+    });
+    registerAuthAndAccessRoutes(app, dependencies);
+
+    const desktop = await request(app)
+      .post('/api/client-auth/clients')
+      .send({ label: 'OpenChamber Desktop', clientKind: 'desktop-local' });
+    const other = await request(app)
+      .post('/api/client-auth/clients')
+      .send({ label: 'Other device' });
+
+    // The trusted desktop shell client manages all devices like a UI session.
+    authContext = { type: 'client', clientId: desktop.body.client.id, client: desktop.body.client };
+
+    const listed = await request(app).get('/api/client-auth/clients');
+    expect(listed.status).toBe(200);
+    const listedIds = listed.body.clients.map((client) => client.id).sort();
+    expect(listedIds).toEqual([desktop.body.client.id, other.body.client.id].sort());
+
+    const revoked = await request(app).delete(`/api/client-auth/clients/${other.body.client.id}`);
+    expect(revoked.status).toBe(200);
+    expect(revoked.body.revoked).toBe(true);
+    expect(revoked.body.client.id).toBe(other.body.client.id);
+
+    const purged = await request(app).delete('/api/client-auth/clients');
+    expect(purged.status).toBe(200);
+    expect(purged.body.purged).toBe(1);
   });
 
   it('allows only the local desktop client token to create remote client tokens', async () => {

@@ -2226,28 +2226,64 @@ export function MobileApp({ apis }: MobileAppProps) {
 
   const handleNativeResume = React.useCallback(() => {
     const apiBaseUrl = getRuntimeApiBaseUrl();
-    if (!apiBaseUrl) return;
     const validationSeq = nativeResumeValidationSeqRef.current + 1;
     nativeResumeValidationSeqRef.current = validationSeq;
+
+    if (!apiBaseUrl) {
+      // Already disconnected — e.g. a previous re-probe ran mid network flux
+      // (Android Wi-Fi switch with no cellular fallback) and found nothing
+      // reachable. When a resume/online signal arrives, silently retry the last
+      // saved instance instead of dead-ending on the connect screen until the
+      // user restarts the app. Success fires runtime-endpoint-changed, which
+      // re-bootstraps everything.
+      void autoConnectLastInstance();
+      return;
+    }
 
     // Re-probe the active device's transports on resume: the network may have
     // changed while the app slept, so hot-switch LAN⇄relay if a better transport
     // is now reachable — no re-pairing. A 'switched' outcome already fired the
     // runtime-endpoint-changed subscription (which re-bootstraps the app), so we
     // only refresh in place when the transport is 'unchanged'.
-    void reprobeActiveConnection().then((outcome) => {
-      if (nativeResumeValidationSeqRef.current !== validationSeq) return;
-      if (outcome === 'unreachable' || outcome === 'no-connection') {
-        switchRuntimeEndpoint({ apiBaseUrl: '', clientToken: null, runtimeKey: 'mobile-disconnected' });
-        setConnectionEpoch((value) => value + 1);
-        return;
-      }
-      if (outcome === 'switched') return;
-
+    const refreshInPlace = () => {
       void initializeApp();
       void refreshGitHubAuthStatus(apis.github, { force: true });
       if (providersCount === 0) void loadProviders({ source: 'mobileApp:nativeResume' });
       if (agentsCount === 0) void loadAgents({ source: 'mobileApp:nativeResume' });
+    };
+    const disconnect = () => {
+      switchRuntimeEndpoint({ apiBaseUrl: '', clientToken: null, runtimeKey: 'mobile-disconnected' });
+      setConnectionEpoch((value) => value + 1);
+    };
+
+    void reprobeActiveConnection().then((outcome) => {
+      if (nativeResumeValidationSeqRef.current !== validationSeq) return;
+      if (outcome === 'no-connection') {
+        disconnect();
+        return;
+      }
+      if (outcome === 'unreachable') {
+        // Right after a resume or Wi-Fi switch the network is often still
+        // settling (on Android without a SIM there is NO connectivity at all for
+        // a few seconds), so a single fast probe races the network coming up.
+        // Retry once after a grace period before tearing the connection down.
+        window.setTimeout(() => {
+          if (nativeResumeValidationSeqRef.current !== validationSeq) return;
+          void reprobeActiveConnection().then((retry) => {
+            if (nativeResumeValidationSeqRef.current !== validationSeq) return;
+            if (retry === 'switched') return;
+            if (retry === 'unchanged') {
+              refreshInPlace();
+              return;
+            }
+            disconnect();
+          });
+        }, 4000);
+        return;
+      }
+      if (outcome === 'switched') return;
+
+      refreshInPlace();
     });
 
     const now = Date.now();
@@ -2259,6 +2295,29 @@ export function MobileApp({ apis }: MobileAppProps) {
 
   useNativeMobileChrome();
   useNativeMobileLifecycle(handleNativeResume);
+
+  // Network-change re-probe. The resume hook only fires on background→foreground,
+  // but on Android switching Wi-Fi (quick-settings tile) does NOT background the
+  // app — no visibility/appState event ever fires, so the app would sit on a dead
+  // LAN transport instead of hot-switching to relay. The webview's `online` event
+  // fires on connectivity changes (new Wi-Fi, cellular back, airplane off), so
+  // run the same re-probe then. Debounced: the first seconds after `online` the
+  // route is often not usable yet, and rapid offline/online flaps must collapse
+  // into one probe. iOS also gets this (harmless — same seq-guarded operation the
+  // resume path runs; a concurrent duplicate supersedes via the seq ref).
+  React.useEffect(() => {
+    if (!isNativeMobileApp) return;
+    let timer: number | undefined;
+    const handleOnline = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => handleNativeResume(), 1500);
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.clearTimeout(timer);
+    };
+  }, [isNativeMobileApp, handleNativeResume]);
 
   React.useEffect(() => {
     registerRuntimeAPIs(apis);

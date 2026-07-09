@@ -429,15 +429,7 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     page: 'remote-instances',
     titleKey: 'settings.remoteInstances.clientAuth.title',
     descriptionKey: 'settings.remoteInstances.clientAuth.description',
-    keywords: ['pairing link', 'client token', 'connect desktop', 'remote access'],
-    isAvailable: (ctx) => !ctx.isVSCode,
-  },
-  {
-    id: 'remote-instances.relay',
-    page: 'remote-instances',
-    titleKey: 'settings.remoteInstances.relay.title',
-    descriptionKey: 'settings.remoteInstances.relay.description',
-    keywords: ['relay', 'pairing', 'no ports', 'end-to-end encrypted', 'remote access', 'connect from anywhere'],
+    keywords: ['pairing link', 'client token', 'connect desktop', 'remote access', 'relay', 'devices', 'connect from anywhere'],
     isAvailable: (ctx) => !ctx.isVSCode,
   },
   {

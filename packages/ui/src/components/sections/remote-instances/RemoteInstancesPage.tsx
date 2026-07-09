@@ -21,7 +21,6 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
-import { RelaySection } from '@/components/sections/remote-instances/RelaySection';
 import { useDesktopSshStore } from '@/stores/useDesktopSshStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { toast } from '@/components/ui';
@@ -44,11 +43,15 @@ import {
 import {
   desktopHostsGet,
   desktopHostsSet,
+  desktopInstallIdGet,
   normalizeHostUrl,
   redactSensitiveUrl,
   resolveDesktopHostUrl,
+  relayHostDisplayUrl,
   type DesktopHost,
+  type DesktopHostRelay,
 } from '@/lib/desktopHosts';
+import { createRelayTunnelClient } from '@/lib/relay/tunnel-client';
 import { getDesktopLanAddress, isDesktopLocalOriginActive, isDesktopShell } from '@/lib/desktop';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getRuntimeApiBaseUrl, switchRuntimeEndpoint } from '@/lib/runtime-switch';
@@ -496,61 +499,120 @@ export const RemoteInstancesPage: React.FC = () => {
       setDirectError(t('settings.remoteInstances.direct.error.invalidConnectLink'));
       return;
     }
-    // Desktop host-switching is direct HTTP only; a relay-only pairing link
-    // can't be imported as a switchable host.
-    const directCandidates = payload.candidates.filter(
-      (candidate): candidate is Extract<PairingEndpointCandidate, { type: 'lan' | 'tunnel' }> => candidate.type !== 'relay',
+    // The redeem body is identical across every transport (the desktop is the
+    // same device however it reaches the server). The install-id dedupe key
+    // collapses re-pairing / re-auth of this desktop into one device record.
+    const installId = await desktopInstallIdGet().catch(() => '');
+    const redeemBody = JSON.stringify({
+      pairingId: payload.pairingId,
+      secret: payload.secret,
+      clientLabel: payload.label || 'OpenChamber Desktop',
+      clientKind: 'desktop',
+      deviceName: 'OpenChamber Desktop',
+      ...(installId ? { dedupeKey: `desktop:${installId}` } : {}),
+    });
+    const redeemInit: RequestInit = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: redeemBody,
+    };
+    const tokenFromResponse = async (response: Response): Promise<string | null> => {
+      if (!response.ok) return null;
+      const body = (await response.json().catch(() => null)) as { clientToken?: unknown } | null;
+      const token = typeof body?.clientToken === 'string' ? body.clientToken.trim() : '';
+      return token || null;
+    };
+
+    // Try direct (LAN/tunnel) candidates first — they're cheaper and don't need
+    // relay infrastructure — then fall back to relay. Ordered by payload priority.
+    const ordered = [...payload.candidates].sort(
+      (a, b) => (a.type === 'relay' ? 1 : 0) - (b.type === 'relay' ? 1 : 0),
     );
-    if (directCandidates.length === 0) {
-      setDirectError(t('desktopHostSwitcher.error.invalidUrl'));
-      return;
-    }
-    // Redeem the one-time secret at the first candidate that answers to mint a
-    // client token for this desktop. The remote instance is a user-provided URL,
-    // so a plain cross-origin fetch is correct here (not the active runtime).
-    let redeemed: { url: string; token: string } | null = null;
-    for (const candidate of directCandidates) {
+
+    let redeemed:
+      | { kind: 'direct'; url: string; token: string }
+      | { kind: 'relay'; relay: DesktopHostRelay; token: string }
+      | null = null;
+
+    for (const candidate of ordered) {
+      if (candidate.type === 'relay') {
+        // Open a throwaway E2EE tunnel just to redeem the one-time secret; the
+        // grant (if any) authorizes admission to the relay for this serverId.
+        const tunnel = createRelayTunnelClient({
+          relayUrl: candidate.relayUrl,
+          serverId: candidate.serverId,
+          hostEncPubJwk: candidate.hostEncPubJwk,
+          ...(candidate.grant ? { grant: candidate.grant } : {}),
+        });
+        try {
+          const response = await tunnel.fetch('/api/client-auth/pairing/redeem', redeemInit);
+          const token = await tokenFromResponse(response);
+          if (token) {
+            redeemed = {
+              kind: 'relay',
+              // grant is intentionally not persisted (one-time pairing artifact).
+              relay: { relayUrl: candidate.relayUrl, serverId: candidate.serverId, hostEncPubJwk: candidate.hostEncPubJwk },
+              token,
+            };
+            break;
+          }
+        } catch {
+          // Relay unreachable / handshake failed — try the next candidate.
+        } finally {
+          tunnel.close();
+        }
+        continue;
+      }
+      // Direct: the remote instance is a user-provided URL, so a plain
+      // cross-origin fetch is correct here (not the active runtime).
       const candidateUrl = normalizeHostUrl(candidate.url);
       if (!candidateUrl) continue;
       try {
-        const response = await fetch(`${candidateUrl}/api/client-auth/pairing/redeem`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({
-            pairingId: payload.pairingId,
-            secret: payload.secret,
-            clientLabel: payload.label || 'OpenChamber Desktop',
-            clientKind: 'desktop',
-            deviceName: 'OpenChamber Desktop',
-          }),
-        });
-        if (!response.ok) continue;
-        const body = (await response.json().catch(() => null)) as { clientToken?: unknown } | null;
-        const token = typeof body?.clientToken === 'string' ? body.clientToken.trim() : '';
+        const response = await fetch(`${candidateUrl}/api/client-auth/pairing/redeem`, redeemInit);
+        const token = await tokenFromResponse(response);
         if (token) {
-          redeemed = { url: candidateUrl, token };
+          redeemed = { kind: 'direct', url: candidateUrl, token };
           break;
         }
       } catch {
         // Unreachable candidate — try the next one.
       }
     }
+
     if (!redeemed) {
       setDirectError(t('desktopHostSwitcher.error.invalidUrl'));
       return;
     }
-    const { url, token } = redeemed;
-    const existing = directHosts.find((host) => normalizeHostUrl(host.apiUrl || host.url) === url);
-    if (existing) {
-      const nextHosts = directHosts.map((host) => host.id === existing.id
-        ? { ...host, label: payload.label || host.label, url, apiUrl: url, clientToken: token }
-        : host);
-      await persistDirectHosts(nextHosts, directDefaultHostId);
+
+    const makeId = (): string => (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `host-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+
+    if (redeemed.kind === 'relay') {
+      const { relay, token } = redeemed;
+      // Relay hosts are keyed by serverId (one host per server, regardless of
+      // which relay routes it), so re-importing updates the existing record.
+      const existing = directHosts.find((host) => host.relay?.serverId === relay.serverId);
+      const displayUrl = relayHostDisplayUrl(relay.serverId);
+      if (existing) {
+        const nextHosts = directHosts.map((host) => host.id === existing.id
+          ? { ...host, label: payload.label || host.label, url: displayUrl, apiUrl: undefined, clientToken: token, relay }
+          : host);
+        await persistDirectHosts(nextHosts, directDefaultHostId);
+      } else {
+        await persistDirectHosts([{ id: makeId(), label: payload.label || t('settings.remoteInstances.clientAuth.addDevice.transport.relay'), url: displayUrl, clientToken: token, relay }, ...directHosts], directDefaultHostId);
+      }
     } else {
-      const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : `host-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      await persistDirectHosts([{ id, label: payload.label || redactSensitiveUrl(url), url, apiUrl: url, clientToken: token }, ...directHosts], directDefaultHostId);
+      const { url, token } = redeemed;
+      const existing = directHosts.find((host) => !host.relay && normalizeHostUrl(host.apiUrl || host.url) === url);
+      if (existing) {
+        const nextHosts = directHosts.map((host) => host.id === existing.id
+          ? { ...host, label: payload.label || host.label, url, apiUrl: url, clientToken: token }
+          : host);
+        await persistDirectHosts(nextHosts, directDefaultHostId);
+      } else {
+        await persistDirectHosts([{ id: makeId(), label: payload.label || redactSensitiveUrl(url), url, apiUrl: url, clientToken: token }, ...directHosts], directDefaultHostId);
+      }
     }
     setDirectConnectLink('');
     setDirectError(null);
@@ -740,7 +802,11 @@ export const RemoteInstancesPage: React.FC = () => {
       const payload = buildPairingConnectionPayload({
         pairingId: pairing.id,
         secret: pairing.secret,
-        label: label || server.label,
+        // The typed name (`label`) is the per-device label shown in THIS server's
+        // device list; it already went to createPairingSession above. The payload
+        // label is what the paired device names its connection by, which must be
+        // the issuing server's name (hostname), not the device's own name.
+        label: server.label,
         fingerprint: pairing.fingerprint ?? undefined,
         expiresAt: pairing.expiresAt,
         candidates: server.candidates as unknown as PairingEndpointCandidate[],
@@ -1243,22 +1309,38 @@ export const RemoteInstancesPage: React.FC = () => {
                     ))}
                     {remoteClients.map((client) => {
                       const isLocalDesktopClient = client.clientKind === 'desktop-local';
+                      // Live presence: the server refreshes lastUsedAt on every
+                      // authenticated request (writes throttled to 60s), so a
+                      // device with activity in the last 90s is connected NOW.
+                      // The list polls every 5s, keeping this fresh.
+                      const lastUsedMs = client.lastUsedAt ? Date.parse(client.lastUsedAt) : Number.NaN;
+                      const isOnline = !client.revokedAt
+                        && (isLocalDesktopClient || (Number.isFinite(lastUsedMs) && Date.now() - lastUsedMs < 90_000));
+                      const statusText = client.revokedAt
+                        ? t('settings.remoteInstances.clientAuth.state.revoked')
+                        : isOnline
+                          ? (client.lastTransport === 'relay' && !isLocalDesktopClient
+                            ? t('settings.remoteInstances.clientAuth.state.connectedRelay')
+                            : t('settings.remoteInstances.clientAuth.state.connectedDirect'))
+                          : client.lastUsedAt
+                            ? t('settings.remoteInstances.clientAuth.lastUsed', { date: client.lastUsedAt })
+                            : t('settings.remoteInstances.clientAuth.neverUsed');
                       return (
                         <div key={client.id} className="flex items-center justify-between gap-3 py-1.5">
                           <div className="min-w-0">
                             <div className="flex min-w-0 items-center gap-2">
+                              <span className={cn(
+                                'h-2 w-2 shrink-0 rounded-full',
+                                client.revokedAt ? 'bg-muted-foreground/20' : isOnline ? 'bg-[var(--status-success)]' : 'bg-muted-foreground/30',
+                              )} />
                               <p className="typography-ui-label text-foreground truncate">{client.label}</p>
                               {isLocalDesktopClient ? (
                                 <span className="typography-micro text-muted-foreground bg-muted px-1 rounded flex-shrink-0 leading-none pb-px border border-border/50">
                                   {t('settings.remoteInstances.clientAuth.state.thisDevice')}
                                 </span>
-                              ) : client.usesRelay ? (
-                                <span className="typography-micro text-muted-foreground bg-muted px-1 rounded shrink-0 leading-none pb-px border border-border/50">
-                                  {t('settings.remoteInstances.clientAuth.state.viaRelay')}
-                                </span>
                               ) : null}
                             </div>
-                            <p className="typography-micro text-muted-foreground truncate">{client.revokedAt ? t('settings.remoteInstances.clientAuth.state.revoked') : client.lastUsedAt ? t('settings.remoteInstances.clientAuth.lastUsed', { date: client.lastUsedAt }) : t('settings.remoteInstances.clientAuth.neverUsed')}</p>
+                            <p className={cn('typography-micro truncate', isOnline && !client.revokedAt ? 'text-[var(--status-success)]' : 'text-muted-foreground')}>{statusText}</p>
                           </div>
                           <Button type="button" variant="ghost" size="xs" className="!font-normal" onClick={() => void revokeRemoteClient(client)} disabled={Boolean(client.revokedAt)}>
                             {t('settings.remoteInstances.clientAuth.actions.revoke')}
@@ -1273,8 +1355,6 @@ export const RemoteInstancesPage: React.FC = () => {
             </section>
           </div>
         ) : null}
-
-        {clientAuth ? <RelaySection /> : null}
 
         {showInstanceManagement ? <div data-settings-item="remote-instances.direct-hosts" className="mb-8 border-t border-[var(--surface-subtle)] pt-8">
           <div className="mb-1 px-1 space-y-0.5">
