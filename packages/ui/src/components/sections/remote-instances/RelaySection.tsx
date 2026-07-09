@@ -1,12 +1,9 @@
 import React from 'react';
-import { Button } from '@/components/ui/button';
-import { toast } from '@/components/ui';
 import { useI18n, type I18nKey } from '@/lib/i18n';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
 // OpenChamber-owned relay routes (registered before the generic OpenCode proxy).
 const RELAY_STATUS_ROUTE = '/api/openchamber/relay/status';
-const RELAY_DISABLE_ROUTE = '/api/openchamber/relay/disable';
 
 const STATUS_POLL_INTERVAL_MS = 5_000;
 
@@ -81,7 +78,6 @@ export const RelaySection: React.FC = () => {
   const { t } = useI18n();
   const [status, setStatus] = React.useState<RelayStatus | null>(null);
   const [statusLoaded, setStatusLoaded] = React.useState(false);
-  const [isToggling, setIsToggling] = React.useState(false);
 
   const refreshStatus = React.useCallback(async (signal?: AbortSignal) => {
     const next = await fetchRelayStatus(signal);
@@ -108,25 +104,6 @@ export const RelaySection: React.FC = () => {
       window.clearInterval(interval);
     };
   }, [refreshStatus]);
-
-  const handleDisable = React.useCallback(async () => {
-    const confirmed = window.confirm(t('settings.remoteInstances.relay.confirm.disable'));
-    if (!confirmed) return;
-    setIsToggling(true);
-    try {
-      const response = await runtimeFetch(RELAY_DISABLE_ROUTE, { method: 'POST' });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      await refreshStatus();
-    } catch (err) {
-      toast.error(t('settings.remoteInstances.relay.toast.disableFailed'), {
-        description: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setIsToggling(false);
-    }
-  }, [refreshStatus, t]);
 
   const enabled = status?.enabled === true;
   const state: RelayState = enabled ? (status?.state ?? 'disabled') : 'disabled';
@@ -156,11 +133,6 @@ export const RelaySection: React.FC = () => {
             <p className="typography-micro text-[var(--status-error)] break-all">{status.lastError}</p>
           ) : null}
         </div>
-        {enabled ? (
-          <Button type="button" variant="ghost" size="xs" className="!font-normal shrink-0" onClick={() => void handleDisable()} disabled={isToggling}>
-            {t('settings.remoteInstances.relay.actions.disable')}
-          </Button>
-        ) : null}
       </div>
     </div>
   );

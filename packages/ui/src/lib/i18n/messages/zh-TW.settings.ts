@@ -271,6 +271,8 @@
   'settings.remoteInstances.clientAuth.state.empty': '尚無用戶端 token。',
   'settings.remoteInstances.clientAuth.state.revoked': '已撤銷',
   'settings.remoteInstances.clientAuth.state.thisDevice': '此裝置',
+  'settings.remoteInstances.clientAuth.state.pending': 'Waiting to connect…',
+  'settings.remoteInstances.clientAuth.state.viaRelay': 'Relay',
   'settings.remoteInstances.clientAuth.lastUsed': '上次使用：{date}',
   'settings.remoteInstances.clientAuth.neverUsed': '從未使用',
   'settings.remoteInstances.relay.title': 'OpenChamber Relay',

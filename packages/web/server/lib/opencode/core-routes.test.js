@@ -295,6 +295,7 @@ describe('core-routes', () => {
       label: 'Pair phone',
       allowedClientKinds: ['mobile'],
       createdByClientId: null,
+      usesRelay: false,
     });
   });
 

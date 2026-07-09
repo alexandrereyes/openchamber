@@ -1,6 +1,7 @@
 import type {
   ClientAuthAPI,
   PairingSessionCreateResult,
+  PendingPairingRecord,
   RemoteClientCreateResult,
   RemoteClientPurgeRevokedResult,
   RemoteClientRecord,
@@ -55,6 +56,30 @@ export const createWebClientAuthAPI = (): ClientAuthAPI => ({
       throw new Error(payload?.error || response.statusText || 'Failed to create pairing session');
     }
     return payload;
+  },
+
+  async listPendingPairings(): Promise<PendingPairingRecord[]> {
+    const response = await runtimeFetch('/api/client-auth/pairing/sessions', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const payload = await jsonOrNull<{ pending?: PendingPairingRecord[]; error?: string }>(response);
+    if (!response.ok || !payload) {
+      throw new Error(payload?.error || response.statusText || 'Failed to load pending pairings');
+    }
+    return Array.isArray(payload.pending) ? payload.pending : [];
+  },
+
+  async cancelPairing(id: string): Promise<{ cancelled: boolean }> {
+    const response = await runtimeFetch(`/api/client-auth/pairing/sessions/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    const payload = await jsonOrNull<{ cancelled?: boolean; error?: string }>(response);
+    if (!response.ok || !payload) {
+      throw new Error(payload?.error || response.statusText || 'Failed to cancel pairing');
+    }
+    return { cancelled: payload.cancelled === true };
   },
 
   async revokeClient(id: string): Promise<RemoteClientRevokeResult> {

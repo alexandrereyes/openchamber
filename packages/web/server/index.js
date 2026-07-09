@@ -1267,6 +1267,9 @@ async function main(options = {}) {
         ? relayServiceInstance.ensureEnabledForPairing()
         : relayServiceInstance.getPairingCandidate();
     },
+    // Re-evaluate the relay lifecycle after pairing/device changes (a revoked or
+    // redeemed device can flip relay demand on or off).
+    reconcileRelay: () => (relayServiceInstance ? relayServiceInstance.reconcile() : Promise.resolve()),
     readSettingsFromDiskMigrated,
     normalizeTunnelSessionTtlMs,
     sayTTSCapability,
@@ -1320,6 +1323,15 @@ async function main(options = {}) {
     writeSettingsToDisk,
     remoteClientAuthRuntime,
     getLocalPort: () => tunnelRuntimeContext.getActivePort(),
+    // Relay demand = any paired device or pending pairing session that uses the
+    // relay transport. Drives the auto on/off lifecycle.
+    hasRelayDemand: async () => {
+      const [pendingRelay, deviceRelay] = await Promise.all([
+        clientPairingRuntime.hasActiveRelaySession().catch(() => false),
+        remoteClientAuthRuntime.hasActiveRelayClients().catch(() => false),
+      ]);
+      return pendingRelay || deviceRelay;
+    },
   });
   relayServiceInstance = relayService;
   relayService.registerRoutes(app);
@@ -1434,7 +1446,9 @@ async function main(options = {}) {
   }
 
   // Only opens a relay control socket when the user opted in (config enabled).
-  void relayService.startIfEnabled();
+  // Reconcile the relay lifecycle from demand on startup: run it if any relay
+  // device/session exists, stop it (and clear a stale enabled flag) otherwise.
+  void relayService.reconcile();
 
   return {
     expressApp: app,

@@ -86,6 +86,7 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
           expiresAt: normalizeTimestamp(client.expiresAt),
           clientKind: normalizeOptionalString(client.clientKind),
           dedupeKey: normalizeOptionalString(client.dedupeKey),
+          usesRelay: client.usesRelay === true,
           ...normalizeMetadata(client),
         }))
         .filter((client) => client.tokenHash.length > 0)
@@ -124,12 +125,28 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
     devicePlatform: client.devicePlatform,
     deviceModel: client.deviceModel,
     appVersion: client.appVersion,
+    usesRelay: client.usesRelay === true,
   });
 
   const listClients = async () => {
     return withStoreMutation(async () => {
       const store = await readStore();
       return store.clients.map(publicClient);
+    });
+  };
+
+  // Relay-transport demand from paired devices: any non-revoked, non-expired
+  // client that was paired over the relay.
+  const hasActiveRelayClients = async () => {
+    return withStoreMutation(async () => {
+      const store = await readStore();
+      const now = Date.now();
+      return store.clients.some((client) => {
+        if (client.usesRelay !== true) return false;
+        if (client.revokedAt) return false;
+        const expires = Date.parse(client.expiresAt || '');
+        return !Number.isFinite(expires) || expires > now;
+      });
     });
   };
 
@@ -144,6 +161,7 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
     devicePlatform,
     deviceModel,
     appVersion,
+    usesRelay,
   } = {}) => {
     return withStoreMutation(async () => {
       const store = await readStore();
@@ -165,6 +183,7 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
         devicePlatform: normalizeOptionalString(devicePlatform),
         deviceModel: normalizeOptionalString(deviceModel),
         appVersion: normalizeOptionalString(appVersion),
+        usesRelay: usesRelay === true,
       };
       if (normalizedDedupeKey) {
         store.clients = store.clients.filter((entry) => entry.dedupeKey !== normalizedDedupeKey);
@@ -234,6 +253,7 @@ export const createRemoteClientAuthRuntime = ({ fsPromises, path, crypto, storeP
     authenticateBearerToken,
     createClient,
     listClients,
+    hasActiveRelayClients,
     purgeRevokedClients,
     revokeClient,
   };

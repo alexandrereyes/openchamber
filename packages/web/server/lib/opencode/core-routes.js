@@ -365,6 +365,8 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
     // hostEncPubJwk, priority }) when the host relay is enabled, else null.
     // Injected lazily because the relay service is constructed after these routes.
     getRelayPairingCandidate = async () => null,
+    // Re-evaluate the relay lifecycle after pairing/device changes.
+    reconcileRelay = async () => {},
   } = dependencies;
   const PAIRING_REDEEM_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000;
   const PAIRING_REDEEM_RATE_LIMIT_MAX_ATTEMPTS = 10;
@@ -733,6 +735,7 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
       if (!result.revoked) {
         return res.status(404).json({ revoked: false, error: 'Client not found' });
       }
+      void reconcileRelay();
       res.json(result);
     });
   });
@@ -740,29 +743,41 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
   app.delete('/api/client-auth/clients', async (req, res, next) => {
     await runWithUiAuth(req, res, next, async () => {
       const result = await remoteClientAuthRuntime.purgeRevokedClients();
+      void reconcileRelay();
       res.json(result);
     }, { sessionOnly: true });
   });
 
   app.post('/api/client-auth/pairing/sessions', express.json({ limit: '64kb' }), async (req, res, next) => {
     await runWithClientCreateAuth(req, res, next, async (authContext) => {
+      const candidates = await pairingServerCandidates(req, {
+        preferredServerUrl: req.body?.serverUrl,
+        includeRelay: typeof req.body?.includeRelay === 'boolean' ? req.body.includeRelay : undefined,
+        includeDirect: req.body?.includeDirect !== false,
+      });
+      const usesRelay = candidates.some((candidate) => candidate.type === 'relay');
       const result = await clientPairingRuntime.createPairingSession({
         label: req.body?.label,
         allowedClientKinds: req.body?.allowedClientKinds,
         createdByClientId: clientIdFromAuthContext(authContext),
+        usesRelay,
       });
+      void reconcileRelay();
       res.setHeader('Cache-Control', 'no-store');
       res.status(201).json({
         ...result,
-        server: {
-          label: 'OpenChamber',
-          candidates: await pairingServerCandidates(req, {
-            preferredServerUrl: req.body?.serverUrl,
-            includeRelay: typeof req.body?.includeRelay === 'boolean' ? req.body.includeRelay : undefined,
-            includeDirect: req.body?.includeDirect !== false,
-          }),
-        },
+        server: { label: 'OpenChamber', candidates },
       });
+    });
+  });
+
+  // Pending pairing sessions (link created, device not yet connected) for the
+  // "pending devices" list. Secrets are never included.
+  app.get('/api/client-auth/pairing/sessions', async (req, res, next) => {
+    await runWithClientCreateAuth(req, res, next, async () => {
+      const pending = await clientPairingRuntime.listPendingSessions();
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ pending });
     });
   });
 
@@ -772,6 +787,7 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
       if (!result.cancelled) {
         return res.status(404).json({ cancelled: false, error: 'Pairing session not found' });
       }
+      void reconcileRelay();
       res.json(result);
     });
   });
@@ -798,6 +814,9 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
         dedupeKey: req.body?.dedupeKey,
       });
       clearPairingRedeemRateLimit(req);
+      // The session became a device: relay demand may have moved from the pending
+      // session to the paired device (or a non-relay redeem may drop it).
+      void reconcileRelay();
       res.setHeader('Cache-Control', 'no-store');
       res.json({
         ok: true,

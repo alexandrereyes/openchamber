@@ -59,6 +59,9 @@ export const createRelayService = ({
   readSettingsFromDiskMigrated,
   writeSettingsToDisk,
   getLocalPort,
+  // Returns true when any paired device or pending pairing session uses the
+  // relay transport. The relay lifecycle is driven purely by this demand.
+  hasRelayDemand = async () => false,
   logger = console,
 }) => {
   const identityRuntime = createRelayIdentityRuntime({ crypto, readSettingsFromDiskMigrated, writeSettingsToDisk });
@@ -117,6 +120,28 @@ export const createRelayService = ({
       }
     } catch (error) {
       logger.warn(`[Relay] startup failed: ${error?.message ?? error}`);
+    }
+  };
+
+  // Drive the relay lifecycle from demand: run it when a device or pending
+  // session uses the relay, stop it when none remain. Called on startup and after
+  // pairing/device changes, so the operator never toggles it manually.
+  const reconcile = async () => {
+    try {
+      const demand = await hasRelayDemand();
+      const config = await readConfig();
+      if (demand) {
+        if (!config.enabled) await writeConfig({ enabled: true, relayUrl: config.relayUrl });
+        if (!hostClient) {
+          const next = await readConfig();
+          await start(next.relayUrl);
+        }
+      } else {
+        if (config.enabled) await writeConfig({ enabled: false, relayUrl: config.relayUrl });
+        stop();
+      }
+    } catch (error) {
+      logger.warn(`[Relay] reconcile failed: ${error?.message ?? error}`);
     }
   };
 
@@ -213,6 +238,7 @@ export const createRelayService = ({
   return {
     registerRoutes,
     startIfEnabled,
+    reconcile,
     stop,
     getStatus,
     getPairingCandidate,

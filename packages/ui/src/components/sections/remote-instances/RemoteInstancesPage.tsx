@@ -32,7 +32,7 @@ import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import { useI18n, type I18nKey } from '@/lib/i18n';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
-import type { RemoteClientRecord } from '@/lib/api/types';
+import type { PendingPairingRecord, RemoteClientRecord } from '@/lib/api/types';
 import { buildPairingConnectionPayload, encodePairingConnectionPayload, parsePairingConnectionPayload, type PairingEndpointCandidate } from '@/lib/connectionPayload';
 import {
   desktopSshLogsClear,
@@ -404,6 +404,7 @@ export const RemoteInstancesPage: React.FC = () => {
   const [directEditToken, setDirectEditToken] = React.useState('');
   const [directEditHeaders, setDirectEditHeaders] = React.useState<HeaderDraft[]>([]);
   const [remoteClients, setRemoteClients] = React.useState<RemoteClientRecord[]>([]);
+  const [pendingPairings, setPendingPairings] = React.useState<PendingPairingRecord[]>([]);
   const [remoteClientsLoading, setRemoteClientsLoading] = React.useState(false);
   const [remoteClientLabel, setRemoteClientLabel] = React.useState('');
   const [remoteClientError, setRemoteClientError] = React.useState<string | null>(null);
@@ -629,7 +630,12 @@ export const RemoteInstancesPage: React.FC = () => {
     if (!options?.silent) setRemoteClientsLoading(true);
     if (!options?.silent) setRemoteClientError(null);
     try {
-      setRemoteClients(await clientAuth.listClients());
+      const [clients, pending] = await Promise.all([
+        clientAuth.listClients(),
+        clientAuth.listPendingPairings().catch(() => [] as PendingPairingRecord[]),
+      ]);
+      setRemoteClients(clients);
+      setPendingPairings(pending);
     } catch (err) {
       // A silent poll must not surface a transient error over the live list.
       if (!options?.silent) setRemoteClientError(err instanceof Error ? err.message : String(err));
@@ -637,6 +643,17 @@ export const RemoteInstancesPage: React.FC = () => {
       if (!options?.silent) setRemoteClientsLoading(false);
     }
   }, [clientAuth]);
+
+  const cancelPendingPairing = React.useCallback(async (id: string) => {
+    if (!clientAuth) return;
+    try {
+      await clientAuth.cancelPairing(id);
+      setPendingPairings((prev) => prev.filter((entry) => entry.id !== id));
+      await loadRemoteClients({ silent: true });
+    } catch (err) {
+      setRemoteClientError(err instanceof Error ? err.message : String(err));
+    }
+  }, [clientAuth, loadRemoteClients]);
 
   // Load on mount, then poll while the page is visible so a device that redeems
   // a pairing link shows up in the list without reopening settings.
@@ -1192,31 +1209,56 @@ export const RemoteInstancesPage: React.FC = () => {
                     </Button>
                   </div>
                 ) : null}
-                {remoteClientsLoading ? (
+                {remoteClientsLoading && remoteClients.length === 0 && pendingPairings.length === 0 ? (
                   <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.state.loading')}</p>
-                ) : remoteClients.length === 0 ? (
+                ) : remoteClients.length === 0 && pendingPairings.length === 0 ? (
                   <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.clientAuth.state.empty')}</p>
-                ) : remoteClients.map((client) => {
-                  const isLocalDesktopClient = client.clientKind === 'desktop-local';
-                  return (
-                    <div key={client.id} className="flex items-center justify-between gap-3 py-1.5">
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <p className="typography-ui-label text-foreground truncate">{client.label}</p>
-                          {isLocalDesktopClient ? (
-                            <span className="typography-micro text-muted-foreground bg-muted px-1 rounded flex-shrink-0 leading-none pb-px border border-border/50">
-                              {t('settings.remoteInstances.clientAuth.state.thisDevice')}
-                            </span>
-                          ) : null}
+                ) : (
+                  <>
+                    {pendingPairings.map((pending) => (
+                      <div key={`pending-${pending.id}`} className="flex items-center justify-between gap-3 py-1.5">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--status-warning)] animate-pulse" />
+                            <p className="typography-ui-label text-foreground truncate">{pending.label || t('settings.remoteInstances.clientAuth.field.labelPlaceholder')}</p>
+                            {pending.usesRelay ? (
+                              <span className="typography-micro text-muted-foreground bg-muted px-1 rounded shrink-0 leading-none pb-px border border-border/50">{t('settings.remoteInstances.clientAuth.state.viaRelay')}</span>
+                            ) : null}
+                          </div>
+                          <p className="typography-micro text-muted-foreground truncate">{t('settings.remoteInstances.clientAuth.state.pending')}</p>
                         </div>
-                        <p className="typography-micro text-muted-foreground truncate">{client.revokedAt ? t('settings.remoteInstances.clientAuth.state.revoked') : client.lastUsedAt ? t('settings.remoteInstances.clientAuth.lastUsed', { date: client.lastUsedAt }) : t('settings.remoteInstances.clientAuth.neverUsed')}</p>
+                        <Button type="button" variant="ghost" size="xs" className="!font-normal" onClick={() => void cancelPendingPairing(pending.id)}>
+                          {t('settings.common.actions.cancel')}
+                        </Button>
                       </div>
-                      <Button type="button" variant="ghost" size="xs" className="!font-normal" onClick={() => void revokeRemoteClient(client)} disabled={Boolean(client.revokedAt)}>
-                        {t('settings.remoteInstances.clientAuth.actions.revoke')}
-                      </Button>
-                    </div>
-                  );
-                })}
+                    ))}
+                    {remoteClients.map((client) => {
+                      const isLocalDesktopClient = client.clientKind === 'desktop-local';
+                      return (
+                        <div key={client.id} className="flex items-center justify-between gap-3 py-1.5">
+                          <div className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="typography-ui-label text-foreground truncate">{client.label}</p>
+                              {isLocalDesktopClient ? (
+                                <span className="typography-micro text-muted-foreground bg-muted px-1 rounded flex-shrink-0 leading-none pb-px border border-border/50">
+                                  {t('settings.remoteInstances.clientAuth.state.thisDevice')}
+                                </span>
+                              ) : client.usesRelay ? (
+                                <span className="typography-micro text-muted-foreground bg-muted px-1 rounded shrink-0 leading-none pb-px border border-border/50">
+                                  {t('settings.remoteInstances.clientAuth.state.viaRelay')}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="typography-micro text-muted-foreground truncate">{client.revokedAt ? t('settings.remoteInstances.clientAuth.state.revoked') : client.lastUsedAt ? t('settings.remoteInstances.clientAuth.lastUsed', { date: client.lastUsedAt }) : t('settings.remoteInstances.clientAuth.neverUsed')}</p>
+                          </div>
+                          <Button type="button" variant="ghost" size="xs" className="!font-normal" onClick={() => void revokeRemoteClient(client)} disabled={Boolean(client.revokedAt)}>
+                            {t('settings.remoteInstances.clientAuth.actions.revoke')}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
               </div>
               {remoteClientError ? <p className="typography-meta text-[var(--status-error)]">{remoteClientError}</p> : null}
             </section>

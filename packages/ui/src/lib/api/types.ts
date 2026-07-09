@@ -1107,6 +1107,19 @@ export interface RemoteClientRecord {
   revokedAt: string | null;
   expiresAt?: string | null;
   clientKind?: string | null;
+  authMethod?: string | null;
+  deviceName?: string | null;
+  devicePlatform?: string | null;
+  usesRelay?: boolean;
+}
+
+// A pairing link that has been created but not yet redeemed by a device.
+export interface PendingPairingRecord {
+  id: string;
+  label?: string;
+  fingerprint?: string | null;
+  expiresAt?: string;
+  usesRelay?: boolean;
 }
 
 export interface RemoteClientCreateResult {
@@ -1160,6 +1173,9 @@ export interface ClientAuthAPI {
   }): Promise<PairingSessionCreateResult>;
   purgeRevokedClients(): Promise<RemoteClientPurgeRevokedResult>;
   revokeClient(id: string): Promise<RemoteClientRevokeResult>;
+  // Pairing links created but not yet redeemed (the "pending devices" list).
+  listPendingPairings(): Promise<PendingPairingRecord[]>;
+  cancelPairing(id: string): Promise<{ cancelled: boolean }>;
 }
 
 export interface RuntimeAPIs {
