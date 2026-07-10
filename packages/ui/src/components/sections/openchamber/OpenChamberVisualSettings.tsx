@@ -33,6 +33,7 @@ import {
     setDirectoryShowHidden,
     useDirectoryShowHidden,
 } from '@/lib/directoryShowHidden';
+import { SettingsSection, SettingsTwoColumn } from '@/components/sections/shared/SettingsSection';
 
 interface Option<T extends string> {
     id: T;
@@ -720,12 +721,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                 {hasAppearanceSettings && (
                     <div className="space-y-0">
                         {hasThemeSettings && (
-                            <section className="space-y-4 pb-8">
-                                <h2 className="typography-ui-header font-medium text-foreground">
-                                    {t('settings.openchamber.visual.section.colorModeAndTheme')}
-                                </h2>
-
-                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
+                            <SettingsSection title={t('settings.openchamber.visual.section.colorModeAndTheme')} divider={false}>
+                                <SettingsTwoColumn>
                                     <div className="space-y-3">
                                         <div
                                             role="radiogroup"
@@ -867,7 +864,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             </Tooltip>
                                         </div>
                                     </div>
-                                </div>
+                                </SettingsTwoColumn>
 
                                 {macVibrancySupported && (
                                     <div data-settings-item="appearance.window-transparency" className="flex flex-col gap-1.5 border-t border-border/40 pt-4">
@@ -950,16 +947,12 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </div>
                                     </div>
                                 )}
-                            </section>
+                            </SettingsSection>
                         )}
 
                         {hasLocalizationSettings && (
-                            <section className="space-y-4 border-t border-border/40 py-8">
-                                <h2 className="typography-ui-header font-medium text-foreground">
-                                    {t('settings.openchamber.visual.section.localization')}
-                                </h2>
-
-                                <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
+                            <SettingsSection title={t('settings.openchamber.visual.section.localization')}>
+                                <SettingsTwoColumn>
                                     <div data-settings-item="appearance.language" className="space-y-1.5">
                                         <div className="flex min-w-0 flex-col">
                                             <span className="typography-ui-label text-foreground">{t('settings.appearance.language.label')}</span>
@@ -1014,15 +1007,12 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             )}
                                         </div>
                                     )}
-                                </div>
-                            </section>
+                                </SettingsTwoColumn>
+                            </SettingsSection>
                         )}
 
                         {(showPwaInstallNameSetting || showPwaOrientationSetting || showMobileKeyboardModeSetting) && (
-                            <section className="space-y-4 border-t border-border/40 py-8">
-                            <h2 className="typography-ui-header font-medium text-foreground">
-                                {t('settings.openchamber.visual.section.appInstall')}
-                            </h2>
+                            <SettingsSection title={t('settings.openchamber.visual.section.appInstall')}>
 
                             {showPwaInstallNameSetting && (
                                 <div data-settings-item="appearance.pwa-install-name" className="py-1.5 space-y-1.5">
@@ -1157,19 +1147,15 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     </div>
                                 </div>
                             )}
-                            </section>
+                            </SettingsSection>
                         )}
                     </div>
                 )}
 
                 {/* --- Density & type --- */}
                 {hasLayoutSettings && (
-                    <section className="space-y-4 border-t border-border/40 py-8">
-                        <h2 className="typography-ui-header font-medium text-foreground">
-                            {t('settings.openchamber.visual.section.densityAndType')}
-                        </h2>
-
-                        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10">
+                    <SettingsSection title={t('settings.openchamber.visual.section.densityAndType')}>
+                        <SettingsTwoColumn>
                             <div className="space-y-3">
                                 {shouldShow('fontSize') && !isMobile && (
                                     <div data-settings-item="appearance.interface-font-size" className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
@@ -1358,14 +1344,13 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     </div>
                                 )}
                             </div>
-                        </div>
-                    </section>
+                        </SettingsTwoColumn>
+                    </SettingsSection>
                 )}
 
                 {/* --- Navigation --- */}
                 {hasNavigationSettings && (
-                    <section className="space-y-4 border-t border-border/40 py-8">
-                            <h2 className="typography-ui-header font-medium text-foreground">{t('settings.openchamber.visual.section.navigation')}</h2>
+                    <SettingsSection title={t('settings.openchamber.visual.section.navigation')}>
                             {shouldShow('fileEditorKeymap') && (
                                 <div data-settings-item="appearance.file-editor-keymap" className="flex flex-col gap-2 py-1.5 sm:flex-row sm:items-start sm:gap-8">
                                     <span className="typography-ui-label text-foreground sm:w-56 shrink-0">
@@ -1464,7 +1449,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     </div>
                                 </div>
                             )}
-                    </section>
+                    </SettingsSection>
                 )}
 
                 {hasBehaviorSettings && (
@@ -2193,8 +2178,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
                 {/* --- Privacy & Data --- */}
                 {shouldShow('reportUsage') && (
-                    <section className="space-y-4 border-t border-border/40 py-8">
-                        <h2 className="typography-ui-header font-medium text-foreground">{t('settings.openchamber.visual.section.privacy')}</h2>
+                    <SettingsSection title={t('settings.openchamber.visual.section.privacy')}>
                         <div data-settings-item="appearance.usage-reports" className="flex items-start gap-2 py-1.5">
                             <Checkbox
                                 checked={reportUsage}
@@ -2222,7 +2206,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 </span>
                             </div>
                         </div>
-                    </section>
+                    </SettingsSection>
                 )}
 
             </div>
