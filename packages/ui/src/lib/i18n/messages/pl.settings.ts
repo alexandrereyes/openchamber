@@ -169,6 +169,7 @@ export const settingsDict = {
   'settings.common.actions.reset': 'Zresetuj',
   'settings.common.actions.saveChanges': 'Zapisz zmiany',
   'settings.common.actions.saving': 'Zapisywanie...',
+  'settings.common.status.saved': 'Zapisano',
   'settings.common.badge.modified': 'Zmodyfikowano',
   'settings.common.badge.new': 'Nowy',
   'settings.common.field.description': 'Opis',

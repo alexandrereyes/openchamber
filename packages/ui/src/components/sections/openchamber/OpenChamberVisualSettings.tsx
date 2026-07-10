@@ -756,11 +756,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 gap-2 py-1.5 md:grid-cols-[14rem_auto] md:gap-x-8 md:gap-y-2">
-                                    <div data-settings-item="appearance.light-theme" className="flex min-w-0 items-center gap-2">
-                                        <span className="typography-ui-label text-foreground shrink-0">{t('settings.openchamber.visual.field.lightTheme')}</span>
+                                <div className="space-y-2 py-1.5">
+                                    <div data-settings-item="appearance.light-theme" className="grid grid-cols-1 gap-2 md:grid-cols-[14rem_minmax(0,1fr)] md:items-center md:gap-x-8">
+                                        <span className="typography-ui-label text-foreground">{t('settings.openchamber.visual.field.lightTheme')}</span>
                                         <Select value={selectedLightTheme?.metadata.id ?? ''} onValueChange={setLightThemePreference}>
-                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectLightThemeAria')} className="w-fit">
+                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectLightThemeAria')} className="w-full max-w-56">
                                                 <SelectValue placeholder={t('settings.openchamber.visual.field.selectThemePlaceholder')}>
                                                     {selectedLightTheme
                                                         ? formatThemeLabel(selectedLightTheme.metadata.name, 'light')
@@ -776,10 +776,10 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div data-settings-item="appearance.dark-theme" className="flex min-w-0 items-center gap-2">
-                                        <span className="typography-ui-label text-foreground shrink-0">{t('settings.openchamber.visual.field.darkTheme')}</span>
+                                    <div data-settings-item="appearance.dark-theme" className="grid grid-cols-1 gap-2 md:grid-cols-[14rem_minmax(0,1fr)] md:items-center md:gap-x-8">
+                                        <span className="typography-ui-label text-foreground">{t('settings.openchamber.visual.field.darkTheme')}</span>
                                         <Select value={selectedDarkTheme?.metadata.id ?? ''} onValueChange={setDarkThemePreference}>
-                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectDarkThemeAria')} className="w-fit">
+                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectDarkThemeAria')} className="w-full max-w-56">
                                                 <SelectValue placeholder={t('settings.openchamber.visual.field.selectThemePlaceholder')}>
                                                     {selectedDarkTheme
                                                         ? formatThemeLabel(selectedDarkTheme.metadata.name, 'dark')
@@ -920,16 +920,16 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                         )}
 
                         {hasLocalizationSettings && (
-                            <section className="px-2 pb-2 pt-0 space-y-2">
+                            <section className="border-t border-border/40 px-2 pb-2 pt-6 space-y-2">
                                 <h4 className="typography-ui-header font-medium text-foreground">{t('settings.openchamber.visual.section.localization')}</h4>
 
-                                <div data-settings-item="appearance.language" className="grid grid-cols-1 gap-2 py-1.5 md:grid-cols-[14rem_auto] md:gap-x-8 md:gap-y-2">
+                                <div data-settings-item="appearance.language" className="grid grid-cols-1 gap-2 py-1.5 md:grid-cols-[14rem_minmax(0,1fr)] md:gap-x-8 md:gap-y-2">
                                     <div className="flex min-w-0 flex-col">
                                         <span className="typography-ui-label text-foreground shrink-0">{t('settings.appearance.language.label')}</span>
                                         <span className="typography-meta text-muted-foreground">{t('settings.appearance.language.description')}</span>
                                     </div>
                                     <Select value={locale} onValueChange={(value) => setLocale(value as Locale)}>
-                                        <SelectTrigger aria-label={t('settings.appearance.language.select')} className="w-fit">
+                                        <SelectTrigger aria-label={t('settings.appearance.language.select')} className="w-full max-w-56">
                                             <SelectValue>{label(locale)}</SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
@@ -943,12 +943,12 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 </div>
 
                                 {(shouldShow('timeFormat') || shouldShow('weekStart')) && (
-                                    <div className="grid grid-cols-1 gap-2 py-1.5 md:grid-cols-[14rem_auto] md:gap-x-8 md:gap-y-2">
+                                    <div className="space-y-2 py-1.5">
                                         {shouldShow('timeFormat') && (
-                                            <div data-settings-item="appearance.time-format" className="flex min-w-0 items-center gap-2">
-                                                <span className="typography-ui-label text-foreground shrink-0">{t('settings.openchamber.visual.field.timeFormat')}</span>
+                                            <div data-settings-item="appearance.time-format" className="grid grid-cols-1 gap-2 md:grid-cols-[14rem_minmax(0,1fr)] md:items-center md:gap-x-8">
+                                                <span className="typography-ui-label text-foreground">{t('settings.openchamber.visual.field.timeFormat')}</span>
                                                 <Select value={timeFormatPreference} onValueChange={(value: 'auto' | '12h' | '24h') => handleTimeFormatPreferenceChange(value)}>
-                                                    <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectTimeFormatAria')} className="w-fit">
+                                                    <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectTimeFormatAria')} className="w-full max-w-56">
                                                         <SelectValue>{selectedTimeFormatLabel}</SelectValue>
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -961,10 +961,10 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         )}
 
                                         {shouldShow('weekStart') && (
-                                            <div data-settings-item="appearance.week-start" className="flex min-w-0 items-center gap-2">
-                                                <span className="typography-ui-label text-foreground shrink-0">{t('settings.openchamber.visual.field.weekStartsOn')}</span>
+                                            <div data-settings-item="appearance.week-start" className="grid grid-cols-1 gap-2 md:grid-cols-[14rem_minmax(0,1fr)] md:items-center md:gap-x-8">
+                                                <span className="typography-ui-label text-foreground">{t('settings.openchamber.visual.field.weekStartsOn')}</span>
                                                 <Select value={weekStartPreference} onValueChange={(value: 'auto' | 'monday' | 'sunday') => handleWeekStartPreferenceChange(value)}>
-                                                    <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectWeekStartAria')} className="w-fit">
+                                                    <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectWeekStartAria')} className="w-full max-w-56">
                                                         <SelectValue>{selectedWeekStartLabel}</SelectValue>
                                                     </SelectTrigger>
                                                     <SelectContent>
@@ -981,7 +981,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                         )}
 
                         {(showPwaInstallNameSetting || showPwaOrientationSetting || showMobileKeyboardModeSetting) && (
-                            <section className="px-2 pb-2 pt-0 space-y-2">
+                            <section className="border-t border-border/40 px-2 pb-2 pt-6 space-y-2">
 
                             {showPwaInstallNameSetting && (
                                 <div data-settings-item="appearance.pwa-install-name" className="py-1.5 space-y-1.5">
@@ -1123,7 +1123,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
                 {/* --- UI Scaling & Layout --- */}
                 {hasLayoutSettings && (
-                    <div className="mb-8 space-y-3">
+                    <div className="border-t border-border/40 pt-6 space-y-3">
                         <section className="p-2 space-y-0.5">
                             <h4 className="typography-ui-header font-medium text-foreground">{t('settings.openchamber.visual.section.spacingAndLayout')}</h4>
                             <div className="pl-2">
@@ -1135,7 +1135,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     </div>
                                     <div className="flex items-center gap-2 w-fit">
                                         <Select value={uiFont} onValueChange={(value) => setUiFont(value as UiFontOption)}>
-                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectInterfaceFontAria')} className="w-[13rem]">
+                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectInterfaceFontAria')} className="w-56">
                                                 <SelectValue>{UI_FONT_OPTIONS.find((option) => option.id === uiFont)?.label}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1168,7 +1168,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     </div>
                                     <div className={cn("flex items-center gap-2", isMobile ? "w-full" : "w-fit")}>
                                         <Select value={monoFont} onValueChange={(value) => setMonoFont(value as MonoFontOption)}>
-                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectCodeFontAria')} className="w-[13rem]">
+                                            <SelectTrigger aria-label={t('settings.openchamber.visual.field.selectCodeFontAria')} className="w-56">
                                                 <SelectValue>{CODE_FONT_OPTIONS.find((option) => option.id === monoFont)?.label}</SelectValue>
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1329,7 +1329,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
                 {/* --- Navigation --- */}
                 {hasNavigationSettings && (
-                    <div className="space-y-3">
+                    <div className="border-t border-border/40 pt-6 space-y-3">
                         <section className="px-2 pb-2 pt-0">
                             <h4 className="typography-ui-header font-medium text-foreground">{t('settings.openchamber.visual.section.navigation')}</h4>
                             {shouldShow('fileEditorKeymap') && (
@@ -2160,7 +2160,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
                 {/* --- Privacy & Data --- */}
                 {shouldShow('reportUsage') && (
-                    <div className="space-y-3">
+                    <div className="border-t border-border/40 pt-6 space-y-3">
                         <section className="px-2 pb-2 pt-0">
                             <h4 className="typography-ui-header font-medium text-foreground mb-2">{t('settings.openchamber.visual.section.privacy')}</h4>
                             <div data-settings-item="appearance.usage-reports" className="flex items-start gap-2 py-1.5">

@@ -357,6 +357,7 @@ export const settingsDict = {
   'settings.common.actions.copyAll': '全部复制',
   'settings.common.actions.clear': '清除',
   'settings.common.actions.saving': '保存中...',
+  'settings.common.status.saved': '已保存',
   'settings.common.actions.saveChanges': '保存更改',
   'settings.common.scope.global': '全局',
   'settings.common.scope.project': '项目',

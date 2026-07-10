@@ -357,6 +357,7 @@ export const settingsDict = {
   "settings.common.actions.copyAll": "Copiar todo",
   "settings.common.actions.clear": "Limpiar",
   "settings.common.actions.saving": "Guardando...",
+  'settings.common.status.saved': 'Guardado',
   "settings.common.actions.saveChanges": "Guardar cambios",
   "settings.common.scope.global": "Global",
   "settings.common.scope.project": "Proyecto",

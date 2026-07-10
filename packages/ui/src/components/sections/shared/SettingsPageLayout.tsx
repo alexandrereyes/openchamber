@@ -1,10 +1,16 @@
 import React from 'react';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { Icon } from '@/components/icon/Icon';
+import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 interface SettingsPageLayoutProps {
   /** Page content */
   children: React.ReactNode;
+  /** Optional page title shown above settings content. */
+  title?: string;
+  /** Show persistence feedback for instant-save settings. */
+  showSaveStatus?: boolean;
   /** Additional className for the content container */
   className?: string;
   /** Additional className for the outer ScrollableOverlay */
@@ -29,6 +35,8 @@ export const SettingsPageLayout: React.FC<SettingsPageLayoutProps> = ({
   children,
   className,
   outerClassName,
+  title,
+  showSaveStatus = false,
 }) => {
   return (
     <ScrollableOverlay
@@ -41,8 +49,58 @@ export const SettingsPageLayout: React.FC<SettingsPageLayoutProps> = ({
           className
         )}
       >
+        {(title || showSaveStatus) && (
+          <div className="flex items-center justify-between gap-4 border-b border-border/40 pb-4">
+            {title ? (
+              <h1 className="typography-ui-header font-semibold text-foreground">{title}</h1>
+            ) : <span />}
+            {showSaveStatus && <SettingsSaveStatus />}
+          </div>
+        )}
         {children}
       </div>
     </ScrollableOverlay>
+  );
+};
+
+const SettingsSaveStatus: React.FC = () => {
+  const { t } = useI18n();
+  const [status, setStatus] = React.useState<'idle' | 'saving' | 'saved'>('idle');
+
+  React.useEffect(() => {
+    let timeout: ReturnType<typeof window.setTimeout> | undefined;
+    const handleSaveState = (event: Event) => {
+      const state = (event as CustomEvent<'saving' | 'saved' | 'error'>).detail;
+      if (state === 'saving') {
+        setStatus('saving');
+        return;
+      }
+
+      window.clearTimeout(timeout);
+      if (state === 'saved') {
+        setStatus('saved');
+        timeout = window.setTimeout(() => setStatus('idle'), 1800);
+        return;
+      }
+
+      setStatus('idle');
+    };
+
+    window.addEventListener('openchamber:settings-save-state', handleSaveState);
+    return () => {
+      window.removeEventListener('openchamber:settings-save-state', handleSaveState);
+      window.clearTimeout(timeout);
+    };
+  }, []);
+
+  if (status === 'idle') {
+    return null;
+  }
+
+  return (
+    <div aria-live="polite" className="flex shrink-0 items-center gap-1.5 typography-meta text-muted-foreground">
+      <Icon name={status === 'saving' ? 'loader-4' : 'check'} className={cn('size-3.5', status === 'saving' && 'animate-spin')} />
+      <span>{status === 'saving' ? t('settings.common.actions.saving') : t('settings.common.status.saved')}</span>
+    </div>
   );
 };

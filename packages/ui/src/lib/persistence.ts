@@ -140,6 +140,13 @@ const dispatchSettingsSynced = (settings: DesktopSettings): void => {
   window.dispatchEvent(new CustomEvent<DesktopSettings>('openchamber:settings-synced', { detail: settings }));
 };
 
+const dispatchSettingsSaveState = (state: 'saving' | 'saved' | 'error'): void => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent<'saving' | 'saved' | 'error'>('openchamber:settings-save-state', { detail: state }));
+};
+
 type PersistApi = {
   hasHydrated?: () => boolean;
   onFinishHydration?: (callback: () => void) => (() => void) | undefined;
@@ -1386,7 +1393,10 @@ const _flushSettingsUpdate = async (): Promise<void> => {
         persistToLocalStorage(updated);
         applyDesktopUiPreferences(updated);
         dispatchSettingsSynced(updated);
+        dispatchSettingsSaveState('saved');
         _settingsCache = null;
+      } else {
+        dispatchSettingsSaveState('error');
       }
       waiters.forEach((resolve) => resolve());
       return;
@@ -1407,6 +1417,7 @@ const _flushSettingsUpdate = async (): Promise<void> => {
 
     if (!response.ok) {
       console.warn('Failed to update shared settings via API:', response.status, response.statusText);
+      dispatchSettingsSaveState('error');
       return;
     }
 
@@ -1415,11 +1426,15 @@ const _flushSettingsUpdate = async (): Promise<void> => {
       persistToLocalStorage(updated);
       applyDesktopUiPreferences(updated);
       dispatchSettingsSynced(updated);
+      dispatchSettingsSaveState('saved');
       // Invalidate GET cache so next read sees the fresh data
       _settingsCache = null;
+    } else {
+      dispatchSettingsSaveState('error');
     }
   } catch (error) {
     console.warn('Failed to update shared settings via API:', error);
+    dispatchSettingsSaveState('error');
   } finally {
     waiters.forEach((resolve) => resolve());
   }
@@ -1431,6 +1446,7 @@ export const updateDesktopSettings = async (changes: Partial<DesktopSettings>): 
   }
 
   _pendingSettingsChanges = { ...(_pendingSettingsChanges ?? {}), ...changes };
+  dispatchSettingsSaveState('saving');
 
   if (_settingsFlushTimer) {
     clearTimeout(_settingsFlushTimer);

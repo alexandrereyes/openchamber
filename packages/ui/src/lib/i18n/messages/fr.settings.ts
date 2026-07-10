@@ -288,6 +288,7 @@ export const settingsDict = {
   'settings.common.actions.copyAll': 'Copier tout',
   'settings.common.actions.clear': 'Effacer',
   'settings.common.actions.saving': 'Enregistrement...',
+  'settings.common.status.saved': 'Enregistré',
   'settings.common.actions.saveChanges': 'Enregistrer les modifications',
   'settings.common.scope.global': 'Mondial',
   'settings.common.scope.project': 'Projet',

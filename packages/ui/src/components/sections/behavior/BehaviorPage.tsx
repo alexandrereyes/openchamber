@@ -321,7 +321,7 @@ export const BehaviorPage: React.FC = () => {
               onValueChange={(value) => setResponseStylePreset(value)}
               disabled={isLoading || !responseStyleEnabled}
             >
-              <SelectTrigger className="w-full sm:w-56" size="lg">
+              <SelectTrigger className="w-full sm:w-56">
                 <SelectValue>
                   {(value) => {
                     if (value === 'custom') return t('settings.behavior.page.responseStyle.option.custom');

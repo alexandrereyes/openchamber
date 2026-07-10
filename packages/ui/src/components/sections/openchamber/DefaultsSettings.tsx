@@ -319,7 +319,7 @@ export const DefaultsSettings: React.FC = () => {
           </div>
           <div className="flex items-center gap-2 sm:w-fit">
             <Select value={defaultVariant ?? DEFAULT_VARIANT_VALUE} onValueChange={handleVariantChange} disabled={!supportsVariants}>
-              <SelectTrigger className="w-fit min-w-[120px]">
+              <SelectTrigger className="w-full sm:w-56">
                 <SelectValue placeholder={t('settings.openchamber.defaults.field.thinkingPlaceholder')}>
                   {formatVariantLabel(defaultVariant ?? DEFAULT_VARIANT_VALUE)}
                 </SelectValue>

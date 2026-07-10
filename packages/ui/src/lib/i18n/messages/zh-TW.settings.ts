@@ -354,6 +354,7 @@
   'settings.common.actions.copyAll': '全部複製',
   'settings.common.actions.clear': '清除',
   'settings.common.actions.saving': '儲存中...',
+  'settings.common.status.saved': '已儲存',
   'settings.common.actions.saveChanges': '儲存變更',
   'settings.common.scope.global': '全域',
   'settings.common.scope.project': '專案',

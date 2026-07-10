@@ -12,9 +12,10 @@ import { TunnelSettings } from './TunnelSettings';
 import { OpenCodeCliSettings } from './OpenCodeCliSettings';
 import { DesktopNetworkSettings } from './DesktopNetworkSettings';
 import { KeyboardShortcutsSettings } from './KeyboardShortcutsSettings';
-import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
 import { useDeviceInfo } from '@/lib/device';
 import { isDesktopLocalOriginActive, isDesktopShell, isVSCodeRuntime, isWebRuntime } from '@/lib/desktop';
+import { useI18n } from '@/lib/i18n';
 import { subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
 import type { OpenChamberSection } from './types';
 
@@ -34,6 +35,7 @@ interface OpenChamberPageProps {
 }
 
 export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => {
+    const { t } = useI18n();
     const { isMobile } = useDeviceInfo();
     const runtimeEndpointEpoch = useRuntimeEndpointEpoch();
     const showAbout = isMobile && isWebRuntime();
@@ -44,38 +46,33 @@ export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => 
     // If no section specified, show all (mobile/legacy behavior)
     if (!section) {
         return (
-            <ScrollableOverlay
-                outerClassName="h-full"
-                className="w-full"
-            >
-                <div className="openchamber-page-body mx-auto max-w-3xl space-y-3 p-3 sm:space-y-6 sm:p-6 sm:pt-8">
-                    <OpenChamberVisualSettings />
-                    <div className="border-t border-border/40 pt-6">
-                        <DefaultsSettings />
-                    </div>
-                    {showDesktopNetworkSettings && (
-                        <div className="border-t border-border/40 pt-6">
-                            <DesktopNetworkSettings />
-                        </div>
-                    )}
-                    {!isVSCode && (
-                        <div className="border-t border-border/40 pt-6">
-                            <OpenCodeCliSettings />
-                        </div>
-                    )}
-                    <div className="border-t border-border/40 pt-6">
-                        <SessionRetentionSettings />
-                    </div>
-                    <div className="border-t border-border/40 pt-6">
-                        <PasskeySettings />
-                    </div>
-                    {showAbout && (
-                        <div className="border-t border-border/40 pt-6">
-                            <AboutSettings />
-                        </div>
-                    )}
+            <SettingsPageLayout showSaveStatus className="openchamber-page-body space-y-3 sm:space-y-6">
+                <OpenChamberVisualSettings />
+                <div className="border-t border-border/40 pt-6">
+                    <DefaultsSettings />
                 </div>
-            </ScrollableOverlay>
+                {showDesktopNetworkSettings && (
+                    <div className="border-t border-border/40 pt-6">
+                        <DesktopNetworkSettings />
+                    </div>
+                )}
+                {!isVSCode && (
+                    <div className="border-t border-border/40 pt-6">
+                        <OpenCodeCliSettings />
+                    </div>
+                )}
+                <div className="border-t border-border/40 pt-6">
+                    <SessionRetentionSettings />
+                </div>
+                <div className="border-t border-border/40 pt-6">
+                    <PasskeySettings />
+                </div>
+                {showAbout && (
+                    <div className="border-t border-border/40 pt-6">
+                        <AboutSettings />
+                    </div>
+                )}
+            </SettingsPageLayout>
         );
     }
 
@@ -105,15 +102,22 @@ export const OpenChamberPage: React.FC<OpenChamberPageProps> = ({ section }) => 
         }
     };
 
+    const pageTitle = {
+        visual: t('settings.page.appearance.title'),
+        chat: t('settings.page.chat.title'),
+        sessions: t('settings.page.sessions.title'),
+        shortcuts: t('settings.page.shortcuts.title'),
+        git: t('settings.page.git.title'),
+        github: t('settings.page.git.title'),
+        notifications: t('settings.page.notifications.title'),
+        voice: t('settings.page.voice.title'),
+        tunnel: t('settings.page.tunnel.title'),
+    }[section];
+
     return (
-        <ScrollableOverlay
-            outerClassName="h-full"
-            className="w-full"
-        >
-            <div className="openchamber-page-body mx-auto max-w-3xl space-y-6 p-3 sm:p-6 sm:pt-8">
-                {renderSectionContent()}
-            </div>
-        </ScrollableOverlay>
+        <SettingsPageLayout title={pageTitle} showSaveStatus className="openchamber-page-body">
+            {renderSectionContent()}
+        </SettingsPageLayout>
     );
 };
 
