@@ -28,6 +28,7 @@ type PromptNavigatorRailProps = {
 const LINE_HIT_HEIGHT_PX = 8;
 const HOVER_CLOSE_DELAY_MS = 120;
 const COMPACT_BACKDROP_MAX_WIDTH_PX = 1280;
+const STACK_MAX_HEIGHT_CLASS = 'max-h-[40vh]';
 
 const buildPromptEntries = (
     turnIds: string[],
@@ -74,46 +75,54 @@ function LineRail({
         <div
             className={cn(
                 'flex flex-col items-center rounded-full px-1 py-1.5',
-                lineGapClass,
                 needsBackdrop
                     ? 'border border-[var(--interactive-border)]/40 bg-[var(--surface-background)]/90 shadow-sm backdrop-blur-sm'
                     : 'bg-transparent',
             )}
         >
-            {prompts.map((prompt) => {
-                const isActive = prompt.turnId === activeTurnId;
-                const preview = prompt.preview.trim() || emptyPreviewLabel;
+            <div
+                className={cn(
+                    'flex min-h-0 flex-col items-center overflow-y-auto overflow-x-hidden',
+                    STACK_MAX_HEIGHT_CLASS,
+                    lineGapClass,
+                    '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+                )}
+            >
+                {prompts.map((prompt) => {
+                    const isActive = prompt.turnId === activeTurnId;
+                    const preview = prompt.preview.trim() || emptyPreviewLabel;
 
-                return (
-                    <button
-                        key={prompt.turnId}
-                        type="button"
-                        className={cn(
-                            'flex shrink-0 items-center justify-center rounded-full',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
-                        )}
-                        style={{
-                            width: '16px',
-                            height: `${LINE_HIT_HEIGHT_PX}px`,
-                        }}
-                        aria-label={preview}
-                        aria-current={isActive ? 'true' : undefined}
-                        onClick={() => {
-                            onSelectTurn(prompt.turnId);
-                        }}
-                    >
-                        <span
-                            aria-hidden="true"
+                    return (
+                        <button
+                            key={prompt.turnId}
+                            type="button"
                             className={cn(
-                                'block h-0.5 rounded-full transition-colors',
-                                isActive
-                                    ? 'w-3.5 bg-[var(--surface-foreground)]'
-                                    : 'w-3 bg-[var(--surface-foreground)]/40',
+                                'flex shrink-0 items-center justify-center rounded-full',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
                             )}
-                        />
-                    </button>
-                );
-            })}
+                            style={{
+                                width: '16px',
+                                height: `${LINE_HIT_HEIGHT_PX}px`,
+                            }}
+                            aria-label={preview}
+                            aria-current={isActive ? 'true' : undefined}
+                            onClick={() => {
+                                onSelectTurn(prompt.turnId);
+                            }}
+                        >
+                            <span
+                                aria-hidden="true"
+                                className={cn(
+                                    'block h-0.5 rounded-full transition-colors',
+                                    isActive
+                                        ? 'w-3.5 bg-[var(--surface-foreground)]'
+                                        : 'w-3 bg-[var(--surface-foreground)]/40',
+                                )}
+                            />
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -287,6 +296,14 @@ export function PromptNavigatorRail({
         onLoadEarlier();
     }, [isLoadingOlder, onLoadEarlier]);
 
+    const handleWrapperBlur = React.useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && event.currentTarget.contains(next)) {
+            return;
+        }
+        scheduleCloseHoverPanel();
+    }, [scheduleCloseHoverPanel]);
+
     const isPanelOpen = isPromptNavigatorPanelOpen || isHoverOpen;
 
     if (prompts.length === 0) {
@@ -302,6 +319,8 @@ export function PromptNavigatorRail({
                 className="pointer-events-auto relative"
                 onMouseEnter={openHoverPanel}
                 onMouseLeave={scheduleCloseHoverPanel}
+                onFocus={openHoverPanel}
+                onBlur={handleWrapperBlur}
             >
                 <LineRail
                     prompts={prompts}
