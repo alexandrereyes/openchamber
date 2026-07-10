@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Part } from '@opencode-ai/sdk/v2';
 
+import { Icon } from '@/components/icon/Icon';
 import { useDeviceInfo } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
@@ -18,6 +19,9 @@ type PromptNavigatorRailProps = {
     previewsByTurnId: Map<string, Part[]>;
     activeTurnId: string | null;
     onSelectTurn: (turnId: string) => void;
+    canLoadEarlier: boolean;
+    isLoadingOlder: boolean;
+    onLoadEarlier: () => void;
 };
 
 const LINE_HIT_HEIGHT_PX = 8;
@@ -53,6 +57,9 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
     previewsByTurnId,
     activeTurnId,
     onSelectTurn,
+    canLoadEarlier,
+    isLoadingOlder,
+    onLoadEarlier,
 }) => {
     const { t } = useI18n();
     const { screenWidth } = useDeviceInfo();
@@ -98,6 +105,14 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
         setPromptNavigatorPanelOpen(false);
     }, [onSelectTurn, setPromptNavigatorPanelOpen]);
 
+    const handleLoadEarlier = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        if (isLoadingOlder) {
+            return;
+        }
+        onLoadEarlier();
+    }, [isLoadingOlder, onLoadEarlier]);
+
     const isPanelOpen = isPromptNavigatorPanelOpen || isHoverOpen;
 
     if (prompts.length === 0) {
@@ -123,6 +138,30 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
                             : 'bg-transparent',
                     )}
                 >
+                    {canLoadEarlier ? (
+                        <button
+                            type="button"
+                            className={cn(
+                                'flex shrink-0 items-center justify-center rounded-full',
+                                'text-[var(--surface-mutedForeground)] hover:text-[var(--surface-foreground)]',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
+                                isLoadingOlder ? 'cursor-wait opacity-70' : undefined,
+                            )}
+                            style={{
+                                width: '16px',
+                                height: `${LINE_HIT_HEIGHT_PX}px`,
+                            }}
+                            aria-label={t('chat.promptNavigator.loadMore')}
+                            disabled={isLoadingOlder}
+                            onClick={handleLoadEarlier}
+                        >
+                            {isLoadingOlder ? (
+                                <Icon name="loader-4" className="size-3 animate-spin" />
+                            ) : (
+                                <Icon name="arrow-up-s" className="size-3" />
+                            )}
+                        </button>
+                    ) : null}
                     {prompts.map((prompt) => {
                         const isActive = prompt.turnId === activeTurnId;
 
@@ -168,6 +207,29 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
                         onMouseLeave={scheduleCloseHoverPanel}
                     >
                         <ul className="max-h-[min(24rem,70vh)] overflow-y-auto">
+                            {canLoadEarlier ? (
+                                <li className="border-b border-[var(--interactive-border)]/40 px-1 pb-1">
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            'flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-2',
+                                            'typography-meta text-[var(--surface-mutedForeground)] transition-colors',
+                                            'hover:bg-[var(--interactive-hover)]/60 hover:text-[var(--surface-foreground)]',
+                                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
+                                            isLoadingOlder ? 'cursor-wait opacity-70' : undefined,
+                                        )}
+                                        disabled={isLoadingOlder}
+                                        onClick={handleLoadEarlier}
+                                    >
+                                        {isLoadingOlder ? (
+                                            <Icon name="loader-4" className="size-3.5 shrink-0 animate-spin" />
+                                        ) : (
+                                            <Icon name="arrow-up-s" className="size-3.5 shrink-0" />
+                                        )}
+                                        <span>{t('chat.promptNavigator.loadMore')}</span>
+                                    </button>
+                                </li>
+                            ) : null}
                             {prompts.map((prompt) => {
                                 const isActive = prompt.turnId === activeTurnId;
                                 const preview = prompt.preview.trim() || t('chat.timeline.noTextContent');

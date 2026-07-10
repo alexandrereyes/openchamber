@@ -1523,6 +1523,7 @@ export const dict = {
   'chat.promptNavigator.aria': 'Navigation des prompts',
   'chat.promptNavigator.goToPrompt': 'Aller au prompt {number}',
   'chat.promptNavigator.currentPrompt': 'Prompt actuel',
+  'chat.promptNavigator.loadMore': 'Charger plus de prompts',
   'chat.timeline.relative.justNow': 'à l’instant',
   'chat.timeline.relative.minutesAgo': 'il y a {count} min',
   'chat.timeline.relative.hoursAgo': 'il y a {count} h',

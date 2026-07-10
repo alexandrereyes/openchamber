@@ -1690,6 +1690,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.promptNavigator.aria": "Navegação de prompts",
   "chat.promptNavigator.goToPrompt": "Ir para o prompt {number}",
   "chat.promptNavigator.currentPrompt": "Prompt atual",
+  "chat.promptNavigator.loadMore": "Carregar mais prompts",
   "chat.timeline.relative.justNow": "agora mesmo",
   "chat.timeline.relative.minutesAgo": "há {count}m",
   "chat.timeline.relative.hoursAgo": "há {count}h",

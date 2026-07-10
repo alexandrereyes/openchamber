@@ -1712,6 +1712,7 @@ export const dict = {
   'chat.promptNavigator.aria': 'Prompt navigation',
   'chat.promptNavigator.goToPrompt': 'Go to prompt {number}',
   'chat.promptNavigator.currentPrompt': 'Current prompt',
+  'chat.promptNavigator.loadMore': 'Load more prompts',
   'chat.timeline.relative.justNow': 'just now',
   'chat.timeline.relative.minutesAgo': '{count}m ago',
   'chat.timeline.relative.hoursAgo': '{count}h ago',

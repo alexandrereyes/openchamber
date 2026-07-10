@@ -1682,6 +1682,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.promptNavigator.aria': '提示詞導覽',
   'chat.promptNavigator.goToPrompt': '移至第 {number} 條提示',
   'chat.promptNavigator.currentPrompt': '目前提示',
+  'chat.promptNavigator.loadMore': '載入更多提示',
   'chat.timeline.relative.justNow': '剛剛',
   'chat.timeline.relative.minutesAgo': '{count} 分鐘前',
   'chat.timeline.relative.hoursAgo': '{count} 小時前',

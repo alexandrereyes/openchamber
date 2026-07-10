@@ -167,6 +167,9 @@ type ChatViewportProps = {
     activeTurnId: string | null;
     onSelectTurn: (turnId: string) => void;
     showPromptNavigator: boolean;
+    canLoadEarlierPrompts: boolean;
+    isLoadingOlderPrompts: boolean;
+    onLoadEarlierPrompts: () => void;
 };
 
 const ChatViewport = React.memo(({
@@ -197,6 +200,9 @@ const ChatViewport = React.memo(({
     activeTurnId,
     onSelectTurn,
     showPromptNavigator,
+    canLoadEarlierPrompts,
+    isLoadingOlderPrompts,
+    onLoadEarlierPrompts,
 }: ChatViewportProps) => {
     const { t } = useI18n();
     const promptPreviewsByTurnId = React.useMemo(() => {
@@ -303,6 +309,9 @@ const ChatViewport = React.memo(({
                         previewsByTurnId={promptPreviewsByTurnId}
                         activeTurnId={activeTurnId}
                         onSelectTurn={onSelectTurn}
+                        canLoadEarlier={canLoadEarlierPrompts}
+                        isLoadingOlder={isLoadingOlderPrompts}
+                        onLoadEarlier={onLoadEarlierPrompts}
                     />
                 ) : null}
             </div>
@@ -335,7 +344,10 @@ const ChatViewport = React.memo(({
         && prev.turnIds === next.turnIds
         && prev.activeTurnId === next.activeTurnId
         && prev.onSelectTurn === next.onSelectTurn
-        && prev.showPromptNavigator === next.showPromptNavigator;
+        && prev.showPromptNavigator === next.showPromptNavigator
+        && prev.canLoadEarlierPrompts === next.canLoadEarlierPrompts
+        && prev.isLoadingOlderPrompts === next.isLoadingOlderPrompts
+        && prev.onLoadEarlierPrompts === next.onLoadEarlierPrompts;
 });
 
 ChatViewport.displayName = 'ChatViewport';
@@ -1073,6 +1085,9 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
                 activeTurnId={timelineController.activeTurnId}
                 onSelectTurn={handlePromptNavigatorSelect}
                 showPromptNavigator={showPromptNavigator}
+                canLoadEarlierPrompts={timelineController.historySignals.canLoadEarlier}
+                isLoadingOlderPrompts={timelineController.isLoadingOlder}
+                onLoadEarlierPrompts={handleLoadOlderClick}
             />
 
             <div
