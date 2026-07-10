@@ -61,6 +61,14 @@
       {
         "from": "resources/opencode-cli",
         "to": "opencode-cli"
+      },
+      {
+        "from": "../opencode-container-workspace",
+        "to": "opencode-container-workspace",
+        "filter": [
+          "src/**",
+          "package.json"
+        ]
       }
     ],
     "afterPack": "scripts/after-pack.cjs",

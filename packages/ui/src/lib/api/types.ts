@@ -734,6 +734,66 @@ export interface ToolsAPI {
   getAvailableTools(): Promise<string[]>;
 }
 
+export type WorkspaceProviderKind = 'docker' | 'kubernetes';
+
+export interface WorkspaceProviderValidationInput {
+  provider: WorkspaceProviderKind;
+  context?: string;
+  namespace?: string;
+}
+
+export interface WorkspaceProviderValidationResult {
+  available: boolean;
+  version?: string | null;
+  context?: string | null;
+  namespace?: string | null;
+  error?: string;
+}
+
+interface WorkspacePatchFileSummary {
+  path: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface WorkspacePatchSummary {
+  files: WorkspacePatchFileSummary[];
+  totalFiles: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface WorkspacePatchSummaryResult {
+  patchBytes: number;
+  summary: WorkspacePatchSummary;
+}
+
+export interface WorkspaceExportDiffResult {
+  patch: string;
+  provider: WorkspaceProviderKind | string;
+}
+
+export interface WorkspaceConfigureResult {
+  configured: boolean;
+  enabled: boolean;
+  spec?: string;
+}
+
+export interface WorkspacePatchApplyResult {
+  applied: boolean;
+  checkOnly: boolean;
+  summary?: WorkspacePatchSummary;
+  error?: string;
+}
+
+export interface WorkspaceSecurityAPI {
+  validateProvider(input: WorkspaceProviderValidationInput): Promise<WorkspaceProviderValidationResult>;
+  configureFromSettings(): Promise<WorkspaceConfigureResult>;
+  exportDiff(input: { id: string; directory?: string | null }): Promise<WorkspaceExportDiffResult>;
+  summarizePatch(patch: string): Promise<WorkspacePatchSummaryResult>;
+  applyPatch(input: { directory: string; patch: string; checkOnly?: boolean }): Promise<WorkspacePatchApplyResult>;
+}
+
 export interface EditorAPI {
   openFile(path: string, line?: number, column?: number): Promise<void>;
   openDiff(
@@ -1194,6 +1254,7 @@ export interface RuntimeAPIs {
   diagnostics?: DiagnosticsAPI;
   clientAuth?: ClientAuthAPI;
   tools: ToolsAPI;
+  workspaces?: WorkspaceSecurityAPI;
   editor?: EditorAPI;
   vscode?: VSCodeAPI;
   worktrees?: WorktreeMetadata[];

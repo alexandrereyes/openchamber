@@ -36,6 +36,7 @@ import { SnippetsPage } from '@/components/sections/snippets/SnippetsPage';
 import { GitPage } from '@/components/sections/git-identities/GitPage';
 import type { OpenChamberSection } from '@/components/sections/openchamber/types';
 import { OpenChamberPage } from '@/components/sections/openchamber/OpenChamberPage';
+import { SecureWorkspacesSettings } from '@/components/sections/openchamber/SecureWorkspacesSettings';
 import { AboutSettings } from '@/components/sections/openchamber/AboutSettings';
 import { useDeviceInfo } from '@/lib/device';
 import { isDesktopLocalOriginActive, isDesktopShell, isVSCodeRuntime, isWebRuntime } from '@/lib/desktop';
@@ -92,6 +93,7 @@ const pageOrder: SettingsPageSlug[] = [
   'snippets',
   'projects',
   'remote-instances',
+  'workspaces',
   'agents',
   'behavior',
   'commands',
@@ -171,6 +173,8 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
       return 'folders';
     case 'remote-instances':
       return 'server';
+    case 'workspaces':
+      return 'stack';
     case 'appearance':
       return 'palette';
     case 'chat':
@@ -487,6 +491,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return t('settings.page.projects.title');
       case 'remote-instances':
         return t('settings.page.remoteInstances.title');
+      case 'workspaces':
+        return t('settings.page.workspaces.title');
       case 'providers':
         return t('settings.page.providers.title');
       case 'usage':
@@ -782,6 +788,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         return <ProjectsPage />;
       case 'remote-instances':
         return <RemoteInstancesPage />;
+      case 'workspaces':
+        return <div className="h-full overflow-auto px-5 py-6"><SecureWorkspacesSettings /></div>;
       case 'agents':
         return <AgentsPage />;
       case 'behavior':

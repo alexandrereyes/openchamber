@@ -8,6 +8,7 @@ import { createVSCodeGitAPI } from './git';
 import { createVSCodeActionsAPI } from './vscode';
 import { createVSCodeGitHubAPI } from './github';
 import { createVSCodeNotificationsAPI } from './notifications';
+import { createVSCodeWorkspaceSecurityAPI } from './workspaces';
 
 // Stub APIs return sensible defaults instead of throwing
 const createStubTerminalAPI = (): TerminalAPI => ({
@@ -28,6 +29,7 @@ export const createVSCodeAPIs = (): RuntimeAPIs => ({
   notifications: createVSCodeNotificationsAPI(),
   github: createVSCodeGitHubAPI(),
   tools: createVSCodeToolsAPI(),
+  workspaces: createVSCodeWorkspaceSecurityAPI(),
   editor: createVSCodeEditorAPI(),
   vscode: createVSCodeActionsAPI(),
 });
