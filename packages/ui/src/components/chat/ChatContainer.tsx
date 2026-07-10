@@ -570,17 +570,16 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
     // History metadata — use sync's hasMore/isLoading
     const historyMeta = React.useMemo(() => {
         if (!currentSessionId) return null;
-        // Sync's meta is authoritative once a fetch has confirmed the history
-        // is fully loaded — a stale prefetch-cache entry (cursor recorded at
-        // the initial page) must not keep the "load older" affordance alive
-        // after the user has already reached the top.
         const syncComplete = sync.isComplete(currentSessionId);
-        const prefetchHasMore = !syncComplete
-            && Boolean(sessionPrefetchInfo?.cursor)
+        const prefetchHasMore = Boolean(sessionPrefetchInfo?.cursor)
             && sessionPrefetchInfo?.complete !== true;
+        const syncHasMore = sync.hasMore(currentSessionId);
+        const complete = syncComplete
+            ? !prefetchHasMore && !syncHasMore
+            : !(syncHasMore || prefetchHasMore);
         return {
             limit: sessionMessages.length,
-            complete: syncComplete || !(sync.hasMore(currentSessionId) || prefetchHasMore),
+            complete,
             loading: sync.isLoading(currentSessionId),
         };
     }, [currentSessionId, sessionMessages.length, sessionPrefetchInfo, sync]);
@@ -765,6 +764,23 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
     const handlePromptNavigatorSelect = React.useCallback((turnId: string) => {
         void navigation.scrollToTurnId(turnId, { behavior: 'smooth' });
     }, [navigation]);
+    const canLoadEarlierPrompts = React.useMemo(() => {
+        if (!currentSessionId) {
+            return false;
+        }
+        if (sync.hasMore(currentSessionId)) {
+            return true;
+        }
+        if (sessionPrefetchInfo?.cursor && sessionPrefetchInfo.complete !== true) {
+            return true;
+        }
+        return timelineController.historySignals.canLoadEarlier;
+    }, [
+        currentSessionId,
+        sessionPrefetchInfo,
+        sync,
+        timelineController.historySignals.canLoadEarlier,
+    ]);
     const showPromptNavigator = !isMobile
         && !isDesktopExpandedInput
         && promptNavigatorEnabled
@@ -1085,7 +1101,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({ autoOpenDraft = tr
                 activeTurnId={timelineController.activeTurnId}
                 onSelectTurn={handlePromptNavigatorSelect}
                 showPromptNavigator={showPromptNavigator}
-                canLoadEarlierPrompts={timelineController.historySignals.canLoadEarlier}
+                canLoadEarlierPrompts={canLoadEarlierPrompts}
                 isLoadingOlderPrompts={timelineController.isLoadingOlder}
                 onLoadEarlierPrompts={handleLoadOlderClick}
             />

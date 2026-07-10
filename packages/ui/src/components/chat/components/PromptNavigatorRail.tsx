@@ -2,6 +2,7 @@ import React from 'react';
 import type { Part } from '@opencode-ai/sdk/v2';
 
 import { Icon } from '@/components/icon/Icon';
+import { Button } from '@/components/ui/button';
 import { useDeviceInfo } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
@@ -131,37 +132,35 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
             >
                 <div
                     className={cn(
-                        'flex flex-col items-center rounded-full px-1 py-1.5',
+                        'flex flex-col items-stretch rounded-2xl px-1 py-1.5',
                         lineGapClass,
                         needsBackdrop
                             ? 'border border-[var(--interactive-border)]/40 bg-[var(--surface-background)]/90 shadow-sm backdrop-blur-sm'
-                            : 'bg-transparent',
+                            : 'border border-[var(--interactive-border)]/30 bg-[var(--surface-background)]/80 shadow-sm backdrop-blur-sm',
                     )}
                 >
                     {canLoadEarlier ? (
-                        <button
+                        <Button
                             type="button"
+                            variant="secondary"
+                            size="xs"
                             className={cn(
-                                'flex shrink-0 items-center justify-center rounded-full',
-                                'text-[var(--surface-mutedForeground)] hover:text-[var(--surface-foreground)]',
-                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
-                                isLoadingOlder ? 'cursor-wait opacity-70' : undefined,
+                                'mb-1 h-auto min-h-0 w-full rounded-full px-2 py-1 typography-micro font-medium',
+                                'border border-[var(--interactive-border)]/50 bg-[var(--surface-elevated)]',
                             )}
-                            style={{
-                                width: '16px',
-                                height: `${LINE_HIT_HEIGHT_PX}px`,
-                            }}
                             aria-label={t('chat.promptNavigator.loadMore')}
                             disabled={isLoadingOlder}
                             onClick={handleLoadEarlier}
                         >
                             {isLoadingOlder ? (
-                                <Icon name="loader-4" className="size-3 animate-spin" />
+                                <Icon name="loader-4" className="size-3 shrink-0 animate-spin" />
                             ) : (
-                                <Icon name="arrow-up-s" className="size-3" />
+                                <Icon name="arrow-up-s" className="size-3 shrink-0" />
                             )}
-                        </button>
+                            <span className="truncate">{t('chat.promptNavigator.loadMore')}</span>
+                        </Button>
                     ) : null}
+                    <div className={cn('flex flex-col items-center', lineGapClass)}>
                     {prompts.map((prompt) => {
                         const isActive = prompt.turnId === activeTurnId;
 
@@ -195,6 +194,7 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
                             </button>
                         );
                     })}
+                    </div>
                 </div>
 
                 {isPanelOpen ? (
