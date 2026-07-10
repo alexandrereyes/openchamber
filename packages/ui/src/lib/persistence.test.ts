@@ -4,7 +4,13 @@ import type { RuntimeAPIs, SettingsPayload } from '@/lib/api/types';
 import { registerRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { startModelPrefsAutoSave } from '@/lib/modelPrefsAutoSave';
 import { useUIStore } from '@/stores/useUIStore';
-import { applyPersistedHomeDirectoryToWindow, syncDesktopSettings, updateDesktopSettings } from './persistence';
+import {
+  applyPersistedHomeDirectoryToWindow,
+  getSettingsSaveState,
+  subscribeToSettingsSaveState,
+  syncDesktopSettings,
+  updateDesktopSettings,
+} from './persistence';
 
 type TestWindow = {
   __OPENCHAMBER_HOME__?: string;
@@ -194,6 +200,21 @@ describe('updateDesktopSettings', () => {
     expect(saveCalls).toEqual([{ themeVariant: 'dark', fontSize: 14 }]);
     expect(firstResolved).toBe(true);
     expect(secondResolved).toBe(true);
+  });
+
+  test('publishes saving and saved states for an immediate setting update', async () => {
+    const states: string[] = [];
+    registerSettingsSave(async (changes) => changes as SettingsPayload);
+    const unsubscribe = subscribeToSettingsSaveState(() => {
+      states.push(getSettingsSaveState());
+    });
+
+    try {
+      await updateDesktopSettings({ useSystemTheme: false, themeVariant: 'light' });
+      expect(states).toEqual(['saving', 'saved']);
+    } finally {
+      unsubscribe();
+    }
   });
 
   test('applies model selector settings from server settings', async () => {
