@@ -92,12 +92,22 @@ export function PromptNavigatorRail({
         clearCloseTimeout();
         closeTimeoutRef.current = window.setTimeout(() => {
             setIsHoverOpen(false);
+            // Keyboard shortcut can leave the panel sticky-open; clear it on
+            // leave so "Load more" never stays visible without an open menu.
+            setPromptNavigatorPanelOpen(false);
         }, HOVER_CLOSE_DELAY_MS);
-    }, [clearCloseTimeout]);
+    }, [clearCloseTimeout, setPromptNavigatorPanelOpen]);
 
     React.useEffect(() => () => {
         clearCloseTimeout();
-    }, [clearCloseTimeout]);
+        setPromptNavigatorPanelOpen(false);
+    }, [clearCloseTimeout, setPromptNavigatorPanelOpen]);
+
+    // Clear any sticky keyboard-opened panel on mount so the rail never
+    // boots with the prompt list / load-more already visible.
+    React.useEffect(() => {
+        setPromptNavigatorPanelOpen(false);
+    }, [setPromptNavigatorPanelOpen]);
 
     const handleSelectPrompt = React.useCallback((turnId: string) => {
         onSelectTurn(turnId);
