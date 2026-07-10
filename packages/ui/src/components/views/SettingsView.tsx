@@ -51,6 +51,7 @@ import {
   type SettingsPageSlug,
   type SettingsRuntimeContext,
   type SettingsPageMeta,
+  type SettingsPageGroup,
 } from '@/lib/settings/metadata';
 import { buildSettingsSearchResults, type SettingsSearchResult } from '@/lib/settings/search';
 
@@ -105,6 +106,14 @@ const pageOrder: SettingsPageSlug[] = [
   'tunnel',
   'about',
 ];
+
+const SETTINGS_NAV_GROUPS = [
+  { id: 'interface', titleKey: 'settings.view.navigation.interface' },
+  { id: 'workspace', titleKey: 'settings.view.navigation.workspace' },
+  { id: 'opencode', titleKey: 'settings.view.navigation.openCode' },
+  { id: 'resources', titleKey: 'settings.view.navigation.resources' },
+  { id: 'advanced', titleKey: 'settings.view.navigation.advanced' },
+] as const satisfies readonly { id: SettingsPageGroup; titleKey: string }[];
 
 const SNIPPETS_SETTINGS_ICON = { icon: 'chat-thread' } as const;
 const ADD_PROVIDER_SETTINGS_ID = '__add_provider__';
@@ -355,6 +364,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
       .slice()
       .sort((a, b) => (rank.get(a.slug) ?? 999) - (rank.get(b.slug) ?? 999));
   }, [visiblePages]);
+
+  const groupedNavigationPages = React.useMemo(() => {
+    return SETTINGS_NAV_GROUPS
+      .map((group) => ({
+        ...group,
+        pages: sortedFilteredPages.filter((page) => page.group === group.id),
+      }))
+      .filter((group) => group.pages.length > 0);
+  }, [sortedFilteredPages]);
 
   const activeProjectId = useProjectsStore((state) => state.activeProjectId);
 
@@ -960,7 +978,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
 
         {/* Scrollable nav items */}
         <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-          <div className="flex flex-col gap-0.5 pt-4 pb-2 px-2">
+          <div className={cn('flex flex-col pb-2 px-2', hasSearchQuery ? 'gap-0.5 pt-4' : 'gap-3 pt-3')}>
             {hasSearchQuery ? (
               settingsSearchResults.length > 0 ? (() => {
                 let resultIndex = 0;
@@ -1006,20 +1024,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
                   {t('settings.view.search.noResults')}
                 </div>
               )
-            ) : sortedFilteredPages.map((page) => {
-              const selected = settingsSlug === page.slug;
-              const iconName = getSettingsNavIcon(page.slug);
-              if (!iconName && page.slug !== 'mcp') return null;
+            ) : groupedNavigationPages.map((group) => (
+              <div key={group.id} className="space-y-0.5">
+                <div className="px-2 pb-0.5 pt-1 typography-micro font-medium uppercase tracking-wide text-muted-foreground">
+                  {t(group.titleKey)}
+                </div>
+                {group.pages.map((page) => {
+                  const selected = settingsSlug === page.slug;
+                  const iconName = getSettingsNavIcon(page.slug);
+                  if (!iconName && page.slug !== 'mcp') return null;
 
-              return (
-                <Tooltip key={page.slug}>
-                  <TooltipTrigger asChild>
+                  return (
                     <button
+                      key={page.slug}
                       type="button"
                       onClick={() => openPage(page.slug)}
                       aria-current={selected ? 'page' : undefined}
                       className={cn(
-                        'flex h-8 items-center gap-2 rounded-md px-2 overflow-hidden',
+                        'flex h-8 w-full items-center gap-2 rounded-md px-2 overflow-hidden',
                         selected
                           ? 'bg-interactive-selection text-foreground'
                           : 'text-foreground hover:bg-interactive-hover'
@@ -1037,10 +1059,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
                         )}
                       </span>
                     </button>
-                  </TooltipTrigger>
-                </Tooltip>
-              );
-            })}
+                  );
+                })}
+              </div>
+            ))}
           </div>
         </div>
 
