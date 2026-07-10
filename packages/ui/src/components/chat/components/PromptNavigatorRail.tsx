@@ -1,8 +1,9 @@
+"use no memo";
+
 import React from 'react';
 import type { Part } from '@opencode-ai/sdk/v2';
 
 import { Icon } from '@/components/icon/Icon';
-import { Button } from '@/components/ui/button';
 import { useDeviceInfo } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
 import { useUIStore } from '@/stores/useUIStore';
@@ -53,7 +54,7 @@ const resolveLineGapClass = (count: number): string => {
     return 'gap-1';
 };
 
-export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
+export function PromptNavigatorRail({
     turnIds,
     previewsByTurnId,
     activeTurnId,
@@ -61,7 +62,7 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
     canLoadEarlier,
     isLoadingOlder,
     onLoadEarlier,
-}) => {
+}: PromptNavigatorRailProps) {
     const { t } = useI18n();
     const { screenWidth } = useDeviceInfo();
     const isPromptNavigatorPanelOpen = useUIStore((state) => state.isPromptNavigatorPanelOpen);
@@ -107,6 +108,7 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
     }, [onSelectTurn, setPromptNavigatorPanelOpen]);
 
     const handleLoadEarlier = React.useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+        event.preventDefault();
         event.stopPropagation();
         if (isLoadingOlder) {
             return;
@@ -132,7 +134,7 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
             >
                 <div
                     className={cn(
-                        'flex flex-col items-stretch rounded-2xl px-1 py-1.5',
+                        'flex flex-col items-stretch rounded-2xl px-1.5 py-1.5',
                         lineGapClass,
                         needsBackdrop
                             ? 'border border-[var(--interactive-border)]/40 bg-[var(--surface-background)]/90 shadow-sm backdrop-blur-sm'
@@ -140,13 +142,15 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
                     )}
                 >
                     {canLoadEarlier ? (
-                        <Button
+                        <button
                             type="button"
-                            variant="secondary"
-                            size="xs"
                             className={cn(
-                                'mb-1 h-auto min-h-0 w-full rounded-full px-2 py-1 typography-micro font-medium',
+                                'mb-1 flex max-w-[7.5rem] items-center justify-center gap-1 rounded-full px-2 py-1',
                                 'border border-[var(--interactive-border)]/50 bg-[var(--surface-elevated)]',
+                                'typography-micro font-medium text-[var(--surface-foreground)]',
+                                'hover:bg-[var(--interactive-hover)]/60',
+                                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
+                                isLoadingOlder ? 'cursor-wait opacity-70' : undefined,
                             )}
                             aria-label={t('chat.promptNavigator.loadMore')}
                             disabled={isLoadingOlder}
@@ -158,42 +162,42 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
                                 <Icon name="arrow-up-s" className="size-3 shrink-0" />
                             )}
                             <span className="truncate">{t('chat.promptNavigator.loadMore')}</span>
-                        </Button>
+                        </button>
                     ) : null}
                     <div className={cn('flex flex-col items-center', lineGapClass)}>
-                    {prompts.map((prompt) => {
-                        const isActive = prompt.turnId === activeTurnId;
+                        {prompts.map((prompt) => {
+                            const isActive = prompt.turnId === activeTurnId;
 
-                        return (
-                            <button
-                                key={prompt.turnId}
-                                type="button"
-                                className={cn(
-                                    'flex shrink-0 items-center justify-center rounded-full',
-                                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
-                                )}
-                                style={{
-                                    width: '16px',
-                                    height: `${LINE_HIT_HEIGHT_PX}px`,
-                                }}
-                                aria-label={t('chat.promptNavigator.goToPrompt', { number: prompt.index + 1 })}
-                                aria-current={isActive ? 'true' : undefined}
-                                onClick={() => {
-                                    handleSelectPrompt(prompt.turnId);
-                                }}
-                            >
-                                <span
-                                    aria-hidden="true"
+                            return (
+                                <button
+                                    key={prompt.turnId}
+                                    type="button"
                                     className={cn(
-                                        'block h-0.5 rounded-full transition-colors',
-                                        isActive
-                                            ? 'w-3.5 bg-[var(--surface-foreground)]'
-                                            : 'w-3 bg-[var(--surface-foreground)]/40',
+                                        'flex shrink-0 items-center justify-center rounded-full',
+                                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--interactive-focusRing)]',
                                     )}
-                                />
-                            </button>
-                        );
-                    })}
+                                    style={{
+                                        width: '16px',
+                                        height: `${LINE_HIT_HEIGHT_PX}px`,
+                                    }}
+                                    aria-label={t('chat.promptNavigator.goToPrompt', { number: prompt.index + 1 })}
+                                    aria-current={isActive ? 'true' : undefined}
+                                    onClick={() => {
+                                        handleSelectPrompt(prompt.turnId);
+                                    }}
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className={cn(
+                                            'block h-0.5 rounded-full transition-colors',
+                                            isActive
+                                                ? 'w-3.5 bg-[var(--surface-foreground)]'
+                                                : 'w-3 bg-[var(--surface-foreground)]/40',
+                                        )}
+                                    />
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -278,4 +282,4 @@ export const PromptNavigatorRail: React.FC<PromptNavigatorRailProps> = ({
             </div>
         </nav>
     );
-};
+}
