@@ -78,29 +78,38 @@ interface SettingsViewProps {
 }
 
 const pageOrder: SettingsPageSlug[] = [
+  // Interface
   'appearance',
   'chat',
   'notifications',
   'sessions',
   'shortcuts',
-  'git',
-  'magic-prompts',
-  'snippets',
+  // Workspace & remote
   'projects',
   'remote-instances',
+  'tunnel',
+  // OpenCode
+  'providers',
   'agents',
   'behavior',
   'commands',
   'mcp',
   'plugins',
-  'providers',
-  'usage',
+  // Content
+  'magic-prompts',
+  'snippets',
   'skills.installed',
   'skills.catalog',
+  // Git
+  'git',
+  // Usage
+  'usage',
+  // Advanced
   'voice',
-  'tunnel',
   'about',
 ];
+
+const NAV_GROUP_ORDER = ['general', 'projects', 'opencode', 'content', 'git', 'usage', 'advanced'] as const;
 
 const SNIPPETS_SETTINGS_ICON = { icon: 'chat-thread' } as const;
 const ADD_PROVIDER_SETTINGS_ID = '__add_provider__';
@@ -166,7 +175,7 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
     case 'projects':
       return 'folders';
     case 'remote-instances':
-      return 'server';
+      return 'computer';
     case 'appearance':
       return 'palette';
     case 'chat':
@@ -193,7 +202,7 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
     case 'mcp':
       return null;
     case 'plugins':
-      return 'code-box';
+      return 'plug-2';
 
     case 'skills.installed':
       return 'book-open';
@@ -208,7 +217,7 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
     case 'voice':
       return 'mic';
     case 'tunnel':
-      return 'global';
+      return 'share-2';
     case 'about':
       return 'information';
     case 'home':
@@ -939,41 +948,70 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
                   {t('settings.view.search.noResults')}
                 </div>
               )
-            ) : sortedFilteredPages.map((page) => {
-              const selected = settingsSlug === page.slug;
-              const iconName = getSettingsNavIcon(page.slug);
-              if (!iconName && page.slug !== 'mcp') return null;
+            ) : (() => {
+              const pagesByGroup = new Map<string, typeof sortedFilteredPages>();
+              for (const page of sortedFilteredPages) {
+                const group = page.group;
+                const existing = pagesByGroup.get(group);
+                if (existing) {
+                  existing.push(page);
+                } else {
+                  pagesByGroup.set(group, [page]);
+                }
+              }
 
-              return (
-                <Tooltip key={page.slug}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={() => openPage(page.slug)}
-                      aria-current={selected ? 'page' : undefined}
-                      className={cn(
-                        'flex h-8 items-center gap-2 rounded-md px-2 overflow-hidden',
-                        selected
-                          ? 'bg-interactive-selection text-foreground'
-                          : 'text-foreground hover:bg-interactive-hover'
-                      )}
-                    >
-                      {page.slug === 'mcp'
-                        ? <McpIcon className="h-4 w-4 shrink-0" />
-                        : <Icon name={iconName!} className="h-4 w-4 shrink-0" />}
-                      <span className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden transition-opacity duration-150 opacity-100">
-                        <span className="typography-ui-label font-normal truncate">{getPageTitle(page.slug)}</span>
-                        {page.slug === 'tunnel' && (
-                          <span className="shrink-0 typography-micro px-1 rounded leading-none pb-px text-[var(--status-warning)] bg-[var(--status-warning)]/10">
-                            {t('settings.view.badge.beta')}
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  </TooltipTrigger>
-                </Tooltip>
-              );
-            })}
+              const visibleGroups = NAV_GROUP_ORDER
+                .map((group) => ({ group, pages: pagesByGroup.get(group) ?? [] }))
+                .filter((entry) => entry.pages.length > 0);
+
+              return visibleGroups.map(({ group, pages }, groupIndex) => (
+                <div key={group} className="space-y-0.5">
+                  <div
+                    className={cn(
+                      'px-2 pb-0.5 typography-micro font-medium text-muted-foreground/70',
+                      groupIndex === 0 ? 'pt-1' : 'pt-3',
+                    )}
+                  >
+                    {t(`settings.view.nav.group.${group}`)}
+                  </div>
+                  {pages.map((page) => {
+                    const selected = settingsSlug === page.slug;
+                    const iconName = getSettingsNavIcon(page.slug);
+                    if (!iconName && page.slug !== 'mcp') return null;
+
+                    return (
+                      <Tooltip key={page.slug}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => openPage(page.slug)}
+                            aria-current={selected ? 'page' : undefined}
+                            className={cn(
+                              'flex h-8 items-center gap-2 rounded-md px-2 overflow-hidden',
+                              selected
+                                ? 'bg-interactive-selection text-foreground'
+                                : 'text-foreground hover:bg-interactive-hover'
+                            )}
+                          >
+                            {page.slug === 'mcp'
+                              ? <McpIcon className="h-4 w-4 shrink-0" />
+                              : <Icon name={iconName!} className="h-4 w-4 shrink-0" />}
+                            <span className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden transition-opacity duration-150 opacity-100">
+                              <span className="typography-ui-label font-normal truncate">{getPageTitle(page.slug)}</span>
+                              {page.slug === 'tunnel' && (
+                                <span className="shrink-0 typography-micro px-1 rounded leading-none pb-px text-[var(--status-warning)] bg-[var(--status-warning)]/10">
+                                  {t('settings.view.badge.beta')}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        </TooltipTrigger>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              ));
+            })()}
           </div>
         </div>
 
