@@ -369,12 +369,14 @@ export const createSessionGoalRuntime = ({
     const agent = typeof lastAssistantInfo?.agent === 'string' && lastAssistantInfo.agent
       ? lastAssistantInfo.agent
       : (typeof lastAssistantInfo?.mode === 'string' ? lastAssistantInfo.mode : '');
+    const variant = typeof lastAssistantInfo?.variant === 'string' ? lastAssistantInfo.variant : '';
     await openCodeFetch(`/session/${encodeURIComponent(sessionId)}/prompt_async`, {
       directory,
       method: 'POST',
       body: {
         model: { providerID, modelID },
         ...(agent ? { agent } : {}),
+        ...(variant ? { variant } : {}),
         parts: [{ type: 'text', text: buildContinuationPrompt(goal) }],
       },
     });
