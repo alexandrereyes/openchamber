@@ -101,6 +101,10 @@ export async function setSessionGoalStatus(
       // 'resumed' is the server's kickoff signal for an already-idle session.
       statusReason: status === 'active' ? 'resumed' : (status === 'complete' ? 'marked by user' : ''),
       blockedStreak: 0,
+      // An explicit resume grants a fresh auto-continuation allowance —
+      // otherwise a goal blocked on the turn cap would re-block on the very
+      // next tick and Resume would be a dead end.
+      ...(status === 'active' ? { turnsUsed: 0 } : {}),
       updatedAt: Date.now(),
     };
   });
