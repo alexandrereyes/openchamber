@@ -1035,9 +1035,10 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     const draft = get().newSessionDraft
     const trimmedAgent = typeof agent === "string" && agent.trim().length > 0 ? agent.trim() : undefined
 
-    const goalArmed = inputMode !== "shell" && content.trim().length > 0
+    const goalArm = inputMode !== "shell" && content.trim().length > 0
       ? useSessionGoalArmStore.getState().consume()
-      : false
+      : { armed: false, objectiveOverride: null }
+    const goalArmed = goalArm.armed
     if (goalArmed) {
       // Teach the agent the goal protocol from turn one — without this it
       // only learns about goal mode from the first server continuation.
@@ -1057,7 +1058,8 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
       if (!goalArmed) return
       const uiState = useUIStore.getState()
       const tokenBudget = uiState.sessionGoalDefaultBudgetEnabled ? uiState.sessionGoalDefaultBudget : null
-      void setSessionGoal(goalSessionId, goalDirectory ?? undefined, { objective: content, tokenBudget }, null)
+      const objective = goalArm.objectiveOverride?.trim() || content
+      void setSessionGoal(goalSessionId, goalDirectory ?? undefined, { objective, tokenBudget }, null)
         .catch((error) => {
           console.warn("[session-ui-store] failed to set goal from armed send", error)
         })
