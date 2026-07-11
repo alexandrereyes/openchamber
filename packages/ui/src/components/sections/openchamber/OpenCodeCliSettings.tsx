@@ -7,7 +7,9 @@ import {
   SettingsSection,
   SettingsFieldRow,
   SettingsCheckboxRow,
+  SettingsInset,
   SETTINGS_ICON_BUTTON_CLASS,
+  SETTINGS_OPTION_STACK_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 import { isDesktopShell, requestFileAccess } from '@/lib/desktop';
 import { updateDesktopSettings } from '@/lib/persistence';
@@ -158,25 +160,27 @@ export const OpenCodeCliSettings: React.FC = () => {
           </div>
         </div>
 
-        <SettingsCheckboxRow
-          settingsItem="sessions.opencode-update-notifications"
-          checked={showOpenCodeUpdateNotifications}
-          onChange={handleShowUpdateNotificationsChange}
-          label={t('settings.openchamber.opencodeCli.field.showUpdateNotifications')}
-          ariaLabel={t('settings.openchamber.opencodeCli.field.showUpdateNotificationsAria')}
-        />
+        <SettingsInset className={SETTINGS_OPTION_STACK_CLASS}>
+          <SettingsCheckboxRow
+            settingsItem="sessions.opencode-update-notifications"
+            checked={showOpenCodeUpdateNotifications}
+            onChange={handleShowUpdateNotificationsChange}
+            label={t('settings.openchamber.opencodeCli.field.showUpdateNotifications')}
+            ariaLabel={t('settings.openchamber.opencodeCli.field.showUpdateNotificationsAria')}
+          />
 
-        <div className="flex justify-start py-1.5">
-          <Button
-            type="button"
-            size="xs"
-            onClick={handleSaveAndReload}
-            disabled={isLoading || isSaving}
-            className="shrink-0 !font-normal"
-          >
-            {isSaving ? t('settings.common.actions.saving') : t('settings.openchamber.opencodeCli.actions.saveAndReload')}
-          </Button>
-        </div>
+          <div className="flex justify-start py-1.5">
+            <Button
+              type="button"
+              size="xs"
+              onClick={handleSaveAndReload}
+              disabled={isLoading || isSaving}
+              className="shrink-0 !font-normal"
+            >
+              {isSaving ? t('settings.common.actions.saving') : t('settings.openchamber.opencodeCli.actions.saveAndReload')}
+            </Button>
+          </div>
+        </SettingsInset>
       </div>
     </SettingsSection>
   );

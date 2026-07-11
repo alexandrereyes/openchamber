@@ -43,6 +43,7 @@ import {
     SettingsRadioOption,
     SettingsChipGroup,
     SETTINGS_SELECT_TRIGGER_CLASS,
+    SETTINGS_SELECT_ROW_TRIGGER_CLASS,
     SETTINGS_SELECT_SIZE,
     SETTINGS_ICON_BUTTON_CLASS,
     SETTINGS_CONTROL_CLUSTER_CLASS,
@@ -992,10 +993,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                             <SettingsSection title={t('settings.openchamber.visual.section.appInstall')} contentClassName={SETTINGS_FIELDS_STACK_CLASS}>
 
                             {showPwaInstallNameSetting && (
-                                <SettingsStackedField
+                                <SettingsFieldRow
                                     label={t('settings.openchamber.visual.field.installAppName')}
                                     description={t('settings.openchamber.visual.field.installAppNameHint')}
                                     settingsItem="appearance.pwa-install-name"
+                                    alignEnd={false}
                                     controlClassName={SETTINGS_CONTROL_CLUSTER_CLASS}
                                 >
                                     <Input
@@ -1029,14 +1031,15 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     >
                                         <Icon name="restart" className="h-3.5 w-3.5" />
                                     </Button>
-                                </SettingsStackedField>
+                                </SettingsFieldRow>
                             )}
 
                             {showPwaOrientationSetting && (
-                                <SettingsStackedField
+                                <SettingsFieldRow
                                     label={t('settings.openchamber.visual.field.installOrientation')}
                                     description={t('settings.openchamber.visual.field.installOrientationHint')}
                                     settingsItem="appearance.pwa-orientation"
+                                    alignEnd={false}
                                     controlClassName={SETTINGS_CONTROL_CLUSTER_CLASS}
                                 >
                                     <Select
@@ -1047,7 +1050,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             void applyPwaOrientation(orientation);
                                         }}
                                     >
-                                        <SelectTrigger aria-label={t('settings.openchamber.visual.field.pwaInstallOrientationAria')} size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_TRIGGER_CLASS}>
+                                        <SelectTrigger aria-label={t('settings.openchamber.visual.field.pwaInstallOrientationAria')} size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
                                             <SelectValue placeholder={t('settings.openchamber.visual.field.selectOrientationPlaceholder')}>
                                                 {selectedPwaOrientationLabel}
                                             </SelectValue>
@@ -1074,14 +1077,15 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     >
                                         <Icon name="restart" className="h-3.5 w-3.5" />
                                     </Button>
-                                </SettingsStackedField>
+                                </SettingsFieldRow>
                             )}
 
                             {showMobileKeyboardModeSetting && (
-                                <SettingsStackedField
+                                <SettingsFieldRow
                                     label={t('settings.openchamber.visual.field.mobileKeyboardMode')}
                                     description={t('settings.openchamber.visual.field.mobileKeyboardModeHint')}
                                     settingsItem="appearance.mobile-keyboard-mode"
+                                    alignEnd={false}
                                     controlClassName={SETTINGS_CONTROL_CLUSTER_CLASS}
                                 >
                                     <Select
@@ -1092,7 +1096,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             void updateDesktopSettings({ mobileKeyboardMode: mode });
                                         }}
                                     >
-                                        <SelectTrigger aria-label={t('settings.openchamber.visual.field.mobileKeyboardModeAria')} size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_TRIGGER_CLASS}>
+                                        <SelectTrigger aria-label={t('settings.openchamber.visual.field.mobileKeyboardModeAria')} size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
                                             <SelectValue placeholder={t('settings.openchamber.visual.field.selectMobileKeyboardModePlaceholder')}>
                                                 {selectedMobileKeyboardModeLabel}
                                             </SelectValue>
@@ -1119,7 +1123,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     >
                                         <Icon name="restart" className="h-3.5 w-3.5" />
                                     </Button>
-                                </SettingsStackedField>
+                                </SettingsFieldRow>
                             )}
                             </SettingsSection>
                         )}
@@ -1319,26 +1323,26 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
                 {/* --- Navigation --- */}
                 {hasNavigationSettings && (
-                    <SettingsSection title={t('settings.openchamber.visual.section.navigation')} contentClassName={SETTINGS_OPTION_STACK_CLASS}>
-                            {shouldShow('fileEditorKeymap') && (
-                                <SettingsFieldRow
-                                    label={t('settings.openchamber.visual.field.fileEditorKeymap')}
-                                    settingsItem="appearance.file-editor-keymap"
-                                    alignEnd={false}
-                                >
-                                    <SettingsRadioGroup aria-label={t('settings.openchamber.visual.field.fileEditorKeymap')}>
-                                        {(['default', 'vim'] as const).map((keymap) => (
-                                            <SettingsRadioOption
-                                                key={keymap}
-                                                selected={fileEditorKeymap === keymap}
-                                                onSelect={() => setFileEditorKeymap(keymap)}
-                                                label={t(`settings.openchamber.visual.option.fileEditorKeymap.${keymap}`)}
-                                                ariaLabel={t(`settings.openchamber.visual.option.fileEditorKeymap.${keymap}`)}
-                                            />
-                                        ))}
-                                    </SettingsRadioGroup>
-                                </SettingsFieldRow>
-                            )}
+                    <SettingsSection title={t('settings.openchamber.visual.section.navigation')} contentClassName="space-y-4">
+                        {shouldShow('fileEditorKeymap') && (
+                            <SettingsControlGroup
+                                title={t('settings.openchamber.visual.field.fileEditorKeymap')}
+                                settingsItem="appearance.file-editor-keymap"
+                            >
+                                <SettingsRadioGroup aria-label={t('settings.openchamber.visual.field.fileEditorKeymap')}>
+                                    {(['default', 'vim'] as const).map((keymap) => (
+                                        <SettingsRadioOption
+                                            key={keymap}
+                                            selected={fileEditorKeymap === keymap}
+                                            onSelect={() => setFileEditorKeymap(keymap)}
+                                            label={t(`settings.openchamber.visual.option.fileEditorKeymap.${keymap}`)}
+                                            ariaLabel={t(`settings.openchamber.visual.option.fileEditorKeymap.${keymap}`)}
+                                        />
+                                    ))}
+                                </SettingsRadioGroup>
+                            </SettingsControlGroup>
+                        )}
+                        <div className={SETTINGS_OPTION_STACK_CLASS}>
                             {shouldShow('expandedEditorToolbar') && (
                                 <SettingsCheckboxRow
                                     checked={expandedEditorToolbar}
@@ -1367,6 +1371,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     )}
                                 />
                             )}
+                        </div>
                     </SettingsSection>
                 )}
 

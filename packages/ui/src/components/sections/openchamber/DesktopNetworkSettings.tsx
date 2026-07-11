@@ -18,7 +18,8 @@ import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
 import {
   SettingsSection,
   SettingsCheckboxRow,
-  SettingsStackedField,
+  SettingsFieldRow,
+  SETTINGS_OPTION_STACK_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 
 export const DesktopNetworkSettings: React.FC = () => {
@@ -277,38 +278,42 @@ export const DesktopNetworkSettings: React.FC = () => {
 
   return (
     <SettingsSection title={t('settings.openchamber.desktopNetwork.title')}>
-      <div className="space-y-2">
-        {launchAtLoginSupported ? (
-          <SettingsCheckboxRow
-            settingsItem="sessions.desktop-launch-at-login"
-            checked={launchAtLoginEnabled}
-            onChange={(checked) => {
-              if (checked === launchAtLoginEnabled) return;
-              void handleLaunchAtLoginToggle();
-            }}
-            disabled={isSavingLaunchAtLogin}
-            label={t('settings.openchamber.desktopNetwork.field.launchAtLogin')}
-            description={t('settings.openchamber.desktopNetwork.field.launchAtLoginDescription')}
-            ariaLabel={t('settings.openchamber.desktopNetwork.field.launchAtLoginAria')}
-          />
+      <div className="space-y-3">
+        {(launchAtLoginSupported || keepAwakeSupported) ? (
+          <div className={SETTINGS_OPTION_STACK_CLASS}>
+            {launchAtLoginSupported ? (
+              <SettingsCheckboxRow
+                settingsItem="sessions.desktop-launch-at-login"
+                checked={launchAtLoginEnabled}
+                onChange={(checked) => {
+                  if (checked === launchAtLoginEnabled) return;
+                  void handleLaunchAtLoginToggle();
+                }}
+                disabled={isSavingLaunchAtLogin}
+                label={t('settings.openchamber.desktopNetwork.field.launchAtLogin')}
+                description={t('settings.openchamber.desktopNetwork.field.launchAtLoginDescription')}
+                ariaLabel={t('settings.openchamber.desktopNetwork.field.launchAtLoginAria')}
+              />
+            ) : null}
+
+            {keepAwakeSupported ? (
+              <SettingsCheckboxRow
+                settingsItem="sessions.desktop-keep-awake"
+                checked={keepAwakeEnabled}
+                onChange={(checked) => {
+                  if (checked === keepAwakeEnabled) return;
+                  void handleKeepAwakeToggle();
+                }}
+                disabled={isSavingKeepAwake}
+                label={t('settings.openchamber.desktopNetwork.field.keepAwake')}
+                description={t('settings.openchamber.desktopNetwork.field.keepAwakeDescription')}
+                ariaLabel={t('settings.openchamber.desktopNetwork.field.keepAwakeAria')}
+              />
+            ) : null}
+          </div>
         ) : null}
 
-        {keepAwakeSupported ? (
-          <SettingsCheckboxRow
-            settingsItem="sessions.desktop-keep-awake"
-            checked={keepAwakeEnabled}
-            onChange={(checked) => {
-              if (checked === keepAwakeEnabled) return;
-              void handleKeepAwakeToggle();
-            }}
-            disabled={isSavingKeepAwake}
-            label={t('settings.openchamber.desktopNetwork.field.keepAwake')}
-            description={t('settings.openchamber.desktopNetwork.field.keepAwakeDescription')}
-            ariaLabel={t('settings.openchamber.desktopNetwork.field.keepAwakeAria')}
-          />
-        ) : null}
-
-        <SettingsStackedField
+        <SettingsFieldRow
           settingsItem="sessions.desktop-ui-password"
           label={(
             <label htmlFor="desktop-ui-password">
@@ -316,12 +321,13 @@ export const DesktopNetworkSettings: React.FC = () => {
             </label>
           )}
           description={t('settings.openchamber.desktopPassword.field.passwordDescription')}
+          alignEnd={false}
           controlClassName="flex-col items-stretch"
         >
           <Input
             id="desktop-ui-password"
             type="password"
-            className="h-7 max-w-sm"
+            className="h-9 max-w-sm"
             value={draftPassword}
             onChange={(event) => handlePasswordChange(event.target.value)}
             placeholder={t('settings.openchamber.desktopPassword.field.passwordPlaceholder')}
@@ -329,29 +335,31 @@ export const DesktopNetworkSettings: React.FC = () => {
             required={draftValue}
             aria-invalid={lanRequiresPassword}
           />
-        </SettingsStackedField>
+        </SettingsFieldRow>
 
-        <SettingsCheckboxRow
-          settingsItem="sessions.desktop-lan-access"
-          checked={draftValue}
-          onChange={setDraftValue}
-          disabled={isLoading || isSaving}
-          label={t('settings.openchamber.desktopNetwork.field.allowLanAccess')}
-          description={(
-            <>
-              <span className="block">{t('settings.openchamber.desktopNetwork.field.allowLanAccessDescription')}</span>
-              <span className="block text-[var(--status-warning)]/85">
-                {t('settings.openchamber.desktopNetwork.field.warning')}
-              </span>
-              {lanRequiresPassword || lanBlockedByMissingPassword ? (
+        <div className={SETTINGS_OPTION_STACK_CLASS}>
+          <SettingsCheckboxRow
+            settingsItem="sessions.desktop-lan-access"
+            checked={draftValue}
+            onChange={setDraftValue}
+            disabled={isLoading || isSaving}
+            label={t('settings.openchamber.desktopNetwork.field.allowLanAccess')}
+            description={(
+              <>
+                <span className="block">{t('settings.openchamber.desktopNetwork.field.allowLanAccessDescription')}</span>
                 <span className="block text-[var(--status-warning)]/85">
-                  {t('settings.openchamber.desktopNetwork.field.passwordRequiredWarning')}
+                  {t('settings.openchamber.desktopNetwork.field.warning')}
                 </span>
-              ) : null}
-            </>
-          )}
-          ariaLabel={t('settings.openchamber.desktopNetwork.field.allowLanAccessAria')}
-        />
+                {lanRequiresPassword || lanBlockedByMissingPassword ? (
+                  <span className="block text-[var(--status-warning)]/85">
+                    {t('settings.openchamber.desktopNetwork.field.passwordRequiredWarning')}
+                  </span>
+                ) : null}
+              </>
+            )}
+            ariaLabel={t('settings.openchamber.desktopNetwork.field.allowLanAccessAria')}
+          />
+        </div>
 
         {error ? (
           <div className="typography-micro text-[var(--status-error)]">{error}</div>

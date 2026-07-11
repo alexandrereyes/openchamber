@@ -6,9 +6,11 @@ import {
   SettingsSection,
   SettingsFieldRow,
   SettingsCheckboxRow,
+  SettingsInset,
   SETTINGS_CUSTOM_TRIGGER_CLASS,
   SETTINGS_SELECT_ROW_TRIGGER_CLASS,
   SETTINGS_SELECT_SIZE,
+  SETTINGS_OPTION_STACK_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -305,57 +307,61 @@ export const DefaultsSettings: React.FC = () => {
             )}
           </div>
 
-          <SettingsFieldRow
-            settingsItem="sessions.default-model"
-            label={t('settings.openchamber.defaults.field.defaultModel')}
-          >
-            <ModelSelector
-              providerId={parsedModel.providerId}
-              modelId={parsedModel.modelId}
-              onChange={handleModelChange}
-              className={SETTINGS_CUSTOM_TRIGGER_CLASS}
+          <div>
+            <SettingsFieldRow
+              settingsItem="sessions.default-model"
+              label={t('settings.openchamber.defaults.field.defaultModel')}
+            >
+              <ModelSelector
+                providerId={parsedModel.providerId}
+                modelId={parsedModel.modelId}
+                onChange={handleModelChange}
+                className={SETTINGS_CUSTOM_TRIGGER_CLASS}
+              />
+            </SettingsFieldRow>
+
+            <SettingsFieldRow
+              settingsItem="sessions.default-thinking"
+              label={t('settings.openchamber.defaults.field.defaultThinking')}
+            >
+              <Select value={defaultVariant ?? DEFAULT_VARIANT_VALUE} onValueChange={handleVariantChange} disabled={!supportsVariants}>
+                <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
+                  <SelectValue placeholder={t('settings.openchamber.defaults.field.thinkingPlaceholder')}>
+                    {formatVariantLabel(defaultVariant ?? DEFAULT_VARIANT_VALUE)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={DEFAULT_VARIANT_VALUE}>{t('settings.openchamber.defaults.option.default')}</SelectItem>
+                  {availableVariants.map((variant) => (
+                    <SelectItem key={variant} value={variant}>
+                      {formatVariantLabel(variant)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SettingsFieldRow>
+
+            <SettingsFieldRow
+              settingsItem="sessions.default-agent"
+              label={t('settings.openchamber.defaults.field.defaultAgent')}
+            >
+              <AgentSelector
+                agentName={defaultAgent || ''}
+                onChange={handleAgentChange}
+                className={SETTINGS_CUSTOM_TRIGGER_CLASS}
+              />
+            </SettingsFieldRow>
+          </div>
+
+          <SettingsInset className={SETTINGS_OPTION_STACK_CLASS}>
+            <SettingsCheckboxRow
+              settingsItem="sessions.deletion-dialog"
+              checked={showDeletionDialog}
+              onChange={setShowDeletionDialog}
+              label={t('settings.openchamber.defaults.field.showDeletionDialog')}
+              ariaLabel={t('settings.openchamber.defaults.field.showDeletionDialogAria')}
             />
-          </SettingsFieldRow>
-
-          <SettingsFieldRow
-            settingsItem="sessions.default-thinking"
-            label={t('settings.openchamber.defaults.field.defaultThinking')}
-          >
-            <Select value={defaultVariant ?? DEFAULT_VARIANT_VALUE} onValueChange={handleVariantChange} disabled={!supportsVariants}>
-              <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
-                <SelectValue placeholder={t('settings.openchamber.defaults.field.thinkingPlaceholder')}>
-                  {formatVariantLabel(defaultVariant ?? DEFAULT_VARIANT_VALUE)}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={DEFAULT_VARIANT_VALUE}>{t('settings.openchamber.defaults.option.default')}</SelectItem>
-                {availableVariants.map((variant) => (
-                  <SelectItem key={variant} value={variant}>
-                    {formatVariantLabel(variant)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </SettingsFieldRow>
-
-          <SettingsFieldRow
-            settingsItem="sessions.default-agent"
-            label={t('settings.openchamber.defaults.field.defaultAgent')}
-          >
-            <AgentSelector
-              agentName={defaultAgent || ''}
-              onChange={handleAgentChange}
-              className={SETTINGS_CUSTOM_TRIGGER_CLASS}
-            />
-          </SettingsFieldRow>
-
-          <SettingsCheckboxRow
-            settingsItem="sessions.deletion-dialog"
-            checked={showDeletionDialog}
-            onChange={setShowDeletionDialog}
-            label={t('settings.openchamber.defaults.field.showDeletionDialog')}
-            ariaLabel={t('settings.openchamber.defaults.field.showDeletionDialogAria')}
-          />
+          </SettingsInset>
         </div>
       </SettingsSection>
 
@@ -375,15 +381,17 @@ export const DefaultsSettings: React.FC = () => {
           />
 
           {!smallModelUseDefault ? (
-            <SettingsFieldRow label={t('settings.openchamber.defaults.smallModel.overrideModel')}>
-              <ModelSelector
-                providerId={parsedSmallModel.providerId}
-                modelId={parsedSmallModel.modelId}
-                onChange={handleSmallModelOverrideChange}
-                allowedProviderIds={smallModelProviders}
-                className={SETTINGS_CUSTOM_TRIGGER_CLASS}
-              />
-            </SettingsFieldRow>
+            <SettingsInset>
+              <SettingsFieldRow label={t('settings.openchamber.defaults.smallModel.overrideModel')}>
+                <ModelSelector
+                  providerId={parsedSmallModel.providerId}
+                  modelId={parsedSmallModel.modelId}
+                  onChange={handleSmallModelOverrideChange}
+                  allowedProviderIds={smallModelProviders}
+                  className={SETTINGS_CUSTOM_TRIGGER_CLASS}
+                />
+              </SettingsFieldRow>
+            </SettingsInset>
           ) : null}
         </div>
       </SettingsSection>

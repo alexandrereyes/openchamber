@@ -24,6 +24,7 @@ import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLay
 import {
   SettingsSection,
   SettingsCheckboxRow,
+  SettingsFieldRow,
   SETTINGS_SELECT_ROW_TRIGGER_CLASS,
   SETTINGS_SELECT_SIZE,
 } from '@/components/sections/shared/SettingsSection';
@@ -310,31 +311,36 @@ export const BehaviorPage: React.FC = () => {
           ariaLabel={t('settings.behavior.page.responseStyle.enableAria')}
         />
 
-        <Select<ResponseStyleValue>
-          value={responseStylePreset}
-          onValueChange={(value) => setResponseStylePreset(value)}
-          disabled={isLoading || !responseStyleEnabled}
+        <SettingsFieldRow
+          label={t('settings.behavior.page.responseStyle.preset')}
+          alignEnd={false}
         >
-          <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
-            <SelectValue>
-              {(value) => {
-                if (value === 'custom') return t('settings.behavior.page.responseStyle.option.custom');
-                if (isResponseStylePreset(value)) return t(RESPONSE_STYLE_OPTION_LABEL_KEYS[value]);
-                return null;
-              }}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {RESPONSE_STYLE_PRESETS.map((preset) => (
-              <SelectItem key={preset} value={preset}>
-                {t(RESPONSE_STYLE_OPTION_LABEL_KEYS[preset])}
+          <Select<ResponseStyleValue>
+            value={responseStylePreset}
+            onValueChange={(value) => setResponseStylePreset(value)}
+            disabled={isLoading || !responseStyleEnabled}
+          >
+            <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
+              <SelectValue>
+                {(value) => {
+                  if (value === 'custom') return t('settings.behavior.page.responseStyle.option.custom');
+                  if (isResponseStylePreset(value)) return t(RESPONSE_STYLE_OPTION_LABEL_KEYS[value]);
+                  return null;
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {RESPONSE_STYLE_PRESETS.map((preset) => (
+                <SelectItem key={preset} value={preset}>
+                  {t(RESPONSE_STYLE_OPTION_LABEL_KEYS[preset])}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">
+                {t('settings.behavior.page.responseStyle.option.custom')}
               </SelectItem>
-            ))}
-            <SelectItem value="custom">
-              {t('settings.behavior.page.responseStyle.option.custom')}
-            </SelectItem>
-          </SelectContent>
-        </Select>
+            </SelectContent>
+          </Select>
+        </SettingsFieldRow>
 
         <Textarea
           value={responseStylePreview}

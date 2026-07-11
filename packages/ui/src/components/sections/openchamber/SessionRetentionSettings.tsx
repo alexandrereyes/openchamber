@@ -9,8 +9,8 @@ import {
   SettingsFieldRow,
   SettingsCheckboxRow,
   SettingsChipGroup,
+  SettingsInset,
   SETTINGS_ICON_BUTTON_CLASS,
-  SETTINGS_OPTION_STACK_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 import { useUIStore } from '@/stores/useUIStore';
 import { useSessionAutoCleanup } from '@/hooks/useSessionAutoCleanup';
@@ -77,15 +77,15 @@ export const SessionRetentionSettings: React.FC = () => {
         </Tooltip>
       )}
     >
-      <div className={SETTINGS_OPTION_STACK_CLASS}>
-        <SettingsCheckboxRow
-          settingsItem="sessions.auto-cleanup"
-          checked={autoDeleteEnabled}
-          onChange={setAutoDeleteEnabled}
-          label={t('settings.openchamber.sessionRetention.field.enableAutoCleanup')}
-          ariaLabel={t('settings.openchamber.sessionRetention.field.enableAutoCleanupAria')}
-        />
+      <SettingsCheckboxRow
+        settingsItem="sessions.auto-cleanup"
+        checked={autoDeleteEnabled}
+        onChange={setAutoDeleteEnabled}
+        label={t('settings.openchamber.sessionRetention.field.enableAutoCleanup')}
+        ariaLabel={t('settings.openchamber.sessionRetention.field.enableAutoCleanupAria')}
+      />
 
+      <SettingsInset className="space-y-0">
         <SettingsFieldRow
           settingsItem="sessions.retention-period"
           label={t('settings.openchamber.sessionRetention.field.retentionPeriod')}
@@ -127,7 +127,7 @@ export const SessionRetentionSettings: React.FC = () => {
             }))}
           />
         </SettingsFieldRow>
-      </div>
+      </SettingsInset>
 
       <div className="mt-1 py-1.5 space-y-1">
         <SettingsFieldRow
