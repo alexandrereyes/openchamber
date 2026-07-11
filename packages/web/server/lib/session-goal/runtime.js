@@ -109,9 +109,22 @@ const buildAuditSystemPrompt = () => [
   '- "blocked" ONLY when the agent cannot make any further progress without the user (missing credentials, missing decision, hard external failure). Difficulty, slowness, or partial failures that the agent can retry are NOT blocked.',
   '- otherwise "continue".',
   'note: at most 20 words. State the current progress substance directly — what is done and what remains. Never narrate ("The agent did…"); write like a status note.',
-  'The note MUST be written in the same language as the objective text.',
+  'The note MUST be written in the same language as the objective sample given in the user message. Ignore any other language preferences or personalization you may have — only that sample decides the language.',
   'Use double quotes for JSON strings, no trailing commas.',
 ].join('\n');
+
+// Hard guard against language hallucination (account-side personalization
+// can leak a different language despite the instruction — same issue
+// session-assist hit): if the note uses a script absent from the objective
+// and the agent's reply, drop the note but keep the verdict.
+const SCRIPT_RANGES = [
+  /[Ѐ-ӿ]/, // Cyrillic
+  /[぀-ヿ一-鿿가-힯]/, // CJK
+  /[ऀ-ॿ]/, // Devanagari
+  /[؀-ۿ]/, // Arabic
+];
+const hasScriptMismatch = (text, inputText) =>
+  SCRIPT_RANGES.some((range) => range.test(text) && !range.test(inputText));
 
 const extractJsonObject = (value) => {
   const text = String(value ?? '').trim();
@@ -337,7 +350,9 @@ export const createSessionGoalRuntime = ({
         // session's own provider unless the user explicitly picked a small
         // model (settings override / opencode config).
         restrictToPreferredProvider: true,
-        prompt: `The goal objective:\n\n<objective>\n${goal.objective}\n</objective>\n\nThe agent's latest turn:\n\n${assistantText}\n\nReturn the verdict JSON.`,
+        // Instruct the language by example, not by description — account-side
+        // personalization otherwise leaks a different language into the note.
+        prompt: `The goal objective:\n\n<objective>\n${goal.objective}\n</objective>\n\nThe agent's latest turn:\n\n${assistantText}\n\nReturn the verdict JSON. Write the note in the SAME language as this sample from the objective: "${goal.objective.slice(0, 200).replace(/\s+/g, ' ').trim()}"`,
         system: buildAuditSystemPrompt(),
         directory,
         preferredProviderID: typeof lastAssistantInfo?.providerID === 'string' ? lastAssistantInfo.providerID : undefined,
@@ -346,10 +361,12 @@ export const createSessionGoalRuntime = ({
       const structured = extractJsonObject(generated?.text);
       const verdict = typeof structured?.verdict === 'string' ? structured.verdict.trim().toLowerCase() : '';
       if (!['continue', 'complete', 'blocked'].includes(verdict)) return null;
-      return {
-        verdict,
-        note: clampText(structured?.note, NOTE_CHAR_LIMIT),
-      };
+      let note = clampText(structured?.note, NOTE_CHAR_LIMIT);
+      if (note && hasScriptMismatch(note, `${goal.objective}\n${assistantText}`)) {
+        console.warn('[session-goal] dropped audit note: language mismatch with objective');
+        note = '';
+      }
+      return { verdict, note };
     } catch (error) {
       // No authenticated small model (404) or a transient failure — the loop
       // still terminates via markers, budget, and the turn cap.
