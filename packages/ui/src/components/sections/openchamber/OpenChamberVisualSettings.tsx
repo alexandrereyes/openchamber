@@ -1134,9 +1134,9 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
                 {/* --- Density & type --- */}
                 {hasLayoutSettings && (
-                    <SettingsSection title={t('settings.openchamber.visual.section.densityAndType')}>
-                        <SettingsTwoColumn>
-                            <div className={SETTINGS_FIELDS_STACK_CLASS}>
+                    <SettingsSection title={t('settings.openchamber.visual.section.densityAndType')} contentClassName={SETTINGS_FIELDS_STACK_CLASS}>
+                        {(shouldShow('fontSize') && !isMobile) || shouldShow('terminalFontSize') ? (
+                            <SettingsTwoColumn>
                                 {shouldShow('fontSize') && !isMobile && (
                                     <SettingsStackedField
                                         label={t('settings.openchamber.visual.field.interfaceFont')}
@@ -1168,7 +1168,6 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </Button>
                                     </SettingsStackedField>
                                 )}
-
                                 {shouldShow('terminalFontSize') && (
                                     <SettingsStackedField
                                         label={t('settings.openchamber.visual.field.codeFont')}
@@ -1199,7 +1198,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </Button>
                                     </SettingsStackedField>
                                 )}
+                            </SettingsTwoColumn>
+                        ) : null}
 
+                        {(shouldShow('fontSize') && !isMobile) || shouldShow('terminalFontSize') ? (
+                            <SettingsTwoColumn>
                                 {shouldShow('fontSize') && !isMobile && (
                                     <SettingsStackedField
                                         label={t('settings.openchamber.visual.field.interfaceFontSize')}
@@ -1229,7 +1232,6 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </div>
                                     </SettingsStackedField>
                                 )}
-
                                 {shouldShow('terminalFontSize') && (
                                     <SettingsStackedField
                                         label={t('settings.openchamber.visual.field.terminalFontSize')}
@@ -1259,9 +1261,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </div>
                                     </SettingsStackedField>
                                 )}
-                            </div>
+                            </SettingsTwoColumn>
+                        ) : null}
 
-                            <div className={SETTINGS_FIELDS_STACK_CLASS}>
+                        {shouldShow('spacing') || shouldShow('inputBarOffset') ? (
+                            <SettingsTwoColumn>
                                 {shouldShow('spacing') && (
                                     <SettingsStackedField
                                         label={t('settings.openchamber.visual.field.spacingDensity')}
@@ -1291,7 +1295,6 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </div>
                                     </SettingsStackedField>
                                 )}
-
                                 {shouldShow('inputBarOffset') && (
                                     <SettingsStackedField
                                         label={(
@@ -1333,8 +1336,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         </div>
                                     </SettingsStackedField>
                                 )}
-                            </div>
-                        </SettingsTwoColumn>
+                            </SettingsTwoColumn>
+                        ) : null}
                     </SettingsSection>
                 )}
 
