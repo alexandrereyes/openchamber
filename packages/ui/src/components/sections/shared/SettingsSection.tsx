@@ -60,7 +60,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
       data-settings-item={settingsItem}
       className={cn(
         'space-y-4',
-        divider ? 'border-t border-border/40 py-8' : 'pb-8',
+        divider ? 'border-t border-border/60 py-8' : 'pb-8',
         className,
       )}
     >
@@ -255,7 +255,7 @@ export const SettingsInset: React.FC<SettingsInsetProps> = ({
   return (
     <div
       data-settings-item={settingsItem}
-      className={cn('border-t border-border/40 pt-4', className)}
+      className={cn('border-t border-border/60 pt-4', className)}
     >
       {children}
     </div>

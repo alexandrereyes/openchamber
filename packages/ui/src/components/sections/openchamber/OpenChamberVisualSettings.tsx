@@ -1464,11 +1464,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 {shouldShow('messageTransport') && (
                                     <SettingsControlGroup
                                         title={t('settings.openchamber.visual.section.messageStreamTransport')}
-                                        description={(() => {
-                                            const option = MESSAGE_STREAM_TRANSPORT_OPTIONS.find((item) => item.id === effectiveMessageStreamTransport);
-                                            return option?.descriptionKey ? tUnsafe(option.descriptionKey) : undefined;
-                                        })()}
                                         settingsItem="chat.message-transport"
+                                        contentClassName="space-y-2"
                                     >
                                         <SettingsChipGroup
                                             value={effectiveMessageStreamTransport}
@@ -1479,6 +1476,14 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                             onChange={handleMessageStreamTransportChange}
                                             aria-label={t('settings.openchamber.visual.section.messageStreamTransport')}
                                         />
+                                        {(() => {
+                                            const option = MESSAGE_STREAM_TRANSPORT_OPTIONS.find((item) => item.id === effectiveMessageStreamTransport);
+                                            return option?.descriptionKey ? (
+                                                <span className="typography-meta text-muted-foreground">
+                                                    {tUnsafe(option.descriptionKey)}
+                                                </span>
+                                            ) : null;
+                                        })()}
                                     </SettingsControlGroup>
                                 )}
 
