@@ -272,6 +272,28 @@ export const createNotificationTriggerRuntime = (deps) => {
       .join(' ');
   };
 
+  // A session with an ACTIVE goal suppresses per-turn ready notifications;
+  // the session-goal runtime sends its own notification when the goal
+  // settles. Fetch failures fall through to normal notification behavior.
+  const hasActiveSessionGoal = async (sessionId, directory) => {
+    if (!sessionId) return false;
+    try {
+      const base = buildOpenCodeUrl(`/session/${encodeURIComponent(sessionId)}`, '');
+      const url = directory ? `${base}?directory=${encodeURIComponent(directory)}` : base;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json', ...getOpenCodeAuthHeaders() },
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!response.ok) return false;
+      const session = await response.json().catch(() => null);
+      const goal = session?.metadata?.openchamber?.goal;
+      return Boolean(goal && typeof goal === 'object' && goal.status === 'active');
+    } catch {
+      return false;
+    }
+  };
+
   const maybeSendPushForTrigger = async (payload) => {
     if (!payload || typeof payload !== 'object') {
       return;
@@ -298,6 +320,13 @@ export const createNotificationTriggerRuntime = (deps) => {
         }
 
         if (settings.notifyOnCompletion === false) {
+          return;
+        }
+
+        // While a goal drives the session, per-turn "ready" notifications are
+        // noise produced by the goal loop itself — the goal's own settle
+        // notification (complete/blocked/budget) is the final word instead.
+        if (await hasActiveSessionGoal(sessionId, notificationDirectory)) {
           return;
         }
 

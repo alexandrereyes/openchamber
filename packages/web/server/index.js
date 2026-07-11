@@ -729,7 +729,13 @@ const sessionGoalRuntime = createSessionGoalRuntime({
   buildOpenCodeUrl,
   getOpenCodeAuthHeaders,
   getSmallModelService: async () => import('./lib/small-model/index.js'),
-  emitGoalNotification: ({ sessionId, directory, status, goal }) => {
+  emitGoalNotification: async ({ sessionId, directory, status, goal }) => {
+    // The goal settle notification replaces the per-turn ready notifications
+    // (suppressed while the goal is active) — so it obeys the same toggle.
+    const settings = await readSettingsFromDisk();
+    if (settings.notifyOnCompletion === false) {
+      return;
+    }
     const title = status === 'complete'
       ? 'Goal complete'
       : (status === 'budgetLimited' ? 'Goal reached its token budget' : 'Goal blocked');
