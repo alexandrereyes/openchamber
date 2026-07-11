@@ -117,6 +117,14 @@ sees only that final turn, so the report is its evidence.
   (edit/pause/resume/complete/clear).
 - Sidebar glyph next to the date in `SessionNodeItem`.
 
+## Scheduled goals
+
+Scheduled tasks can run as goals: `execution.goalEnabled` (+ optional
+`execution.goalTokenBudget`) on a task makes the scheduled-tasks runtime
+stamp `metadata.openchamber.goal` onto the fresh session (objective = the
+expanded task prompt) and attach the goal-mode intro part to the prompt.
+The loop here picks it up from session events like any other goal.
+
 ## Limitations
 
 - Web-server feature: VS Code (extension-only) renders goal state via
