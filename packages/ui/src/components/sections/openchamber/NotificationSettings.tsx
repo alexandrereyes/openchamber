@@ -11,6 +11,7 @@ import {
   SettingsSection,
   SettingsTwoColumn,
   SettingsCheckboxRow,
+  SettingsGroupTitle,
   SETTINGS_OPTION_STACK_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 
@@ -576,9 +577,9 @@ export const NotificationSettings: React.FC = () => {
               <SettingsTwoColumn className="gap-2 md:grid-cols-2 md:gap-3 lg:gap-3">
                 {(['completion', 'subtask', 'error', 'question'] as const).map((event: NotificationTemplateEvent) => (
                   <section key={event} className="p-2">
-                    <span className="typography-ui-label text-foreground font-normal capitalize block">
+                    <SettingsGroupTitle className="capitalize">
                       {t(TEMPLATE_EVENT_LABEL_KEYS[event])}
-                    </span>
+                    </SettingsGroupTitle>
                     <div className="mt-1.5 space-y-2">
                       <div>
                         <label className="typography-micro text-muted-foreground block mb-1">{t('settings.notifications.page.template.field.title')}</label>

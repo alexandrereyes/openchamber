@@ -196,20 +196,16 @@ export const PluginsPage: React.FC = () => {
 
     return (
       <SettingsPageLayout
-        title={(
-          <div className="flex items-center gap-2 min-w-0">
-            <h1 className="typography-settings-title text-foreground truncate">
-              {t('settings.plugins.page.header.entry')}
-            </h1>
-            <ScopeBadge
-              scope={selectedEntry.scope}
-              label={
-                selectedEntry.scope === 'project'
-                  ? t('settings.plugins.sidebar.group.projectEntries')
-                  : t('settings.plugins.sidebar.group.userEntries')
-              }
-            />
-          </div>
+        title={t('settings.plugins.page.header.entry')}
+        titleAccessory={(
+          <ScopeBadge
+            scope={selectedEntry.scope}
+            label={
+              selectedEntry.scope === 'project'
+                ? t('settings.plugins.sidebar.group.projectEntries')
+                : t('settings.plugins.sidebar.group.userEntries')
+            }
+          />
         )}
         showSaveStatus={false}
       >
@@ -316,11 +312,9 @@ export const PluginsPage: React.FC = () => {
 
     return (
       <SettingsPageLayout
-        title={(
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <h1 className="typography-settings-title text-foreground truncate">
-              {t('settings.plugins.page.header.file')}
-            </h1>
+        title={t('settings.plugins.page.header.file')}
+        titleAccessory={(
+          <>
             <ScopeBadge
               scope={selectedFile.scope}
               label={
@@ -338,7 +332,7 @@ export const PluginsPage: React.FC = () => {
             >
               {selectedFile.fileName}
             </span>
-          </div>
+          </>
         )}
         showSaveStatus={false}
       >

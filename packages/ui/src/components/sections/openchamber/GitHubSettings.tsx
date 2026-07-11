@@ -11,7 +11,7 @@ import { useI18n } from '@/lib/i18n';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { Icon } from "@/components/icon/Icon";
-import { SettingsSection } from '@/components/sections/shared/SettingsSection';
+import { SettingsSection, SettingsGroupTitle } from '@/components/sections/shared/SettingsSection';
 
 type GitHubUser = {
   login: string;
@@ -424,7 +424,7 @@ export const GitHubSettings: React.FC = () => {
       {flow && (
         <div className="mt-4 rounded-lg bg-[var(--surface-elevated)]/70 p-4 border border-[var(--interactive-border)]">
           <div className="space-y-1">
-            <h4 className="typography-ui-label text-foreground">{t('settings.github.page.flow.title')}</h4>
+            <SettingsGroupTitle>{t('settings.github.page.flow.title')}</SettingsGroupTitle>
             <p className="typography-meta text-muted-foreground">
               {t('settings.github.page.flow.description')}
             </p>

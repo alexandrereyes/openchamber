@@ -21,6 +21,7 @@ import {
   SettingsFieldRow,
   SettingsStackedField,
   SettingsChipGroup,
+  SettingsGroupTitle,
   SETTINGS_SELECT_SIZE,
   SETTINGS_ICON_BUTTON_CLASS,
 } from '@/components/sections/shared/SettingsSection';
@@ -1124,7 +1125,7 @@ export const AgentsPage: React.FC = () => {
               </div>
 
               <div className="border-t border-[var(--surface-subtle)] pt-3">
-                <h4 className="typography-ui-label text-foreground mb-2">{t('settings.agents.page.permissions.addCustomRule')}</h4>
+                <SettingsGroupTitle className="mb-2">{t('settings.agents.page.permissions.addCustomRule')}</SettingsGroupTitle>
                 <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
                   <Select value={pendingRuleName} onValueChange={setPendingRuleName}>
                     <SelectTrigger className="w-full sm:w-[160px]">

@@ -31,6 +31,35 @@ export const SETTINGS_FIELDS_STACK_CLASS = 'space-y-3';
 /** Compact checkbox / radio list stack. */
 export const SETTINGS_OPTION_STACK_CLASS = 'space-y-0.5';
 
+/**
+ * Settings heading classes by context (size + default color).
+ * Prefer these over ad-hoc typography-* + color combinations.
+ */
+/** L1 — page / detail-pane title (larger, quieter than section titles). */
+export const SETTINGS_PAGE_TITLE_CLASS =
+  'typography-settings-page-title text-muted-foreground';
+/** L2 — section title inside a settings page. */
+export const SETTINGS_SECTION_TITLE_CLASS =
+  'typography-settings-section-title text-foreground';
+/** Split-pane sidebar panel title — same level as section titles. */
+export const SETTINGS_PANEL_TITLE_CLASS = SETTINGS_SECTION_TITLE_CLASS;
+/** L3 — control-group heading inside a section. */
+export const SETTINGS_GROUP_TITLE_CLASS =
+  'typography-settings-group-title text-foreground';
+/** L4 — field / control labels. */
+export const SETTINGS_FIELD_LABEL_CLASS =
+  'typography-settings-field-label text-foreground';
+/** Supporting copy under page or section titles. */
+export const SETTINGS_DESCRIPTION_CLASS =
+  'typography-settings-description text-muted-foreground';
+/** Supporting copy under group titles and fields. */
+export const SETTINGS_HELPER_CLASS = 'typography-meta text-muted-foreground';
+/** Callout / alert headline inside a section (not a control-group title). */
+export const SETTINGS_CALLOUT_TITLE_CLASS = 'typography-meta font-medium text-foreground';
+/** Brand / product name under a logo — quieter than L1 page title. */
+export const SETTINGS_BRAND_TITLE_CLASS =
+  'typography-settings-section-title text-foreground';
+
 interface SettingsSectionProps {
   /** Section title. Strings render as the shared h2 style. */
   title?: React.ReactNode;
@@ -83,7 +112,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
             {title != null ? (
               <div className="flex items-center gap-2">
                 {typeof title === 'string' || typeof title === 'number' ? (
-                  <h2 className="typography-settings-title text-foreground">{title}</h2>
+                  <h2 className={SETTINGS_SECTION_TITLE_CLASS}>{title}</h2>
                 ) : (
                   title
                 )}
@@ -91,7 +120,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
               </div>
             ) : null}
             {description != null ? (
-              <div className="typography-settings-description text-muted-foreground">{description}</div>
+              <div className={SETTINGS_DESCRIPTION_CLASS}>{description}</div>
             ) : null}
           </div>
           {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
@@ -132,7 +161,7 @@ export const SettingsGroupTitle: React.FC<SettingsGroupTitleProps> = ({
   as: Tag = 'h3',
 }) => {
   return (
-    <Tag className={cn('typography-ui-label font-medium text-foreground', className)}>
+    <Tag className={cn(SETTINGS_GROUP_TITLE_CLASS, className)}>
       {children}
     </Tag>
   );
@@ -162,7 +191,7 @@ export const SettingsControlGroup: React.FC<SettingsControlGroupProps> = ({
         <div className="space-y-0.5">
           {title != null ? <SettingsGroupTitle>{title}</SettingsGroupTitle> : null}
           {description != null ? (
-            <p className="typography-meta text-muted-foreground">{description}</p>
+            <p className={SETTINGS_HELPER_CLASS}>{description}</p>
           ) : null}
         </div>
       ) : null}
@@ -197,13 +226,13 @@ export const SettingsStackedField: React.FC<SettingsStackedFieldProps> = ({
 }) => {
   const descriptionNode =
     description != null ? (
-      <p className="typography-meta text-muted-foreground">{description}</p>
+      <p className={SETTINGS_HELPER_CLASS}>{description}</p>
     ) : null;
 
   return (
     <div data-settings-item={settingsItem} className={cn('space-y-1.5', className)}>
       <div className="space-y-0.5">
-        <div className="typography-ui-label text-foreground">{label}</div>
+        <div className={SETTINGS_FIELD_LABEL_CLASS}>{label}</div>
         {descriptionPlacement === 'before' ? descriptionNode : null}
       </div>
       <div className={cn('flex min-w-0 items-center gap-2', controlClassName)}>{children}</div>
@@ -245,9 +274,9 @@ export const SettingsFieldRow: React.FC<SettingsFieldRowProps> = ({
       )}
     >
       <div className="min-w-0 sm:w-56 sm:shrink-0">
-        <div className="typography-ui-label text-foreground">{label}</div>
+        <div className={SETTINGS_FIELD_LABEL_CLASS}>{label}</div>
         {description != null ? (
-          <p className="typography-meta mt-0.5 text-muted-foreground">{description}</p>
+          <p className={cn(SETTINGS_HELPER_CLASS, 'mt-0.5')}>{description}</p>
         ) : null}
       </div>
       <div
@@ -344,11 +373,11 @@ export const SettingsCheckboxRow: React.FC<SettingsCheckboxRowProps> = ({
       />
       <div className="flex min-w-0 flex-col">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="typography-ui-label text-foreground">{label}</span>
+          <span className={SETTINGS_FIELD_LABEL_CLASS}>{label}</span>
           {labelAccessory}
         </div>
         {hasDescription ? (
-          <span className="typography-meta text-muted-foreground">{description}</span>
+          <span className={SETTINGS_HELPER_CLASS}>{description}</span>
         ) : null}
       </div>
     </div>
@@ -406,14 +435,14 @@ export const SettingsRadioOption: React.FC<SettingsRadioOptionProps> = ({
       <div className="flex min-w-0 flex-col">
         <span
           className={cn(
-            'typography-ui-label font-normal',
+            'typography-settings-field-label font-normal',
             selected ? 'text-foreground' : 'text-foreground/50',
           )}
         >
           {label}
         </span>
         {description != null ? (
-          <span className="typography-meta text-muted-foreground">{description}</span>
+          <span className={SETTINGS_HELPER_CLASS}>{description}</span>
         ) : null}
       </div>
     </div>

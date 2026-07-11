@@ -233,7 +233,7 @@ const SettingsHome: React.FC<{ onOpen: (slug: SettingsPageSlug) => void }> = ({ 
     <div className="h-full overflow-auto">
       <div className="mx-auto w-full max-w-[840px] px-6 py-6 sm:px-12 sm:py-8 space-y-6">
         <div className="space-y-1">
-          <h1 className="typography-settings-title text-foreground">{t('settings.view.home.title')}</h1>
+          <h1 className="typography-settings-page-title text-muted-foreground">{t('settings.view.home.title')}</h1>
           <p className="typography-settings-description text-muted-foreground">{t('settings.view.home.description')}</p>
         </div>
 
@@ -673,7 +673,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     return (
       <div className="flex h-full items-center justify-center px-6">
         <div className="max-w-md text-center">
-          <div className="typography-ui-header font-semibold text-foreground">{t('settings.view.unavailable.title')}</div>
+          <div className="typography-settings-section-title text-foreground">{t('settings.view.unavailable.title')}</div>
           <p className="typography-ui text-muted-foreground mt-1">{t('settings.view.unavailable.description')}</p>
         </div>
       </div>

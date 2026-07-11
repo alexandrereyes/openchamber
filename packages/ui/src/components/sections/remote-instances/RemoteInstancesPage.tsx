@@ -21,7 +21,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
-import { SettingsSection } from '@/components/sections/shared/SettingsSection';
+import {
+  SettingsSection,
+  SettingsGroupTitle,
+  SETTINGS_PAGE_TITLE_CLASS,
+  SETTINGS_FIELD_LABEL_CLASS,
+} from '@/components/sections/shared/SettingsSection';
 import { useDesktopSshStore } from '@/stores/useDesktopSshStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { toast } from '@/components/ui';
@@ -181,7 +186,7 @@ const suggestConcreteHost = (pattern: string): string => {
 
 const HintLabel: React.FC<{ label: string; hint: React.ReactNode }> = ({ label, hint }) => {
   return (
-    <span className="inline-flex items-center gap-1 typography-meta text-muted-foreground">
+    <span className={`inline-flex items-center gap-1 ${SETTINGS_FIELD_LABEL_CLASS}`}>
       <span>{label}</span>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -1329,7 +1334,7 @@ export const RemoteInstancesPage: React.FC = () => {
 
   if (!draft) {
     return (
-      <SettingsPageLayout>
+      <SettingsPageLayout title={t('settings.page.remoteInstances.title')}>
         {clientAuth ? (
           <SettingsSection
             title={t('settings.remoteInstances.clientAuth.title')}
@@ -1502,7 +1507,7 @@ export const RemoteInstancesPage: React.FC = () => {
               <Input className="h-8" value={directToken} onChange={(event) => setDirectToken(event.target.value)} placeholder={t('settings.remoteInstances.direct.field.tokenPlaceholder')} type="password" disabled={directSaving} />
               <div className="space-y-2">
                 <div>
-                  <p className="typography-ui-label text-foreground">{t('settings.remoteInstances.direct.headers.title')}</p>
+                  <SettingsGroupTitle>{t('settings.remoteInstances.direct.headers.title')}</SettingsGroupTitle>
                   <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.direct.headers.description')}</p>
                 </div>
                 {directHeaders.map((header) => (
@@ -1539,7 +1544,7 @@ export const RemoteInstancesPage: React.FC = () => {
               <Input className="h-8" value={directEditToken} onChange={(event) => setDirectEditToken(event.target.value)} placeholder={t('settings.remoteInstances.direct.field.tokenPlaceholder')} type="password" disabled={directSaving} />
               <div className="space-y-2">
                 <div>
-                  <p className="typography-ui-label text-foreground">{t('settings.remoteInstances.direct.headers.title')}</p>
+                  <SettingsGroupTitle>{t('settings.remoteInstances.direct.headers.title')}</SettingsGroupTitle>
                   <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.direct.headers.description')}</p>
                 </div>
                 {directEditHeaders.map((header) => (
@@ -1835,7 +1840,7 @@ export const RemoteInstancesPage: React.FC = () => {
     <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open) setSelectedId(null); }}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-auto">
       <div className="mb-6 px-1">
-        <h2 className="typography-ui-header font-semibold text-foreground truncate">{instanceTitle}</h2>
+        <h1 className={`${SETTINGS_PAGE_TITLE_CLASS} truncate`}>{instanceTitle}</h1>
         <div className="mt-1 flex flex-wrap items-center gap-2 typography-meta text-muted-foreground">
           <span className={`h-2.5 w-2.5 rounded-full ${phaseDotClass(statusPhase)}`} />
           <span>{t(phaseLabelKey(statusPhase))}</span>

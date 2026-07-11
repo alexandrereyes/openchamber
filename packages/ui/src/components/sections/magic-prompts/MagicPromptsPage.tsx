@@ -312,18 +312,16 @@ export const MagicPromptsPage: React.FC = () => {
 
   return (
     <SettingsPageLayout
-      title={(
-        <div className="flex items-center gap-2">
-          <h1 className="typography-settings-title text-foreground">{tUnsafe(pageConfig.titleKey)}</h1>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Icon name="information" className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent sideOffset={8} className="max-w-xs">
-              {tUnsafe(pageConfig.descriptionKey)}
-            </TooltipContent>
-          </Tooltip>
-        </div>
+      title={tUnsafe(pageConfig.titleKey)}
+      titleAccessory={(
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Icon name="information" className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent sideOffset={8} className="max-w-xs">
+            {tUnsafe(pageConfig.descriptionKey)}
+          </TooltipContent>
+        </Tooltip>
       )}
       headerEnd={(
         <Button

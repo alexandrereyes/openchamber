@@ -4,12 +4,20 @@ import { Icon } from '@/components/icon/Icon';
 import { useI18n } from '@/lib/i18n';
 import { getSettingsSaveState, subscribeToSettingsSaveState } from '@/lib/persistence';
 import { cn } from '@/lib/utils';
+import {
+  SETTINGS_DESCRIPTION_CLASS,
+  SETTINGS_PAGE_TITLE_CLASS,
+} from '@/components/sections/shared/SettingsSection';
 
 interface SettingsPageLayoutProps {
   /** Page content */
   children: React.ReactNode;
   /** Optional page title shown above settings content. */
   title?: React.ReactNode;
+  /** Optional content rendered before a string/number page title. */
+  titleLeading?: React.ReactNode;
+  /** Optional content rendered after a string/number page title. */
+  titleAccessory?: React.ReactNode;
   /** Optional supporting description under the page title. */
   description?: React.ReactNode;
   /** Optional content rendered at the end of the header row (before save status). */
@@ -31,11 +39,15 @@ export const SettingsPageLayout: React.FC<SettingsPageLayoutProps> = ({
   className,
   outerClassName,
   title,
+  titleLeading,
+  titleAccessory,
   description,
   headerEnd,
   showSaveStatus = false,
 }) => {
   const hasHeader = title != null || description != null || headerEnd != null || showSaveStatus;
+  const isPlainTitle = typeof title === 'string' || typeof title === 'number';
+  const hasTitleChrome = titleLeading != null || titleAccessory != null;
 
   return (
     <ScrollableOverlay
@@ -52,15 +64,23 @@ export const SettingsPageLayout: React.FC<SettingsPageLayoutProps> = ({
           <div className="mb-2 flex items-start justify-between gap-4 pb-6">
             <div className="min-w-0 space-y-1">
               {title != null ? (
-                typeof title === 'string' || typeof title === 'number' ? (
-                  <h1 className="typography-settings-title text-foreground">{title}</h1>
+                isPlainTitle ? (
+                  hasTitleChrome ? (
+                    <div className="flex min-w-0 items-center gap-2">
+                      {titleLeading}
+                      <h1 className={cn(SETTINGS_PAGE_TITLE_CLASS, 'min-w-0 truncate')}>{title}</h1>
+                      {titleAccessory}
+                    </div>
+                  ) : (
+                    <h1 className={SETTINGS_PAGE_TITLE_CLASS}>{title}</h1>
+                  )
                 ) : (
                   title
                 )
               ) : null}
               {description != null ? (
                 typeof description === 'string' || typeof description === 'number' ? (
-                  <p className="typography-settings-description text-muted-foreground">{description}</p>
+                  <p className={SETTINGS_DESCRIPTION_CLASS}>{description}</p>
                 ) : (
                   description
                 )

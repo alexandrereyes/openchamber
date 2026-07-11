@@ -369,7 +369,7 @@ export const DefaultsSettings: React.FC = () => {
               <SettingsGroupTitle>
                 {t('settings.openchamber.defaults.smallModel.title')}
               </SettingsGroupTitle>
-              <p className="typography-settings-description text-muted-foreground">
+              <p className="typography-meta text-muted-foreground">
                 {t('settings.openchamber.defaults.smallModel.description')}
               </p>
             </div>

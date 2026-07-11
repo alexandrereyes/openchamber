@@ -153,17 +153,11 @@ export const UsagePage: React.FC = () => {
 
   return (
     <SettingsPageLayout
-      title={(
-        <div className="flex items-center gap-3 min-w-0">
-          <ProviderLogo providerId={selectedProviderId} className="h-5 w-5 shrink-0" />
-          <h1 className="typography-settings-title text-foreground truncate">
-            {t('settings.usage.page.header.providerUsage', { provider: providerName })}
-          </h1>
-        </div>
-      )}
+      title={t('settings.usage.page.header.providerUsage', { provider: providerName })}
+      titleLeading={<ProviderLogo providerId={selectedProviderId} className="h-5 w-5 shrink-0" />}
       description={
         isLoading ? (
-          <span className="animate-pulse">{t('settings.usage.page.header.refreshing')}</span>
+          <span className="animate-pulse typography-settings-description text-muted-foreground">{t('settings.usage.page.header.refreshing')}</span>
         ) : (
           t('settings.usage.page.header.lastUpdated', { time: formatTime(lastUpdated, timeFormatPreference) })
         )

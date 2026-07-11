@@ -781,15 +781,9 @@ export const ProvidersPage: React.FC = () => {
 
   return (
     <SettingsPageLayout
-      title={(
-        <div className="flex items-center gap-3 min-w-0">
-          <ProviderLogo providerId={selectedProvider.id} className="h-5 w-5 shrink-0" />
-          <h1 className="typography-settings-title text-foreground truncate">
-            {selectedProvider.name || selectedProvider.id}
-          </h1>
-        </div>
-      )}
-      description={<span className="font-mono">{selectedProvider.id}</span>}
+      title={selectedProvider.name || selectedProvider.id}
+      titleLeading={<ProviderLogo providerId={selectedProvider.id} className="h-5 w-5 shrink-0" />}
+      description={<span className="font-mono typography-settings-description text-muted-foreground">{selectedProvider.id}</span>}
       showSaveStatus={false}
     >
       <SettingsSection
@@ -972,16 +966,14 @@ export const ProvidersPage: React.FC = () => {
       </SettingsSection>
 
       <SettingsSection
-        title={(
-          <>
-            {t('settings.providers.page.models.title')}
-            {providerModels.length > 0 && (
-              <span className="ml-1.5 typography-micro text-muted-foreground font-normal">
-                ({providerModels.length})
-              </span>
-            )}
-          </>
-        )}
+        title={t('settings.providers.page.models.title')}
+        titleAccessory={
+          providerModels.length > 0 ? (
+            <span className="typography-micro text-muted-foreground font-normal">
+              ({providerModels.length})
+            </span>
+          ) : null
+        }
         headerAction={(
           <div className="flex items-center gap-1">
             <Button
