@@ -103,14 +103,16 @@ export function SessionGoalDialog({ open, onOpenChange, sessionId, directory }: 
               {goal.note ? (
                 <p className="typography-meta text-muted-foreground">{goal.note}</p>
               ) : null}
-              {goal.statusReason && goal.status !== 'active' ? (
+              {/* Only failure states carry a reason worth reading; outcomes
+                  like "verified by audit" are noise next to the status dot. */}
+              {goal.statusReason && (goal.status === 'blocked' || goal.status === 'budgetLimited') ? (
                 <p className="typography-meta text-muted-foreground/70">{goal.statusReason}</p>
               ) : null}
             </div>
           )}
 
           {isCompleted ? (
-            <p className="typography-meta text-muted-foreground">{goal.objective}</p>
+            <p className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words typography-meta text-muted-foreground">{goal.objective}</p>
           ) : (
             <>
               <div className="space-y-1">
