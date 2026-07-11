@@ -4,7 +4,6 @@ import { useSessionGoal } from '@/hooks/useSessionGoal';
 import { formatGoalTokens } from '@/lib/sessionGoalMetadata';
 import { sessionGoalStatusColor, sessionGoalStatusLabelKey } from '@/lib/sessionGoalPresentation';
 import { setSessionGoalStatus } from '@/lib/sessionGoalActions';
-import { SessionGoalDialog } from '@/components/chat/SessionGoalDialog';
 import { toast } from '@/components/ui';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -15,13 +14,13 @@ interface SessionGoalRowProps {
   className?: string;
 }
 
-// Compact goal strip near the composer: status dot, objective (or the latest
-// audit note), token usage, and an inline pause/resume action. Tapping the
-// strip opens the manage dialog.
+// Compact goal strip near the composer: informational only — status dot,
+// objective (or the latest audit note), token usage — plus an inline
+// pause/resume action. The manage dialog opens from the composer target
+// button, not from here.
 export const SessionGoalRow: React.FC<SessionGoalRowProps> = React.memo(({ sessionId, directory, className }) => {
   const { t } = useI18n();
   const { goal, enabled } = useSessionGoal(sessionId ?? '', directory);
-  const [dialogOpen, setDialogOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
   const handleToggleStatus = React.useCallback(async (nextStatus: 'active' | 'paused') => {
@@ -57,49 +56,40 @@ export const SessionGoalRow: React.FC<SessionGoalRowProps> = React.memo(({ sessi
       : null);
 
   return (
-    <>
-      <div
-        className={cn(
-          'flex w-full min-w-0 items-center gap-2 rounded-lg border px-2 py-1',
-          'border-[var(--interactive-border)]',
-          className,
-        )}
-      >
+    <div
+      className={cn(
+        'flex w-full min-w-0 items-center gap-2 rounded-lg border px-2 py-1',
+        'border-[var(--interactive-border)]',
+        className,
+      )}
+      aria-label={t('chat.goal.row.aria')}
+      title={goal.objective}
+    >
+      <Icon name="target" className="h-3.5 w-3.5 flex-shrink-0" style={{ color: sessionGoalStatusColor[goal.status] }} aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate typography-meta text-foreground">
+        {goal.note || goal.objective}
+      </span>
+      <span className="flex-shrink-0 typography-meta text-muted-foreground">
+        {t(sessionGoalStatusLabelKey[goal.status] as never)}
+      </span>
+      {usage ? (
+        <span className="flex-shrink-0 typography-meta tabular-nums text-muted-foreground/70">
+          {usage}
+        </span>
+      ) : null}
+      {pauseResume ? (
         <button
           type="button"
-          onClick={() => setDialogOpen(true)}
-          className="flex min-w-0 flex-1 items-center gap-2 text-left hover:opacity-80"
-          aria-label={t('chat.goal.row.aria')}
-          title={goal.objective}
+          onClick={() => void handleToggleStatus(pauseResume.next)}
+          disabled={busy}
+          className="flex flex-shrink-0 cursor-pointer items-center gap-1 rounded px-1 py-0.5 typography-meta text-muted-foreground hover:bg-[var(--interactive-hover)] hover:text-foreground disabled:opacity-50"
+          aria-label={t(pauseResume.labelKey)}
         >
-          <Icon name="target" className="h-3.5 w-3.5 flex-shrink-0" style={{ color: sessionGoalStatusColor[goal.status] }} aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate typography-meta text-foreground">
-            {goal.note || goal.objective}
-          </span>
-          <span className="flex-shrink-0 typography-meta text-muted-foreground">
-            {t(sessionGoalStatusLabelKey[goal.status] as never)}
-          </span>
-          {usage ? (
-            <span className="flex-shrink-0 typography-meta tabular-nums text-muted-foreground/70">
-              {usage}
-            </span>
-          ) : null}
+          <Icon name={pauseResume.icon} className="h-3 w-3" aria-hidden="true" />
+          <span>{t(pauseResume.labelKey)}</span>
         </button>
-        {pauseResume ? (
-          <button
-            type="button"
-            onClick={() => void handleToggleStatus(pauseResume.next)}
-            disabled={busy}
-            className="flex flex-shrink-0 cursor-pointer items-center gap-1 rounded px-1 py-0.5 typography-meta text-muted-foreground hover:bg-[var(--interactive-hover)] hover:text-foreground disabled:opacity-50"
-            aria-label={t(pauseResume.labelKey)}
-          >
-            <Icon name={pauseResume.icon} className="h-3 w-3" aria-hidden="true" />
-            <span>{t(pauseResume.labelKey)}</span>
-          </button>
-        ) : null}
-      </div>
-      <SessionGoalDialog open={dialogOpen} onOpenChange={setDialogOpen} sessionId={sessionId} directory={directory} />
-    </>
+      ) : null}
+    </div>
   );
 });
 

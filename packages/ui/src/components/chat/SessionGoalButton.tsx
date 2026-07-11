@@ -56,12 +56,14 @@ export const SessionGoalButton: React.FC<SessionGoalButtonProps> = React.memo(({
     return '';
   })();
 
-  const label = liveGoal
+  const label = goal
     ? t('chat.goal.button.manageAria')
     : (armed ? t('chat.goal.button.disarmAria') : t('chat.goal.button.armAria'));
 
+  // Any existing goal (live or completed) opens the manage dialog — a
+  // completed goal must be removed there before a new one can be armed.
   const handleClick = () => {
-    if (liveGoal) {
+    if (goal) {
       setDialogOpen(true);
       return;
     }
