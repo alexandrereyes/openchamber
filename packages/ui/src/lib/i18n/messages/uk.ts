@@ -1419,6 +1419,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.goal.button.createAria": "Встановити ціль сесії",
   "chat.goal.button.manageAria": "Керувати ціллю сесії",
   "chat.goal.button.armAria": "Розпочати ціль наступним повідомленням",
+  "chat.goal.counter.aria": "Ліміт довжини цілі",
   "chat.goal.button.disarmAria": "Ціль увімкнена — торкніться, щоб вимкнути",
   "chat.goal.button.cancelAria": "Ціль виконується — торкніться, щоб скасувати",
   "chat.goal.cancelDialog.title": "Скасувати цю ціль?",

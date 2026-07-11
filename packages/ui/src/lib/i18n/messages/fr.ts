@@ -1262,6 +1262,7 @@ export const dict = {
   'chat.goal.button.createAria': 'Définir un objectif de session',
   'chat.goal.button.manageAria': 'Gérer l\'objectif de session',
   'chat.goal.button.armAria': 'Démarrer un objectif avec le prochain message',
+  "chat.goal.counter.aria": "Limite de longueur de l'objectif",
   'chat.goal.button.disarmAria': 'Objectif armé — touchez pour désarmer',
   'chat.goal.button.cancelAria': 'Objectif en cours — touchez pour l’annuler',
   'chat.goal.cancelDialog.title': 'Annuler cet objectif ?',

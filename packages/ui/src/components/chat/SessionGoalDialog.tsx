@@ -116,7 +116,12 @@ export function SessionGoalDialog({ open, onOpenChange, sessionId, directory }: 
           ) : (
             <>
               <div className="space-y-1">
-                <span className="typography-ui-label text-foreground">{t('chat.goal.dialog.objectiveLabel')}</span>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="typography-ui-label text-foreground">{t('chat.goal.dialog.objectiveLabel')}</span>
+                  <span className="typography-micro tabular-nums text-muted-foreground/70" aria-label={t('chat.goal.counter.aria')}>
+                    {objective.length}/{SESSION_GOAL_OBJECTIVE_CHAR_LIMIT}
+                  </span>
+                </div>
                 <Textarea
                   value={objective}
                   onChange={(event) => setObjective(event.target.value)}

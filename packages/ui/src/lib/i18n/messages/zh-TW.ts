@@ -1411,6 +1411,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.goal.button.createAria': '設定工作階段目標',
   'chat.goal.button.manageAria': '管理工作階段目標',
   'chat.goal.button.armAria': '用下一則訊息啟動目標',
+  'chat.goal.counter.aria': '目標長度限制',
   'chat.goal.button.disarmAria': '目標已就緒 — 點按取消就緒',
   'chat.goal.button.cancelAria': '目標進行中 — 點按取消',
   'chat.goal.cancelDialog.title': '取消此目標？',

@@ -1437,6 +1437,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.goal.button.createAria': 'セッションゴールを設定',
   'chat.goal.button.manageAria': 'セッションゴールを管理',
   'chat.goal.button.armAria': '次のメッセージでゴールを開始',
+  'chat.goal.counter.aria': 'ゴール目標の文字数上限',
   'chat.goal.button.disarmAria': 'ゴール待機中 — タップで解除',
   'chat.goal.button.cancelAria': 'ゴール実行中 — タップでキャンセル',
   'chat.goal.cancelDialog.title': 'このゴールをキャンセルしますか？',

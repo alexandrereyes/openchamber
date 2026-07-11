@@ -3,6 +3,7 @@ import { Icon } from '@/components/icon/Icon';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSessionGoal } from '@/hooks/useSessionGoal';
 import { useSessionGoalArmStore } from '@/stores/useSessionGoalArmStore';
+import { SESSION_GOAL_OBJECTIVE_CHAR_LIMIT } from '@/lib/sessionGoalMetadata';
 import { SessionGoalDialog } from '@/components/chat/SessionGoalDialog';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { useI18n } from '@/lib/i18n';
@@ -103,3 +104,37 @@ export const SessionGoalButton: React.FC<SessionGoalButtonProps> = React.memo(({
 });
 
 SessionGoalButton.displayName = 'SessionGoalButton';
+
+interface SessionGoalObjectiveCounterProps {
+  /** Current composer text length — the armed message becomes the objective. */
+  length: number;
+}
+
+// Tiny hot-path leaf next to the target button: while goal mode is armed the
+// typed message becomes the objective, which the server clamps to 2000
+// chars — surface that limit during typing instead of truncating silently.
+// Renders null when not armed, so normal typing shows nothing.
+export const SessionGoalObjectiveCounter: React.FC<SessionGoalObjectiveCounterProps> = React.memo(({ length }) => {
+  const { t } = useI18n();
+  const armed = useSessionGoalArmStore((state) => state.armed);
+
+  if (!armed || length === 0) {
+    return null;
+  }
+
+  const over = length > SESSION_GOAL_OBJECTIVE_CHAR_LIMIT;
+  return (
+    <span
+      className={cn(
+        'flex-shrink-0 self-center typography-micro tabular-nums',
+        over ? 'text-[var(--status-error)]' : 'text-muted-foreground/70',
+      )}
+      aria-label={t('chat.goal.counter.aria')}
+      title={t('chat.goal.counter.aria')}
+    >
+      {length}/{SESSION_GOAL_OBJECTIVE_CHAR_LIMIT}
+    </span>
+  );
+});
+
+SessionGoalObjectiveCounter.displayName = 'SessionGoalObjectiveCounter';

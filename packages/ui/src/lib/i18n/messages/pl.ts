@@ -2123,6 +2123,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.goal.button.createAria': 'Ustaw cel sesji',
   'chat.goal.button.manageAria': 'Zarządzaj celem sesji',
   'chat.goal.button.armAria': 'Rozpocznij cel następną wiadomością',
+  'chat.goal.counter.aria': 'Limit długości celu',
   'chat.goal.button.disarmAria': 'Cel uzbrojony — dotknij, aby rozbroić',
   'chat.goal.button.cancelAria': 'Cel w toku — dotknij, aby anulować',
   'chat.goal.cancelDialog.title': 'Anulować ten cel?',

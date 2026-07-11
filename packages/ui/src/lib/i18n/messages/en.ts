@@ -1441,6 +1441,7 @@ export const dict = {
   'chat.goal.button.createAria': 'Set a session goal',
   'chat.goal.button.manageAria': 'Manage session goal',
   'chat.goal.button.armAria': 'Start a goal with the next message',
+  'chat.goal.counter.aria': 'Goal objective length limit',
   'chat.goal.button.disarmAria': 'Goal armed — tap to disarm',
   'chat.goal.button.cancelAria': 'Goal running — tap to cancel it',
   'chat.goal.cancelDialog.title': 'Cancel this goal?',

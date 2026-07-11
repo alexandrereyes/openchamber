@@ -1419,6 +1419,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.goal.button.createAria": "Definir un objetivo de sesión",
   "chat.goal.button.manageAria": "Gestionar el objetivo de sesión",
   "chat.goal.button.armAria": "Iniciar un objetivo con el próximo mensaje",
+  "chat.goal.counter.aria": "Límite de longitud del objetivo",
   "chat.goal.button.disarmAria": "Objetivo armado — toca para desactivarlo",
   "chat.goal.button.cancelAria": "Objetivo en curso — toca para cancelarlo",
   "chat.goal.cancelDialog.title": "¿Cancelar este objetivo?",

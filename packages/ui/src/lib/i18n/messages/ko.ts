@@ -1443,6 +1443,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.goal.button.createAria': '세션 목표 설정',
   'chat.goal.button.manageAria': '세션 목표 관리',
   'chat.goal.button.armAria': '다음 메시지로 목표 시작',
+  'chat.goal.counter.aria': '목표 길이 제한',
   'chat.goal.button.disarmAria': '목표 대기 중 — 탭하여 해제',
   'chat.goal.button.cancelAria': '목표 진행 중 — 탭하여 취소',
   'chat.goal.cancelDialog.title': '이 목표를 취소할까요?',
