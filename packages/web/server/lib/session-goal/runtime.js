@@ -38,6 +38,10 @@ const isSessionGoalEnabled = () => {
 const IDLE_QUIET_MS = 15_000;
 // A goal set while the session is already idle should kick off promptly.
 const KICKOFF_QUIET_MS = 3_000;
+// An explicit Resume should nudge immediately — the tick's quiescence check
+// already bails if the session turns out to be busy. The tiny delay only
+// coalesces duplicate session.updated events.
+const RESUME_KICKOFF_MS = 250;
 const FETCH_TIMEOUT_MS = 10_000;
 const MESSAGE_FETCH_LIMIT = 40;
 const TRANSCRIPT_PART_CHAR_LIMIT = 6_000;
@@ -679,7 +683,8 @@ export const createSessionGoalRuntime = ({
       && !timers.has(update.sessionId)
       && !inflight.has(update.sessionId)
     ) {
-      armTimer(update.sessionId, update.directory || directoryHint, kickoffQuietMs);
+      const quiet = update.goal.statusReason === 'resumed' ? RESUME_KICKOFF_MS : kickoffQuietMs;
+      armTimer(update.sessionId, update.directory || directoryHint, quiet);
     }
   };
 
