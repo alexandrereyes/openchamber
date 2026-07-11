@@ -38,6 +38,11 @@ import type { OpenChamberSection } from '@/components/sections/openchamber/types
 import { OpenChamberPage } from '@/components/sections/openchamber/OpenChamberPage';
 import { AboutSettings } from '@/components/sections/openchamber/AboutSettings';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
+import {
+  SETTINGS_DESCRIPTION_CLASS,
+  SETTINGS_PAGE_TITLE_CLASS,
+  SETTINGS_SECTION_TITLE_CLASS,
+} from '@/components/sections/shared/SettingsSection';
 import { useDeviceInfo } from '@/lib/device';
 import { isDesktopLocalOriginActive, isDesktopShell, isVSCodeRuntime, isWebRuntime } from '@/lib/desktop';
 import { useI18n } from '@/lib/i18n';
@@ -233,8 +238,8 @@ const SettingsHome: React.FC<{ onOpen: (slug: SettingsPageSlug) => void }> = ({ 
     <div className="h-full overflow-auto">
       <div className="mx-auto w-full max-w-[840px] px-6 py-6 sm:px-12 sm:py-8 space-y-6">
         <div className="space-y-1">
-          <h1 className="typography-settings-page-title text-muted-foreground">{t('settings.view.home.title')}</h1>
-          <p className="typography-settings-description text-muted-foreground">{t('settings.view.home.description')}</p>
+          <h1 className={SETTINGS_PAGE_TITLE_CLASS}>{t('settings.view.home.title')}</h1>
+          <p className={SETTINGS_DESCRIPTION_CLASS}>{t('settings.view.home.description')}</p>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -673,7 +678,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     return (
       <div className="flex h-full items-center justify-center px-6">
         <div className="max-w-md text-center">
-          <div className="typography-settings-section-title text-foreground">{t('settings.view.unavailable.title')}</div>
+          <div className={SETTINGS_SECTION_TITLE_CLASS}>{t('settings.view.unavailable.title')}</div>
           <p className="typography-ui text-muted-foreground mt-1">{t('settings.view.unavailable.description')}</p>
         </div>
       </div>
