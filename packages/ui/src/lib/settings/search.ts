@@ -49,6 +49,22 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     isAvailable: (ctx) => !ctx.isVSCode,
   },
   {
+    id: 'workspaces.compatibility',
+    page: 'workspaces',
+    titleKey: 'settings.workspaces.compatibility.title',
+    descriptionKey: 'settings.workspaces.compatibility.configuredInactive',
+    keywords: ['opencode', 'plugin', 'adapter', 'activate', 'support'],
+    isAvailable: (ctx) => !ctx.isVSCode,
+  },
+  {
+    id: 'workspaces.egress',
+    page: 'workspaces',
+    titleKey: 'settings.workspaces.egress.title',
+    descriptionKey: 'settings.workspaces.egress.description',
+    keywords: ['egress', 'proxy', 'cidr', 'dns', 'provider connectivity'],
+    isAvailable: (ctx) => !ctx.isVSCode,
+  },
+  {
     id: 'workspaces.export',
     page: 'workspaces',
     titleKey: 'settings.workspaces.export.title',

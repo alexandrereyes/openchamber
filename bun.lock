@@ -131,6 +131,14 @@
         "typescript": "~5.9.0",
       },
     },
+    "packages/opencode-workspace-plugin": {
+      "name": "@openchamber/opencode-workspace-plugin",
+      "version": "0.1.0",
+      "devDependencies": {
+        "vitest": "^4.1.5",
+        "ws": "^8.18.3",
+      },
+    },
     "packages/ui": {
       "name": "@openchamber/ui",
       "version": "1.14.1",
@@ -267,7 +275,7 @@
       "dependencies": {
         "@clack/prompts": "^1.1.0",
         "@octokit/rest": "^22.0.1",
-        "@openchamber/opencode-container-workspace": "file:../../../opencode-container-workspace",
+        "@openchamber/opencode-workspace-plugin": "workspace:*",
         "@opencode-ai/sdk": "1.17.12",
         "@simplewebauthn/server": "13.3.1",
         "adm-zip": "^0.5.16",
@@ -991,6 +999,8 @@
     "@openchamber/electron": ["@openchamber/electron@workspace:packages/electron"],
 
     "@openchamber/mobile": ["@openchamber/mobile@workspace:packages/mobile"],
+
+    "@openchamber/opencode-workspace-plugin": ["@openchamber/opencode-workspace-plugin@workspace:packages/opencode-workspace-plugin"],
 
     "@openchamber/ui": ["@openchamber/ui@workspace:packages/ui"],
 
@@ -3495,8 +3505,6 @@
     "@npmcli/agent/socks-proxy-agent": ["socks-proxy-agent@8.0.5", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "^4.3.4", "socks": "^2.8.3" } }, "sha512-HehCEsotFqbPW9sJ8WVYB6UbmIMv7kUUORIF2Nncq4VQvBfNBLibW9YZR5dlYCSUhwcD628pRllm7n+E+YTzJw=="],
 
     "@npmcli/move-file/rimraf": ["rimraf@3.0.2", "", { "dependencies": { "glob": "^7.1.3" }, "bin": { "rimraf": "bin.js" } }, "sha512-JZkJMZkAGFFPP2YqXZXPbMlMBgsxzE8ILs4lMIX/2o0L9UBw9O/Y3o6wFw/i9YLapcUJWwqbi3kdxIPdC62TIA=="],
-
-    "@openchamber/web/@openchamber/opencode-container-workspace": ["@openchamber/opencode-container-workspace@file:../opencode-container-workspace", {}],
 
     "@openchamber/web/cron-parser": ["cron-parser@4.9.0", "", { "dependencies": { "luxon": "^3.2.1" } }, "sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q=="],
 

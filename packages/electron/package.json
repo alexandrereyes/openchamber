@@ -63,8 +63,8 @@
         "to": "opencode-cli"
       },
       {
-        "from": "../opencode-container-workspace",
-        "to": "opencode-container-workspace",
+        "from": "../opencode-workspace-plugin",
+        "to": "opencode-workspace-plugin",
         "filter": [
           "src/**",
           "package.json"

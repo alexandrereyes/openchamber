@@ -740,6 +740,10 @@ export interface WorkspaceProviderValidationInput {
   provider: WorkspaceProviderKind;
   context?: string;
   namespace?: string;
+  egressHttpProxy?: string;
+  egressProxyCIDR?: string;
+  egressDnsCIDRs?: string;
+  egressNoProxy?: string;
 }
 
 export interface WorkspaceProviderValidationResult {
@@ -751,7 +755,12 @@ export interface WorkspaceProviderValidationResult {
 }
 
 interface WorkspacePatchFileSummary {
+  id?: string;
   path: string;
+  oldPath?: string;
+  newPath?: string;
+  changeType?: string;
+  binary?: boolean;
   additions: number;
   deletions: number;
 }
@@ -771,12 +780,31 @@ export interface WorkspacePatchSummaryResult {
 export interface WorkspaceExportDiffResult {
   patch: string;
   provider: WorkspaceProviderKind | string;
+  exportID?: string;
+  expiresAt?: string;
+  patchBytes?: number;
+  summary?: WorkspacePatchSummary;
 }
 
 export interface WorkspaceConfigureResult {
   configured: boolean;
   enabled: boolean;
   spec?: string;
+  activated?: boolean;
+  active?: boolean;
+  external?: boolean;
+  manualRestartRequired?: boolean;
+  compatibility?: WorkspaceCompatibilityResult;
+}
+
+export interface WorkspaceCompatibilityResult {
+  configured: boolean;
+  active: boolean;
+  supported: boolean;
+  adapterKinds: string[];
+  spec?: string;
+  status: 'active' | 'pending-activation' | 'not-configured';
+  error?: string | null;
 }
 
 export interface WorkspacePatchApplyResult {
@@ -788,10 +816,11 @@ export interface WorkspacePatchApplyResult {
 
 export interface WorkspaceSecurityAPI {
   validateProvider(input: WorkspaceProviderValidationInput): Promise<WorkspaceProviderValidationResult>;
-  configureFromSettings(): Promise<WorkspaceConfigureResult>;
+  compatibility(input?: { directory?: string | null }): Promise<WorkspaceCompatibilityResult>;
+  configureFromSettings(input?: { activate?: boolean }): Promise<WorkspaceConfigureResult>;
   exportDiff(input: { id: string; directory?: string | null }): Promise<WorkspaceExportDiffResult>;
   summarizePatch(patch: string): Promise<WorkspacePatchSummaryResult>;
-  applyPatch(input: { directory: string; patch: string; checkOnly?: boolean }): Promise<WorkspacePatchApplyResult>;
+  applyPatch(input: { directory: string; patch?: string; checkOnly?: boolean; exportID?: string; fileIDs?: string[]; workspaceID?: string }): Promise<WorkspacePatchApplyResult>;
 }
 
 export interface EditorAPI {

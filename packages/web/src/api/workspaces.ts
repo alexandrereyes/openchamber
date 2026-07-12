@@ -1,5 +1,6 @@
 import type {
   WorkspacePatchApplyResult,
+  WorkspaceCompatibilityResult,
   WorkspaceConfigureResult,
   WorkspaceExportDiffResult,
   WorkspacePatchSummaryResult,
@@ -16,23 +17,31 @@ async function readJson<T>(response: Response, fallback: T): Promise<T> {
 export const createWebWorkspaceSecurityAPI = (): WorkspaceSecurityAPI => ({
   async validateProvider(input: WorkspaceProviderValidationInput): Promise<WorkspaceProviderValidationResult> {
     const response = await runtimeFetch('/api/workspaces/providers/validate', {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      query: {
-        provider: input.provider,
-        ...(input.context ? { context: input.context } : {}),
-        ...(input.namespace ? { namespace: input.namespace } : {}),
-      },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
     });
     const payload = await readJson<WorkspaceProviderValidationResult>(response, { available: false });
     if (!response.ok) return { ...payload, available: false, error: payload.error || response.statusText };
     return payload;
   },
 
-  async configureFromSettings(): Promise<WorkspaceConfigureResult> {
+  async compatibility(input?: { directory?: string | null }): Promise<WorkspaceCompatibilityResult> {
+    const response = await runtimeFetch('/api/workspaces/compatibility', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      query: input?.directory ? { directory: input.directory } : {},
+    });
+    const payload = await readJson<WorkspaceCompatibilityResult | { error?: string }>(response, { error: response.statusText });
+    if (!response.ok) throw new Error('error' in payload && payload.error ? payload.error : 'Failed to inspect workspace compatibility');
+    return payload as WorkspaceCompatibilityResult;
+  },
+
+  async configureFromSettings(input?: { activate?: boolean }): Promise<WorkspaceConfigureResult> {
     const response = await runtimeFetch('/api/workspaces/configure', {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ activate: input?.activate === true }),
     });
     const payload = await readJson<WorkspaceConfigureResult | { error?: string }>(response, { error: response.statusText });
     if (!response.ok) throw new Error('error' in payload && payload.error ? payload.error : 'Failed to configure secure workspaces');
@@ -61,8 +70,11 @@ export const createWebWorkspaceSecurityAPI = (): WorkspaceSecurityAPI => ({
     return payload as WorkspacePatchSummaryResult;
   },
 
-  async applyPatch(input: { directory: string; patch: string; checkOnly?: boolean }): Promise<WorkspacePatchApplyResult> {
-    const response = await runtimeFetch('/api/workspaces/export/apply', {
+  async applyPatch(input: { directory: string; patch?: string; checkOnly?: boolean; exportID?: string; fileIDs?: string[]; workspaceID?: string }): Promise<WorkspacePatchApplyResult> {
+    const route = input.exportID
+      ? `/api/workspaces/exports/${encodeURIComponent(input.exportID)}/apply`
+      : '/api/workspaces/export/apply';
+    const response = await runtimeFetch(route, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(input),
