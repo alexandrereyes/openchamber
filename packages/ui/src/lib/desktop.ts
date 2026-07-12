@@ -122,6 +122,9 @@ export type DesktopSettings = {
   smallModelUseDefault?: boolean;
   sessionRecapEnabled?: boolean;
   sessionSuggestionEnabled?: boolean;
+  sessionGoalEnabled?: boolean;
+  sessionGoalDefaultBudgetEnabled?: boolean;
+  sessionGoalDefaultBudget?: number;
   smallModelOverride?: string; // format: "provider/model"
   defaultGitIdentityId?: string; // ''/undefined = unset, 'global' or profile id
   openInAppId?: string;
@@ -159,6 +162,7 @@ export type DesktopSettings = {
   showSplitAssistantMessageActions?: boolean;
   fontSize?: number;
   terminalFontSize?: number;
+  editorFontSize?: number;
   uiFont?: string;
   monoFont?: string;
   padding?: number;
@@ -198,6 +202,8 @@ export type DesktopSettings = {
   sttLanguage?: string;
   // Global draft welcome starters (pinned commands/skills), persisted to settings.json
   draftStarters?: DraftStarterRef[];
+  // One-time migration marker: Craft a Goal was offered in the starter row.
+  draftStartersCraftGoalAdded?: boolean;
 };
 
 type DesktopBridgeGlobal = {

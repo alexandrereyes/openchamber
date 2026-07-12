@@ -117,6 +117,12 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['terminal', 'font', 'text size'],
   },
   {
+    id: 'appearance.editor-font-size',
+    page: 'appearance',
+    titleKey: 'settings.openchamber.visual.field.editorFontSize',
+    keywords: ['editor', 'font', 'text size', 'code'],
+  },
+  {
     id: 'appearance.spacing-density',
     page: 'appearance',
     titleKey: 'settings.openchamber.visual.field.spacingDensity',
@@ -179,6 +185,20 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     page: 'chat',
     titleKey: 'settings.openchamber.visual.field.sessionSuggestion',
     keywords: ['suggestion', 'assist', 'small model', 'follow up'],
+  },
+  {
+    id: 'chat.session-goal',
+    page: 'chat',
+    titleKey: 'settings.openchamber.visual.field.sessionGoal',
+    keywords: ['goal', 'objective', 'auto continue', 'small model'],
+    isAvailable: (ctx) => !ctx.isVSCode,
+  },
+  {
+    id: 'chat.session-goal-budget',
+    page: 'chat',
+    titleKey: 'settings.openchamber.visual.goal.budgetLabel',
+    keywords: ['goal', 'budget', 'tokens', 'limit'],
+    isAvailable: (ctx) => !ctx.isVSCode,
   },
   {
     id: 'chat.reasoning-traces',
