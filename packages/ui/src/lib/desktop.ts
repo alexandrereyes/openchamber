@@ -650,13 +650,8 @@ export const checkForDesktopUpdates = async (): Promise<UpdateInfo | null> => {
     return null;
   }
 
-  try {
-    const info = await invokeDesktop<UpdateInfo>('desktop_check_for_updates');
-    return info as UpdateInfo;
-  } catch (error) {
-    console.warn('Failed to check for updates', error);
-    return null;
-  }
+  const info = await invokeDesktop<UpdateInfo>('desktop_check_for_updates');
+  return info as UpdateInfo;
 };
 
 export const downloadDesktopUpdate = async (
@@ -705,8 +700,8 @@ export const downloadDesktopUpdate = async (
     await invokeDesktop('desktop_download_and_install_update');
     return true;
   } catch (error) {
-    console.warn('Failed to download update', error);
-    return false;
+    // Propagate actionable updater capability / install errors to the UI store.
+    throw error instanceof Error ? error : new Error(String(error));
   } finally {
     if (unlisten) {
       try {
@@ -904,6 +899,11 @@ export const fetchDesktopInstalledApps = async (
     return { apps: [], success: false, hasCache: false, isCacheStale: false };
   }
 
+  // Linux desktop does not resolve installed GUI apps; skip the IPC round-trip.
+  if (getElectronPlatform() === 'linux') {
+    return { apps: [], success: true, hasCache: false, isCacheStale: false };
+  }
+
   const candidate = Array.isArray(apps) ? apps.filter((value) => typeof value === 'string') : [];
   if (candidate.length === 0) {
     return { apps: [], success: true, hasCache: false, isCacheStale: false };
@@ -917,7 +917,10 @@ export const fetchDesktopInstalledApps = async (
     if (!result || typeof result !== 'object') {
       return { apps: [], success: false, hasCache: false, isCacheStale: false };
     }
-    const payload = result as { apps?: unknown; hasCache?: unknown; isCacheStale?: unknown };
+    const payload = result as { apps?: unknown; hasCache?: unknown; isCacheStale?: unknown; supported?: unknown };
+    if (payload.supported === false) {
+      return { apps: [], success: true, hasCache: false, isCacheStale: false };
+    }
     if (!Array.isArray(payload.apps)) {
       return { apps: [], success: false, hasCache: false, isCacheStale: false };
     }
