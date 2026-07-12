@@ -42,6 +42,7 @@ import type { QuestionRequest } from "@/types/question"
 import * as sessionActions from "./session-actions"
 import { getSessionMaterializationStatus, materializeSessionSnapshots } from "./materialization"
 import { openSessionFromToast } from "./session-navigation"
+import { getPermissionToastKey, showPermissionNeededToast } from "./permission-toast"
 import { getRuntimeLiveStatusSeed, LIVE_STATUS_TTL_MS } from "./runtime-live-memory"
 import { getRuntimeKey } from "@/lib/runtime-switch"
 import { getRegisteredRuntimeAPIs } from "@/contexts/runtimeAPIRegistry"
@@ -316,11 +317,6 @@ const pendingQuestionToastIds = new Set<string>()
 const pendingPermissionToastIds = new Set<string>()
 
 const getQuestionToastKey = (sessionID?: string, requestID?: string) => {
-  if (!sessionID || !requestID) return null
-  return `${sessionID}:${requestID}`
-}
-
-const getPermissionToastKey = (sessionID?: string, requestID?: string) => {
   if (!sessionID || !requestID) return null
   return `${sessionID}:${requestID}`
 }
@@ -1200,19 +1196,13 @@ export async function resyncBlockingRequestsForDirectory(
       if (isViewed) continue
       for (const permission of permissions) {
         if (knownIds.has(permission.id)) continue
-        const toastKey = getPermissionToastKey(sessionId, permission.id)
-        if (!toastKey || pendingPermissionToastIds.has(toastKey)) continue
-        pendingPermissionToastIds.add(toastKey)
-        const description = typeof permission.permission === "string" && permission.permission.trim().length > 0
-          ? permission.permission
-          : "Agent needs your approval"
-        toast.info("Permission needed", {
-          id: `permission-${toastKey}`,
-          description,
-          action: {
-            label: "Open session",
-            onClick: () => openSessionFromToast(sessionId, directory),
-          },
+        showPermissionNeededToast({
+          permission,
+          directory,
+          isViewed,
+          pendingIds: pendingPermissionToastIds,
+          show: (title, options) => toast.info(title, options),
+          openSession: openSessionFromToast,
         })
       }
     }
@@ -1442,22 +1432,15 @@ function handleEvent(
       return
     }
 
-    const toastKey = getPermissionToastKey(permission.sessionID, permission.id)
     const isViewed = isViewedInCurrentSession(resolvedDirectory, permission.sessionID)
-    if (!isViewed && toastKey && !pendingPermissionToastIds.has(toastKey)) {
-      pendingPermissionToastIds.add(toastKey)
-      const description = typeof permission.permission === "string" && permission.permission.trim().length > 0
-        ? permission.permission
-        : "Agent needs your approval"
-      toast.info("Permission needed", {
-        id: `permission-${toastKey}`,
-        description,
-        action: {
-          label: "Open session",
-          onClick: () => openSessionFromToast(permission.sessionID, resolvedDirectory),
-        },
-      })
-    }
+    showPermissionNeededToast({
+      permission,
+      directory: resolvedDirectory,
+      isViewed,
+      pendingIds: pendingPermissionToastIds,
+      show: (title, options) => toast.info(title, options),
+      openSession: openSessionFromToast,
+    })
   }
 
   if (payload.type === "permission.replied") {
