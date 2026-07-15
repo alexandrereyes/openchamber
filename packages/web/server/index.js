@@ -162,9 +162,6 @@ function shouldSkipCompression(req, res) {
     return true;
   }
 
-  if (pathname.startsWith('/api/terminal/') && pathname.endsWith('/stream')) {
-    return true;
-  }
   for (const prefix of SSE_PATH_PREFIXES) {
     if (pathname === prefix) {
       return true;

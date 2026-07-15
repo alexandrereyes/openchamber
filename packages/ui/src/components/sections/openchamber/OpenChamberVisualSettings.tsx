@@ -1260,8 +1260,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         <Button size="sm"
                                             type="button"
                                             variant="ghost"
-                                            onClick={() => setTerminalFontSize(13)}
-                                            disabled={terminalFontSize === 13}
+                                            onClick={() => setTerminalFontSize(14)}
+                                            disabled={terminalFontSize === 14}
                                             className="h-7 w-7 px-0 text-muted-foreground hover:text-foreground"
                                             aria-label={t('settings.openchamber.visual.actions.resetTerminalFontSizeAria')}
                                             title={t('settings.common.actions.reset')}

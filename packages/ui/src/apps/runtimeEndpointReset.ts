@@ -7,6 +7,7 @@ import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useAutoReviewStore } from '@/stores/useAutoReviewStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { usePermissionStore } from '@/stores/permissionStore';
+import { useTerminalStore } from '@/stores/useTerminalStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { resetStreamingState } from '@/sync/streaming';
 
@@ -31,6 +32,7 @@ export const resetAppForRuntimeEndpointChange = (detail: RuntimeEndpointChangedD
     useAutoReviewStore.getState().stopRunningRunsForRuntime(detail.previousRuntimeKey);
   }
   disposeTerminalInputTransport();
+  useTerminalStore.getState().clearAll();
   opencodeClient.reconnectToRuntimeBaseUrl();
   useConfigStore.setState({
     providers: [],

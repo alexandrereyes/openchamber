@@ -3,6 +3,11 @@ import { settingsDict } from './zh-CN.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': '附加所选输出',
+  'terminalView.actions.restart': '重启终端',
+  'chat.message.terminalContext': '{terminal}，第 {start}-{end} 行',
+  'chat.chatInput.terminalContext': '{terminal}，第 {start}-{end} 行',
+  'chat.chatInput.terminalContextRemove': '移除终端上下文',
   'common.loading': '加载中...',
   'common.unavailable': '不可用',
   'common.language.english': 'English',

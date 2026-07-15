@@ -3,6 +3,11 @@ import { settingsDict } from './ja.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': '選択した出力を添付',
+  'terminalView.actions.restart': 'ターミナルを再起動',
+  'chat.message.terminalContext': '{terminal}、{start}〜{end}行',
+  'chat.chatInput.terminalContext': '{terminal}、{start}〜{end}行',
+  'chat.chatInput.terminalContextRemove': 'ターミナルコンテキストを削除',
   'common.loading': '読み込み中...',
   'common.unavailable': '利用できません',
   'common.language.english': '英語',

@@ -3,6 +3,11 @@ import { settingsDict } from './zh-TW.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': '附加所選輸出',
+  'terminalView.actions.restart': '重新啟動終端',
+  'chat.message.terminalContext': '{terminal}，第 {start}-{end} 行',
+  'chat.chatInput.terminalContext': '{terminal}，第 {start}-{end} 行',
+  'chat.chatInput.terminalContextRemove': '移除終端上下文',
   'common.loading': '載入中...',
   'common.unavailable': '無法使用',
   'common.language.english': 'English',

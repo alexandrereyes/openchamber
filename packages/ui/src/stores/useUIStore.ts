@@ -903,7 +903,7 @@ export const useUIStore = create<UIStore>()(
         messageLimit: 200,
         fontSize: 100,
         globalDraftStarters: null,
-        terminalFontSize: 13,
+        terminalFontSize: 14,
         editorFontSize: 13,
         uiFont: DEFAULT_UI_FONT,
         monoFont: DEFAULT_MONO_FONT,
@@ -2206,12 +2206,17 @@ export const useUIStore = create<UIStore>()(
       {
         name: 'ui-store',
         storage: createDeferredSafeJSONStorage(),
-        version: 10,
+        version: 11,
         migrate: (persistedState, version) => {
           if (!persistedState || typeof persistedState !== 'object') {
             return persistedState;
           }
           const state = persistedState as Record<string, unknown>;
+
+          // v10 -> v11: move the previous terminal font default forward.
+          if (version < 11 && state.terminalFontSize === 13) {
+            state.terminalFontSize = 14;
+          }
 
           // v9 -> v10: remove obsolete single-file diff view mode setting
           if (version < 10) {

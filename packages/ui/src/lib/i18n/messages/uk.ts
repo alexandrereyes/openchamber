@@ -3,6 +3,11 @@ import { settingsDict } from './uk.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': 'Прикріпити вибраний вивід',
+  'terminalView.actions.restart': 'Перезапустити термінал',
+  'chat.message.terminalContext': '{terminal}, рядки {start}-{end}',
+  'chat.chatInput.terminalContext': '{terminal}, рядки {start}-{end}',
+  'chat.chatInput.terminalContextRemove': 'Видалити контекст термінала',
   "common.loading": "Завантаження...",
   "common.unavailable": "Недоступно",
   "common.language.english": "англійська",

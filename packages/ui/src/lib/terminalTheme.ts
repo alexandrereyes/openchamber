@@ -80,7 +80,6 @@ export function getGhosttyTerminalOptions(
     cursorBlink: false,
     cursorStyle: 'bar' as const,
     fontSize,
-    lineHeight: 1.15,
     fontFamily: augmentedFontFamily,
     allowTransparency: false,
     theme: {

@@ -18,35 +18,18 @@ interface Subscription {
   close: () => void;
 }
 
-interface RetryPolicy {
-  maxRetries: number;
-  initialDelayMs: number;
-  maxDelayMs: number;
-}
-
-interface TerminalTransportCapability {
-  preferred?: 'ws' | 'http' | 'sse';
-  transports?: Array<'ws' | 'http' | 'sse'>;
-  ws?: {
-    path: string;
-    v?: number;
-    enc?: string;
-  };
-}
-
 export interface TerminalSession {
   sessionId: string;
   cols: number;
   rows: number;
-  capabilities?: {
-    input?: TerminalTransportCapability;
-    stream?: TerminalTransportCapability;
-  };
+  status: 'running' | 'exited' | 'error';
 }
 
 export interface TerminalStreamEvent {
-  type: 'connected' | 'data' | 'exit' | 'reconnecting';
+  type: 'snapshot' | 'data' | 'exit' | 'reconnecting';
+  sequence?: number;
   data?: string;
+  status?: 'running' | 'exited' | 'error';
   exitCode?: number;
   signal?: number | null;
   attempt?: number;
@@ -58,13 +41,12 @@ export interface TerminalStreamEvent {
 
 export interface CreateTerminalOptions {
   cwd: string;
+  sessionId?: string;
   cols?: number;
   rows?: number;
-}
-
-export interface TerminalStreamOptions {
-  retry?: Partial<RetryPolicy>;
-  connectionTimeoutMs?: number;
+  themeMode?: 'light' | 'dark';
+  terminalBackground?: string;
+  terminalForeground?: string;
 }
 
 export interface ResizeTerminalPayload {
@@ -85,9 +67,10 @@ export interface ForceKillOptions {
 
 export interface TerminalAPI {
   createSession(options: CreateTerminalOptions): Promise<TerminalSession>;
-  connect(sessionId: string, handlers: TerminalHandlers, options?: TerminalStreamOptions): Subscription;
+  connect(sessionId: string, handlers: TerminalHandlers): Subscription;
   sendInput(sessionId: string, input: string): Promise<void>;
   resize(payload: ResizeTerminalPayload): Promise<void>;
+  updateAppearance?(sessionId: string, appearance: Pick<CreateTerminalOptions, 'themeMode' | 'terminalBackground' | 'terminalForeground'>): Promise<void>;
   close(sessionId: string): Promise<void>;
   restartSession?(currentSessionId: string, options: CreateTerminalOptions): Promise<TerminalSession>;
   forceKill?(options: ForceKillOptions): Promise<void>;

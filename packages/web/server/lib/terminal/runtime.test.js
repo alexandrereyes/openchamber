@@ -1,9 +1,13 @@
 import { EventEmitter } from 'node:events';
+import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import express from 'express';
+import { WebSocket } from 'ws';
 
 import { createTerminalRuntime } from './runtime.js';
+import { createTerminalWsControlFrame, readTerminalWsControlFrame } from './terminal-ws-protocol.js';
 
 function createResponse() {
   return {
@@ -47,6 +51,50 @@ function createRuntime(server, overrides = {}) {
 }
 
 describe('terminal runtime', () => {
+  const createHarness = () => {
+    const routes = { post: new Map(), delete: new Map() };
+    const processes = [];
+    const app = {
+      post(route, handler) { routes.post.set(route, handler); },
+      get() {},
+      delete(route, handler) { routes.delete.set(route, handler); },
+    };
+    const loadPtyProvider = async () => ({
+      backend: 'fake-pty',
+      spawn: (_shell, _args, options) => {
+        const dataHandlers = new Set();
+        const exitHandlers = new Set();
+        const process = {
+          pid: 123 + processes.length,
+          options,
+          writes: [],
+          resizes: [],
+          killed: false,
+          kills: [],
+          write(data) { this.writes.push(data); },
+          resize(cols, rows) { this.resizes.push([cols, rows]); },
+          kill(signal) { this.killed = true; this.kills.push(signal ?? 'SIGTERM'); },
+          onData(handler) { dataHandlers.add(handler); return { dispose: () => dataHandlers.delete(handler) }; },
+          onExit(handler) { exitHandlers.add(handler); return { dispose: () => exitHandlers.delete(handler) }; },
+          emitData(data) { for (const handler of dataHandlers) handler(data); },
+          emitExit(exitCode = 0, signal = 0) { for (const handler of exitHandlers) handler({ exitCode, signal }); },
+        };
+        processes.push(process);
+        return process;
+      },
+    });
+    const server = new EventEmitter();
+    const runtime = createRuntime(server, {
+      app,
+      loadPtyProvider,
+      terminalTerminationGraceMs: 10,
+      fs: { promises: { stat: async () => ({ isDirectory: () => true }) } },
+      searchPathFor: () => '/bin/sh',
+      isExecutable: () => true,
+    });
+    return { routes, processes, runtime };
+  };
+
   it('rejects regular files as terminal working directories', async () => {
     const postRoutes = new Map();
     const app = {
@@ -93,4 +141,170 @@ describe('terminal runtime', () => {
 
     expect(server.listenerCount('upgrade')).toBe(0);
   });
+
+  it('creates client-identified sessions and forwards bounded resize operations', async () => {
+    const harness = createHarness();
+    try {
+      const response = createResponse();
+      await harness.routes.post.get('/api/terminal/create')({ body: { sessionId: 'term-1', cwd: '/repo', cols: 120, rows: 40, themeMode: 'light', terminalBackground: '#faf8f0', terminalForeground: '#1b1b1b' } }, response);
+      expect(response.body).toEqual({ sessionId: 'term-1', cols: 120, rows: 40, status: 'running' });
+      expect(harness.processes[0].options.cwd).toBe('/repo');
+      expect(harness.processes[0].options.env.COLORFGBG).toBe('0;15');
+      harness.processes[0].emitData('\u001b[?2031h\u001b]10;?\u0007\u001b]11;?\u0007');
+      expect(harness.processes[0].writes).toEqual(['\u001b]10;rgb:1b1b/1b1b/1b1b\u001b\\', '\u001b]11;rgb:fafa/f8f8/f0f0\u001b\\']);
+
+      const appearance = createResponse();
+      harness.routes.post.get('/api/terminal/:sessionId/appearance')({ params: { sessionId: 'term-1' }, body: { themeMode: 'dark' } }, appearance);
+      expect(appearance.body).toEqual({ success: true });
+      expect(harness.processes[0].writes.at(-1)).toBe('\u001b[?997;1n');
+
+      const resize = createResponse();
+      harness.routes.post.get('/api/terminal/:sessionId/resize')({ params: { sessionId: 'term-1' }, body: { cols: 200, rows: 60 } }, resize);
+      expect(resize.statusCode).toBe(200);
+      expect(harness.processes[0].resizes).toEqual([[200, 60]]);
+
+      const invalid = createResponse();
+      harness.routes.post.get('/api/terminal/:sessionId/resize')({ params: { sessionId: 'term-1' }, body: { cols: 1001, rows: 60 } }, invalid);
+      expect(invalid.statusCode).toBe(400);
+    } finally { await harness.runtime.shutdown(); }
+  });
+
+  it('restarts atomically with the same identity and closes the previous process', async () => {
+    const harness = createHarness();
+    try {
+      await harness.routes.post.get('/api/terminal/create')({ body: { sessionId: 'term-1', cwd: '/repo' } }, createResponse());
+      const restarted = createResponse();
+      await harness.routes.post.get('/api/terminal/:sessionId/restart')({ params: { sessionId: 'term-1' }, body: { cwd: '/other', cols: 90, rows: 30 } }, restarted);
+      expect(restarted.body).toEqual({ sessionId: 'term-1', cols: 90, rows: 30, status: 'running' });
+      expect(harness.processes).toHaveLength(2);
+      expect(harness.processes[0].killed).toBe(true);
+      expect(harness.processes[1].options.cwd).toBe('/other');
+    } finally { await harness.runtime.shutdown(); }
+  });
+
+  it('retains exited sessions until explicit close', async () => {
+    const harness = createHarness();
+    try {
+      await harness.routes.post.get('/api/terminal/create')({ body: { sessionId: 'term-1', cwd: '/repo' } }, createResponse());
+      harness.processes[0].emitData('last output');
+      harness.processes[0].emitExit(7, 0);
+      const resize = createResponse();
+      harness.routes.post.get('/api/terminal/:sessionId/resize')({ params: { sessionId: 'term-1' }, body: { cols: 80, rows: 24 } }, resize);
+      expect(resize.statusCode).toBe(200);
+      const closed = createResponse();
+      await harness.routes.delete.get('/api/terminal/:sessionId')({ params: { sessionId: 'term-1' } }, closed);
+      expect(closed.body).toEqual({ success: true });
+    } finally { await harness.runtime.shutdown(); }
+  });
+
+  it('escalates close to SIGKILL when a running process ignores SIGTERM', async () => {
+    const harness = createHarness();
+    try {
+      await harness.routes.post.get('/api/terminal/create')({ body: { sessionId: 'term-1', cwd: '/repo' } }, createResponse());
+      await harness.routes.delete.get('/api/terminal/:sessionId')({ params: { sessionId: 'term-1' } }, createResponse());
+      expect(harness.processes[0].kills).toEqual(['SIGTERM', 'SIGKILL']);
+    } finally { await harness.runtime.shutdown(); }
+  });
+
+  it('runs snapshot-first attach, scoped I/O, replay, reconnect, and close over a real websocket', async () => {
+    const app = express();
+    app.use(express.json());
+    const server = http.createServer(app);
+    const processes = [];
+    const loadPtyProvider = async () => ({
+      backend: 'fake-pty',
+      spawn: () => {
+        const data = new Set();
+        const exits = new Set();
+        const process = {
+          pid: 99123,
+          killed: false,
+          writes: [],
+          write(value) { this.writes.push(value); }, resize() {}, kill() { this.killed = true; },
+          onData(handler) { data.add(handler); return { dispose: () => data.delete(handler) }; },
+          onExit(handler) { exits.add(handler); return { dispose: () => exits.delete(handler) }; },
+          emitData(value) { for (const handler of data) handler(value); },
+          emitExit(exitCode) { for (const handler of exits) handler({ exitCode, signal: 0 }); },
+        };
+        processes.push(process);
+        return process;
+      },
+    });
+    const runtime = createRuntime(server, {
+      app, loadPtyProvider,
+      terminalTerminationGraceMs: 10,
+      fs: { promises: { stat: async () => ({ isDirectory: () => true }) } },
+      searchPathFor: () => '/bin/sh', isExecutable: () => true,
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const base = `http://127.0.0.1:${address.port}`;
+    const socketUrl = `ws://127.0.0.1:${address.port}/api/terminal/ws`;
+    const sockets = [];
+
+    const open = async () => {
+      const socket = new WebSocket(socketUrl);
+      sockets.push(socket);
+      const messages = [];
+      socket.on('message', (raw) => messages.push(readTerminalWsControlFrame(raw)));
+      await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+      const next = async (type) => {
+        for (let attempt = 0; attempt < 100; attempt += 1) {
+          const index = messages.findIndex((message) => message?.t === type);
+          if (index >= 0) return messages.splice(index, 1)[0];
+          await new Promise((resolve) => setTimeout(resolve, 2));
+        }
+        throw new Error(`Timed out waiting for ${type}`);
+      };
+      await next('hello');
+      return { socket, next };
+    };
+
+    try {
+      const created = await fetch(`${base}/api/terminal/create`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'term-live', cwd: '/repo', cols: 80, rows: 24 }),
+      });
+      expect(created.status).toBe(200);
+
+      const first = await open();
+      first.socket.send(createTerminalWsControlFrame({ t: 'attach', v: 3, s: 'term-live' }));
+      expect(await first.next('snapshot')).toMatchObject({ s: 'term-live', q: 0, history: '', status: 'running' });
+      first.socket.send(createTerminalWsControlFrame({ t: 'write', v: 3, s: 'term-live', d: 'echo ok\r' }));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(processes[0].writes).toEqual(['echo ok\r']);
+      processes[0].emitData('ok\r\n');
+      expect(await first.next('output')).toMatchObject({ s: 'term-live', q: 1, d: 'ok\r\n' });
+      first.socket.close();
+
+      const second = await open();
+      second.socket.send(createTerminalWsControlFrame({ t: 'attach', v: 3, s: 'term-live' }));
+      expect(await second.next('snapshot')).toMatchObject({ s: 'term-live', q: 1, history: 'ok\r\n', status: 'running' });
+      processes[0].emitExit(7);
+      expect(await second.next('exit')).toMatchObject({ s: 'term-live', q: 2, exitCode: 7 });
+
+      const closed = await fetch(`${base}/api/terminal/term-live`, { method: 'DELETE' });
+      expect(closed.status).toBe(200);
+      expect(await second.next('error')).toMatchObject({ s: 'term-live', code: 'CLOSED', fatal: true });
+
+      await fetch(`${base}/api/terminal/create`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId: 'term-kill', cwd: '/repo' }),
+      });
+      second.socket.send(createTerminalWsControlFrame({ t: 'attach', v: 3, s: 'term-kill' }));
+      await second.next('snapshot');
+      const killed = await fetch(`${base}/api/terminal/force-kill`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cwd: '/repo' }),
+      });
+      expect(await killed.json()).toEqual({ success: true, killedCount: 1, killedSessionIds: ['term-kill'] });
+      expect(await second.next('error')).toMatchObject({ s: 'term-kill', code: 'KILLED', fatal: true });
+      expect(processes[1].killed).toBe(true);
+    } finally {
+      for (const socket of sockets) socket.terminate();
+      await runtime.shutdown();
+      server.closeAllConnections?.();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }, 15_000);
 });

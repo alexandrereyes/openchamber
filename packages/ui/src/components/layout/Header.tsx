@@ -64,7 +64,6 @@ import type { GitHubAuthStatus } from '@/lib/api/types';
 import type { SessionContextUsage } from '@/stores/types/sessionTypes';
 import { DesktopHostSwitcherDialog } from '@/components/desktop/DesktopHostSwitcher';
 import { OpenInAppButton } from '@/components/desktop/OpenInAppButton';
-import { forceKillTerminal } from '@/lib/terminalApi';
 import { useTerminalStore } from '@/stores/useTerminalStore';
 import { ProjectActionsButton } from '@/components/layout/ProjectActionsButton';
 import { SessionSwitcherDropdown } from '@/components/session/SessionSwitcherDropdown';
@@ -1831,7 +1830,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       try {
         // Ensure preview/dev terminals don't linger.
-        await forceKillTerminal({});
+        await runtimeApis.terminal.forceKill?.({});
       } catch {
         // ignore
       }
@@ -1856,7 +1855,7 @@ export const Header: React.FC<HeaderProps> = ({
         setIsDevShutdownInFlight(false);
       }
     }
-  }, [isDevShutdownInFlight, setIsDesktopServicesOpen]);
+  }, [isDevShutdownInFlight, runtimeApis.terminal, setIsDesktopServicesOpen]);
 
   const quotaDisplayTabs = React.useMemo(() => {
     return [

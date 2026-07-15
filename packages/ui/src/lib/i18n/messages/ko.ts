@@ -3,6 +3,11 @@ import { settingsDict } from './ko.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': '선택한 출력 첨부',
+  'terminalView.actions.restart': '터미널 다시 시작',
+  'chat.message.terminalContext': '{terminal}, {start}-{end}행',
+  'chat.chatInput.terminalContext': '{terminal}, {start}-{end}행',
+  'chat.chatInput.terminalContextRemove': '터미널 컨텍스트 제거',
   'common.loading': '로딩 중...',
   'common.unavailable': '사용할 수 없음',
   'common.language.english': '영어',

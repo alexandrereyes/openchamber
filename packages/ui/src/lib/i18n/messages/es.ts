@@ -3,6 +3,11 @@ import { settingsDict } from './es.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': 'Adjuntar salida seleccionada',
+  'terminalView.actions.restart': 'Reiniciar terminal',
+  'chat.message.terminalContext': '{terminal}, líneas {start}-{end}',
+  'chat.chatInput.terminalContext': '{terminal}, líneas {start}-{end}',
+  'chat.chatInput.terminalContextRemove': 'Eliminar contexto del terminal',
   "common.loading": "Cargando...",
   "common.unavailable": "No disponible",
   "common.language.english": "Inglés",

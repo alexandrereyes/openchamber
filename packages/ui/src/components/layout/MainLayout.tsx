@@ -539,8 +539,8 @@ export const MainLayout: React.FC = () => {
                                             <ContextPanel />
                                         </div>
                                     </div>
-                                    <BottomTerminalDock isOpen={isBottomTerminalOpen} isMobile={isMobile}>
-                                        {isBottomTerminalOpen ? (
+                                    <BottomTerminalDock isOpen={isBottomTerminalOpen && activeMainTab !== 'terminal'} isMobile={isMobile}>
+                                        {isBottomTerminalOpen && activeMainTab !== 'terminal' ? (
                                             <ErrorBoundary>
                                                 <React.Suspense fallback={null}>
                                                     <TerminalView />

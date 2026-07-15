@@ -2,7 +2,12 @@ import type { I18nKey } from './en';
 import { settingsDict } from './pt-BR.settings';
 
 export const dict: Record<I18nKey, string> = {
- ...settingsDict,
+  ...settingsDict,
+  'terminalView.actions.attachSelection': 'Anexar saída selecionada',
+  'terminalView.actions.restart': 'Reiniciar terminal',
+  'chat.message.terminalContext': '{terminal}, linhas {start}-{end}',
+  'chat.chatInput.terminalContext': '{terminal}, linhas {start}-{end}',
+  'chat.chatInput.terminalContextRemove': 'Remover contexto do terminal',
   "common.loading": "Carregando...",
   "common.unavailable": "Indisponível",
   "common.language.english": "Inglês",

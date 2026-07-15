@@ -2,6 +2,11 @@ import { settingsDict } from './fr.settings';
 
 export const dict = {
   ...settingsDict,
+  'terminalView.actions.attachSelection': 'Joindre la sortie sélectionnée',
+  'terminalView.actions.restart': 'Redémarrer le terminal',
+  'chat.message.terminalContext': '{terminal}, lignes {start}-{end}',
+  'chat.chatInput.terminalContext': '{terminal}, lignes {start}-{end}',
+  'chat.chatInput.terminalContextRemove': 'Supprimer le contexte du terminal',
   'common.loading': 'Chargement...',
   'common.unavailable': 'Indisponible',
   'common.language.english': 'Anglais',
