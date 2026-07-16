@@ -9,7 +9,7 @@ export const SETTINGS_SELECT_TRIGGER_CLASS = 'w-full min-w-40';
 export const SETTINGS_SELECT_SIZE = 'settings' as const;
 
 /** Fixed-width select used inside full-width SettingsFieldRow control columns. */
-export const SETTINGS_SELECT_ROW_TRIGGER_CLASS = 'w-full min-w-40 sm:w-56';
+export const SETTINGS_SELECT_ROW_TRIGGER_CLASS = 'w-full min-w-40 @xl:w-56';
 
 /** Compact reset / icon action next to a settings control (matches h-9 controls). */
 export const SETTINGS_ICON_BUTTON_CLASS =
@@ -17,7 +17,7 @@ export const SETTINGS_ICON_BUTTON_CLASS =
 
 /** Custom dropdown triggers (ModelSelector / AgentSelector) in settings field rows. */
 export const SETTINGS_CUSTOM_TRIGGER_CLASS =
-  'h-9 min-h-9 w-full min-w-40 sm:w-56 rounded-md px-3';
+  'h-9 min-h-9 w-full min-w-40 @xl:w-56 rounded-md px-3';
 
 /** Shared width for stacked control clusters (select/input + reset). */
 export const SETTINGS_CONTROL_CLUSTER_CLASS = 'w-full max-w-[28rem]';
@@ -152,7 +152,7 @@ export const SettingsTwoColumn: React.FC<SettingsTwoColumnProps> = ({
   className,
 }) => {
   return (
-    <div className={cn('grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-10', className)}>
+    <div className={cn('grid grid-cols-1 gap-6 @3xl:grid-cols-2 @3xl:gap-10', className)}>
       {children}
     </div>
   );
@@ -279,11 +279,11 @@ export const SettingsFieldRow: React.FC<SettingsFieldRowProps> = ({
     <div
       data-settings-item={settingsItem}
       className={cn(
-        'flex flex-col gap-2 py-0.5 sm:flex-row sm:items-center sm:gap-8',
+        'flex flex-col gap-2 py-0.5 @xl:flex-row @xl:items-center @xl:gap-8',
         className,
       )}
     >
-      <div className="min-w-0 sm:w-56 sm:shrink-0">
+      <div className="min-w-0 @xl:w-56 @xl:shrink-0">
         <div className={SETTINGS_FIELD_LABEL_CLASS}>{label}</div>
         {description != null ? (
           <p className={cn(SETTINGS_HELPER_CLASS, 'mt-0.5')}>{description}</p>
@@ -291,8 +291,8 @@ export const SettingsFieldRow: React.FC<SettingsFieldRowProps> = ({
       </div>
       <div
         className={cn(
-          'flex min-w-0 flex-1 items-center gap-2 sm:w-fit sm:flex-none',
-          alignEnd && 'sm:justify-end',
+          'flex min-w-0 flex-1 items-center gap-2 @xl:w-fit @xl:flex-none',
+          alignEnd && '@xl:justify-end',
           controlClassName,
         )}
       >

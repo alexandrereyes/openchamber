@@ -1460,7 +1460,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         title={t('settings.openchamber.visual.section.chatRenderMode')}
                                         settingsItem="chat.render-mode"
                                     >
-                                        <div role="radiogroup" aria-label={t('settings.openchamber.visual.section.chatRenderModeAria')} className="grid w-full max-w-[26rem] grid-cols-1 gap-3 sm:grid-cols-2">
+                                        <div role="radiogroup" aria-label={t('settings.openchamber.visual.section.chatRenderModeAria')} className="grid w-full max-w-[26rem] grid-cols-1 gap-3 @xl:grid-cols-2">
                                             {CHAT_RENDER_MODE_OPTIONS.map((option) => {
                                                 const selected = chatRenderMode === option.id;
                                                 const previewPhase = chatRenderPreviewTick % 12;

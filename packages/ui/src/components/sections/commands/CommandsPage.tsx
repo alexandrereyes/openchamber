@@ -22,6 +22,7 @@ import {
   SettingsSection,
   SettingsFieldRow,
   SETTINGS_SELECT_SIZE,
+  SETTINGS_CUSTOM_TRIGGER_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 
 export const CommandsPage: React.FC = () => {
@@ -265,6 +266,7 @@ export const CommandsPage: React.FC = () => {
           <AgentSelector
             agentName={agent}
             onChange={(agentName: string) => setAgent(agentName)}
+            className={SETTINGS_CUSTOM_TRIGGER_CLASS}
           />
         </SettingsFieldRow>
 
@@ -282,6 +284,7 @@ export const CommandsPage: React.FC = () => {
                 setModel('');
               }
             }}
+            className={SETTINGS_CUSTOM_TRIGGER_CLASS}
           />
         </SettingsFieldRow>
       </SettingsSection>

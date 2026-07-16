@@ -153,6 +153,14 @@ export const subscribeToSettingsSaveState = (listener: () => void): (() => void)
   return () => _settingsSaveStateListeners.delete(listener);
 };
 
+/**
+ * Drive the shared settings save indicator from pages that persist through
+ * their own APIs instead of updateDesktopSettings. 'error' resets to idle.
+ */
+export const reportSettingsSaveState = (state: 'saving' | 'saved' | 'error'): void => {
+  dispatchSettingsSaveState(state);
+};
+
 const dispatchSettingsSaveState = (state: 'saving' | 'saved' | 'error'): void => {
   if (_settingsSaveStateResetTimer) {
     clearTimeout(_settingsSaveStateResetTimer);

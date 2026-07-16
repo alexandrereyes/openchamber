@@ -124,7 +124,7 @@ export const OpenCodeCliSettings: React.FC = () => {
           settingsItem="sessions.opencode-binary"
           label={t('settings.openchamber.opencodeCli.field.binaryPath')}
           alignEnd={false}
-          controlClassName="sm:w-[20rem]"
+          controlClassName="@xl:w-[20rem]"
         >
           <Input
             value={value}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
-import { SettingsSection } from '@/components/sections/shared/SettingsSection';
+import { SettingsSection, SETTINGS_CUSTOM_TRIGGER_CLASS } from '@/components/sections/shared/SettingsSection';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -540,7 +540,8 @@ export const ProvidersPage: React.FC = () => {
                         <button
                           type="button"
                           className={cn(
-                            "flex items-center justify-between gap-2 rounded-lg border border-input bg-transparent px-2 py-2 typography-ui-label whitespace-nowrap shadow-none outline-none hover:bg-interactive-hover h-6 w-fit",
+                            "flex items-center justify-between gap-2 border border-input bg-transparent typography-ui-label whitespace-nowrap shadow-none outline-none hover:bg-interactive-hover",
+                            SETTINGS_CUSTOM_TRIGGER_CLASS,
                           )}
                         >
                           <span className="flex items-center gap-2 min-w-0">
@@ -632,7 +633,7 @@ export const ProvidersPage: React.FC = () => {
                         </TooltipContent>
                       </Tooltip>
                     </label>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1.5">
+                    <div className="flex flex-col @xl:flex-row @xl:items-center gap-2 mt-1.5">
                       <Input
                         type="password"
                         value={apiKeyInputs[candidateProviderId] ?? ''}
@@ -824,7 +825,7 @@ export const ProvidersPage: React.FC = () => {
                       </TooltipContent>
                     </Tooltip>
                   </label>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-1.5">
+                  <div className="flex flex-col @xl:flex-row @xl:items-center gap-2 mt-1.5">
                     <Input
                       type="password"
                       value={apiKeyInputs[selectedProvider.id] ?? ''}
@@ -941,7 +942,7 @@ export const ProvidersPage: React.FC = () => {
         title={t('settings.providers.page.connectionDetails.title')}
         settingsItem="providers.connection-details"
       >
-            <div className="flex flex-col gap-2 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+            <div className="flex flex-col gap-2 py-1.5 @xl:flex-row @xl:items-center @xl:justify-between @xl:gap-8">
               <div className="flex min-w-0 flex-col">
                 {selectedSources && (selectedSources.auth.exists || selectedSources.user.exists || selectedSources.project.exists || selectedSources.custom?.exists) ? (
                   <span className="typography-meta text-muted-foreground">

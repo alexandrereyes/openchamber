@@ -13,6 +13,7 @@ import {
   SettingsSection,
   SettingsFieldRow,
   SettingsStackedField,
+  SETTINGS_FIELD_LABEL_CLASS,
   SETTINGS_SELECT_SIZE,
 } from '@/components/sections/shared/SettingsSection';
 import {
@@ -755,7 +756,7 @@ const SkillsInstalledPage: React.FC = () => {
           ) : (
             <div className="space-y-4 flex-1 min-h-0 flex flex-col pt-2">
               <div className="space-y-2 flex-shrink-0">
-                <label className="typography-ui-label font-medium text-foreground">
+                <label className={SETTINGS_FIELD_LABEL_CLASS}>
                   {t('settings.skills.page.fileDialog.field.filePath')}
                 </label>
                 <Input
@@ -772,7 +773,7 @@ const SkillsInstalledPage: React.FC = () => {
                 )}
               </div>
               <div className="space-y-2 flex-1 min-h-0 flex flex-col">
-                <label className="typography-ui-label font-medium text-foreground flex-shrink-0">
+                <label className={`${SETTINGS_FIELD_LABEL_CLASS} flex-shrink-0`}>
                   {t('settings.skills.page.fileDialog.field.content')}
                 </label>
                 <div className="h-[45vh] min-h-[250px] max-h-[55vh] overflow-hidden rounded-md border border-[var(--surface-subtle)] bg-background">

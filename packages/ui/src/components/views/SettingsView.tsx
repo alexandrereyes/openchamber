@@ -61,7 +61,7 @@ import {
 import { buildSettingsSearchResults, type SettingsSearchResult } from '@/lib/settings/search';
 
 // UI Kit: fixed settings navigation width
-const SETTINGS_NAV_WIDTH = 260;
+const SETTINGS_NAV_WIDTH = 240;
 const SETTINGS_SPLIT_SIDEBAR_WIDTH = 280;
 const SETTINGS_DETAIL_HISTORY_KEY = '__openchamberSettingsDetail';
 
@@ -83,7 +83,7 @@ interface SettingsViewProps {
 }
 
 const pageOrder: SettingsPageSlug[] = [
-  // Interface
+  // 'general' group — Interface
   'appearance',
   'chat',
   'notifications',
@@ -91,12 +91,12 @@ const pageOrder: SettingsPageSlug[] = [
   'shortcuts',
   'voice',
   'about',
-  // Workspace & remote
+  // 'projects' group — Workspace
   'projects',
   'remote-instances',
   'tunnel',
   'git',
-  // OpenCode
+  // 'opencode' group — OpenCode
   'providers',
   'usage',
   'agents',
@@ -104,7 +104,7 @@ const pageOrder: SettingsPageSlug[] = [
   'commands',
   'mcp',
   'plugins',
-  // Content
+  // 'content' group — Content
   'magic-prompts',
   'snippets',
   'skills.installed',
@@ -993,7 +993,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
                             onClick={() => openPage(page.slug)}
                             aria-current={selected ? 'page' : undefined}
                             className={cn(
-                              'flex h-8 items-center gap-2 rounded-md px-2 overflow-hidden',
+                              'flex h-8 w-full items-center gap-2 rounded-md px-2 overflow-hidden',
                               selected
                                 ? 'bg-interactive-selection text-foreground'
                                 : 'text-foreground hover:bg-interactive-hover'

@@ -41,6 +41,7 @@ import {
   PROJECT_SETTINGS_CONTROL_WIDTH,
   ProjectSettingsSubsection,
 } from '@/components/sections/projects/ProjectSettingsSubsection';
+import { SETTINGS_SELECT_SIZE } from '@/components/sections/shared/SettingsSection';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
@@ -414,7 +415,7 @@ export const ProjectActionsSection: React.FC<ProjectActionsSectionProps> = ({ pr
                                     }));
                                   }}
                                 >
-                                  <SelectTrigger className="h-7 w-full">
+                                  <SelectTrigger size={SETTINGS_SELECT_SIZE} className="w-full">
                                     <SelectValue placeholder={t('settings.projects.actions.field.useOutputManualUrl')} />
                                   </SelectTrigger>
                                   <SelectContent>

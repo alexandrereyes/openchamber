@@ -167,7 +167,7 @@ const LocalModelPicker = ({
         <div
             role="radiogroup"
             aria-label={t('settings.voice.page.field.model')}
-            className="mt-1.5 grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
+            className="mt-1.5 grid w-full grid-cols-1 gap-3 @xl:grid-cols-2"
         >
             {LOCAL_STT_MODELS.map((entry) => {
                 const selected = selectedModelId === entry.id;

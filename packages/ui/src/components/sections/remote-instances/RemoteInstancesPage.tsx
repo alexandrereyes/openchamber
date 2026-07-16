@@ -26,6 +26,7 @@ import {
   SettingsGroupTitle,
   SETTINGS_PAGE_TITLE_CLASS,
   SETTINGS_FIELD_LABEL_CLASS,
+  SETTINGS_SELECT_SIZE,
 } from '@/components/sections/shared/SettingsSection';
 import { useDesktopSshStore } from '@/stores/useDesktopSshStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -2086,7 +2087,7 @@ export const RemoteInstancesPage: React.FC = () => {
                 }))
               }
             >
-              <SelectTrigger className="h-7 w-fit min-w-[140px]">
+              <SelectTrigger size={SETTINGS_SELECT_SIZE} className="w-fit min-w-[140px]">
                 <SelectValue placeholder={t('settings.remoteInstances.page.field.modePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
@@ -2155,7 +2156,7 @@ export const RemoteInstancesPage: React.FC = () => {
                   }))
                 }
               >
-                <SelectTrigger className="h-7 w-fit min-w-[140px]">
+                <SelectTrigger size={SETTINGS_SELECT_SIZE} className="w-fit min-w-[140px]">
                   <SelectValue placeholder={t('settings.remoteInstances.page.field.selectInstallMethodPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -2224,7 +2225,7 @@ export const RemoteInstancesPage: React.FC = () => {
                 }));
               }}
             >
-              <SelectTrigger className="h-7 w-fit min-w-[140px]">
+              <SelectTrigger size={SETTINGS_SELECT_SIZE} className="w-fit min-w-[140px]">
                 <SelectValue placeholder={t('settings.remoteInstances.page.field.selectBindHostPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
@@ -2441,7 +2442,7 @@ export const RemoteInstancesPage: React.FC = () => {
                           }))
                         }
                       >
-                        <SelectTrigger className="h-7 w-fit min-w-[140px]">
+                        <SelectTrigger size={SETTINGS_SELECT_SIZE} className="w-fit min-w-[140px]">
                           <SelectValue placeholder={t('settings.remoteInstances.page.field.typePlaceholder')} />
                         </SelectTrigger>
                         <SelectContent>

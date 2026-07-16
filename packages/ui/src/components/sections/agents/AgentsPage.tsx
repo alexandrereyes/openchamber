@@ -24,6 +24,7 @@ import {
   SettingsGroupTitle,
   SETTINGS_SELECT_SIZE,
   SETTINGS_ICON_BUTTON_CLASS,
+  SETTINGS_CUSTOM_TRIGGER_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 import {
   Select,
@@ -790,6 +791,7 @@ export const AgentsPage: React.FC = () => {
               }
               setVariant('');
             }}
+            className={SETTINGS_CUSTOM_TRIGGER_CLASS}
           />
         </SettingsFieldRow>
 
@@ -834,7 +836,7 @@ export const AgentsPage: React.FC = () => {
                 onChange={(event) => setVariant(event.target.value)}
                 placeholder={t('settings.agents.page.field.variantPlaceholder')}
                 disabled={!model && !variant}
-                className="h-7 w-40"
+                className="h-9 w-40 rounded-md px-3"
               />
               {variant && (
                 <Button
@@ -978,7 +980,7 @@ export const AgentsPage: React.FC = () => {
                 const label = formatPermissionLabel(permissionName);
                 const summary = hasDefaultHint ? `${defaultAction} (env blocked)` : defaultAction;
                 return (
-                  <div key={permissionName} className={cn("flex flex-col gap-1 py-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-8", index > 0 && "border-t border-[var(--surface-subtle)]")}>
+                  <div key={permissionName} className={cn("flex flex-col gap-1 py-1.5 @xl:flex-row @xl:items-center @xl:justify-between @xl:gap-8", index > 0 && "border-t border-[var(--surface-subtle)]")}>
                     <div className="flex items-center gap-2">
                       <span className="typography-ui-label text-foreground">{label}</span>
                       <span className="typography-micro text-muted-foreground/70 font-mono hidden sm:inline-block">{permissionName}</span>
@@ -1126,9 +1128,9 @@ export const AgentsPage: React.FC = () => {
 
               <div className="border-t border-[var(--surface-subtle)] pt-3">
                 <SettingsGroupTitle className="mb-2">{t('settings.agents.page.permissions.addCustomRule')}</SettingsGroupTitle>
-                <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                <div className="flex flex-col @xl:flex-row items-end @xl:items-center gap-2">
                   <Select value={pendingRuleName} onValueChange={setPendingRuleName}>
-                    <SelectTrigger className="w-full sm:w-[160px]">
+                    <SelectTrigger className="w-full @xl:w-[160px]">
                       {pendingRuleName ? (
                         <span className="truncate">{formatPermissionLabel(pendingRuleName)}</span>
                       ) : (

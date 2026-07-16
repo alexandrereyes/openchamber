@@ -83,7 +83,7 @@ export const ProjectIdentityFields: React.FC<ProjectIdentityFieldsProps> = ({ fo
           providerId={parsedDefaultModel.providerId}
           modelId={parsedDefaultModel.modelId}
           onChange={handleDefaultModelChange}
-          className={PROJECT_SETTINGS_CONTROL_WIDTH}
+          className={cn('h-9 min-h-9 rounded-md px-3', PROJECT_SETTINGS_CONTROL_WIDTH)}
         />
       </ProjectSettingsSubsection>
 

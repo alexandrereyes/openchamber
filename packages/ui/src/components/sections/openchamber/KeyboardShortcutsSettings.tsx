@@ -197,7 +197,7 @@ export const KeyboardShortcutsSettings: React.FC = () => {
       {(errorText || warningText || pendingOverwrite) && (
         <div className="mb-2 space-y-2">
           {pendingOverwrite && (
-            <div className="rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-background)] p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-background)] p-3 flex flex-col @xl:flex-row @xl:items-center justify-between gap-3">
               <span className="typography-meta text-foreground">
                 {t('settings.openchamber.keyboardShortcuts.overwritePrompt')}
               </span>

@@ -46,7 +46,7 @@
     --border: oklch(0.85 0.02 70); /* Warm border */
     --input: oklch(0.88 0.02 75); /* Input background */
     --ring: oklch(0.65 0.2 55); /* Focus ring color */
-    --radius: 0.5rem;
+    --radius: 0.5625rem;
     --chart-1: oklch(0.58 0.15 230); /* Blue */
     --chart-2: oklch(0.58 0.15 145); /* Oasis green */
     --chart-3: oklch(0.65 0.2 55); /* Orange */
@@ -212,8 +212,8 @@
 @theme inline {
   --radius-none: 0;
   --radius-sm: 0.25rem; /* 4px */
-  --radius-md: 0.375rem; /* 6px */
-  --radius-lg: 0.5rem; /* 8px */
+  --radius-md: 0.4375rem; /* 7px */
+  --radius-lg: 0.5625rem; /* 9px */
   --radius-xl: 0.75rem; /* 12px */
   --radius-full: 9999px;
 

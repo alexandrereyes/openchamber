@@ -397,14 +397,16 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
                   placeholder={t('settings.openchamber.worktrees.setup.commandPlaceholder')}
                   className="h-7 min-w-0 flex-1 font-mono text-xs"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => handleRemoveCommand(index)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                   aria-label={t('settings.openchamber.worktrees.setup.removeCommandAria')}
                 >
                   <Icon name="close" className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
             ))}
             <Button

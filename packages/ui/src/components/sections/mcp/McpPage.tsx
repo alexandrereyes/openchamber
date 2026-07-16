@@ -1,6 +1,5 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui';
@@ -1617,8 +1616,8 @@ export const McpPage: React.FC = () => {
                 <CollapsibleContent className="pt-2">
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-8">
-                        <div className="flex min-w-0 flex-col sm:w-56 shrink-0">
+                      <div className="flex flex-col gap-2 @xl:flex-row @xl:items-center @xl:gap-8">
+                        <div className="flex min-w-0 flex-col @xl:w-56 shrink-0">
                           <span className={SETTINGS_FIELD_LABEL_CLASS}>{t('settings.mcp.page.advanced.timeoutMs')}</span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1670,24 +1669,14 @@ export const McpPage: React.FC = () => {
                     </div>
 
                     <div className="space-y-3">
-                      <div
-                        className="group flex cursor-pointer items-center gap-2 py-1.5"
-                        role="button"
-                        tabIndex={0}
-                        aria-pressed={oauthEnabled}
-                        onClick={() => setOauthEnabled(!oauthEnabled)}
-                        onKeyDown={(event) => {
-                          if (event.key === ' ' || event.key === 'Enter') {
-                            event.preventDefault();
-                            setOauthEnabled(!oauthEnabled);
-                          }
-                        }}
-                      >
-                        <Checkbox checked={oauthEnabled} onChange={setOauthEnabled} ariaLabel={t('settings.mcp.page.advanced.oauthAutoDetectionAria')} />
-                        <span className={SETTINGS_FIELD_LABEL_CLASS}>{t('settings.mcp.page.advanced.oauthAutoDetection')}</span>
-                      </div>
+                      <SettingsCheckboxRow
+                        checked={oauthEnabled}
+                        onChange={setOauthEnabled}
+                        label={t('settings.mcp.page.advanced.oauthAutoDetection')}
+                        ariaLabel={t('settings.mcp.page.advanced.oauthAutoDetectionAria')}
+                      />
 
-                      <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-3 @xl:grid-cols-2">
                         <Input
                           value={oauthClientId}
                           onChange={(e) => setOauthClientId(e.target.value)}

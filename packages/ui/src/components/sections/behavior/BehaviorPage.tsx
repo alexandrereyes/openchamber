@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui';
 import { useI18n, type I18nKey } from '@/lib/i18n';
+import { reportSettingsSaveState } from '@/lib/persistence';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Select,
@@ -76,17 +77,24 @@ const RESPONSE_STYLE_OPTION_LABEL_KEYS: Record<ResponseStylePreset, I18nKey> = {
 };
 
 const saveBehaviorSetting = async (settings: Partial<DesktopSettings>, fallbackError: string) => {
-  const response = await runtimeFetch('/api/config/settings', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(settings),
-  });
+  reportSettingsSaveState('saving');
+  try {
+    const response = await runtimeFetch('/api/config/settings', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
 
-  if (!response.ok) {
-    throw new Error(await readApiError(response, fallbackError));
+    if (!response.ok) {
+      throw new Error(await readApiError(response, fallbackError));
+    }
+    reportSettingsSaveState('saved');
+  } catch (error) {
+    reportSettingsSaveState('error');
+    throw error;
   }
 };
 
