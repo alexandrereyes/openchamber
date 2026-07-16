@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Issue #2284 Reproduction: Badge + Hover Icon Overlap</title>
+<style>
+  /* Minimal Tailwind-like classes to replicate the exact structure */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    padding: 40px;
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  .card {
+    background: #16213e;
+    border-radius: 8px;
+    padding: 16px;
+    width: 280px;
+  }
+
+  .card h3 {
+    color: #ccc;
+    font-size: 14px;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .card p {
+    color: #888;
+    font-size: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* === Replica of the SessionNodeItem row structure === */
+  .row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    border-radius: 6px;
+    padding: 6px 6px 6px 18px;
+    margin: 2px 0;
+    transition: background 0.15s;
+  }
+  .row:hover {
+    background: rgba(255,255,255,0.05);
+  }
+
+  /* The main clickable button area - exact replica of the code */
+  .row-button {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    border-radius: 6px;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: #e0e0e0;
+    cursor: pointer;
+    padding: 0;
+    /* Default: no right padding. On hover: pr-2 = 8px (non-VSCode minimal) */
+    padding-right: 0;
+    transition: padding 0.15s;
+  }
+  .row:hover .row-button {
+    /* group-hover:pr-2 — this is the problematic 8px for minimal non-VSCode */
+    padding-right: 8px;
+  }
+
+  /* The flex row containing title, date, badge */
+  .row-content {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    gap: 4px;
+  }
+
+  /* Title: truncates */
+  .title {
+    display: block;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 400;
+  }
+
+  /* Compact date label: fades on hover */
+  .date-container {
+    position: relative;
+    display: flex;
+    margin-left: 4px;
+    height: 16px;
+    min-width: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  .date-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    text-align: right;
+    font-size: 11.5px;
+    color: rgba(255,255,255,0.5);
+    transition: opacity 0.15s;
+  }
+  .row:hover .date-label {
+    /* group-hover:opacity-0 — fades out on hover */
+    opacity: 0;
+  }
+
+  /* Permission badge: always visible, never fades */
+  .permission-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 4px;
+    background: rgba(239, 68, 68, 0.1);
+    padding: 2px 4px;
+    font-size: 11px;
+    color: #ef4444;
+    flex-shrink: 0;
+  }
+  .shield-icon {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background: #ef4444;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E") center/contain no-repeat;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3C/svg%3E") center/contain no-repeat;
+    background-color: #ef4444;
+  }
+
+  /* Hover actions: absolutely positioned at right: 0 */
+  .hover-actions {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    z-index: 10;
+    display: flex;
+    transform: translateY(-50%);
+    align-items: center;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .row:hover .hover-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Action button styles (minimal) */
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,0.6);
+    cursor: pointer;
+    font-size: 10px;
+    transition: color 0.15s;
+  }
+  .action-btn:hover {
+    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.1);
+  }
+  .action-btn .icon {
+    width: 10px;
+    height: 10px;
+    display: block;
+  }
+
+  /* Variant with better padding (for comparison) */
+  .row-button.better-padding {
+    /* Simulating what the padding should be */
+  }
+  .row:hover .row-button.better-padding {
+    /* pr-12 = 48px — sufficient to clear the badge and actions */
+    padding-right: 48px;
+  }
+
+  /* Badge: also hide on hover variant for comparison */
+  .row:hover .permission-badge.hide-on-hover {
+    opacity: 0;
+  }
+  .permission-badge.hide-on-hover {
+    transition: opacity 0.15s;
+  }
+
+  /* Standard mode variant */
+  .row-button.standard-mode {
+    padding-right: 0;
+  }
+  .row:hover .row-button.standard-mode.quick-archive {
+    /* pr-12 = 48px */
+    padding-right: 48px;
+  }
+  .row:hover .row-button.standard-mode.no-quick-archive {
+    /* pr-5 = 20px */
+    padding-right: 20px;
+  }
+
+  /* Labels for the different versions */
+  .variant-label {
+    font-size: 10px;
+    color: #666;
+    margin-top: 2px;
+    padding-left: 18px;
+  }
+</style>
+</head>
+<body>
+
+<!-- BUG REPRODUCTION: Minimal mode (non-VSCode) with permission badge -->
+<div class="card">
+  <h3>🐛 BUG: Minimal Mode (Desktop)</h3>
+  <p>Permission badge <strong>overlaps</strong> hover actions. Hover over the row below.</p>
+  <p style="color:#f59e0b;font-size:11px;">pr-2 (8px) padding on hover → badge overlaps archive + menu icons</p>
+  <div class="row">
+    <!-- Simulated leading indicators (status dot) -->
+    <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;margin-right:6px;"></div>
+    <div class="row-button">
+      <div class="row-content">
+        <span class="title">Fix login form validation</span>
+        <div class="date-container">
+          <span class="date-label">2h ago</span>
+        </div>
+        <span class="permission-badge">
+          <span class="shield-icon"></span>
+          <span>1</span>
+        </span>
+      </div>
+    </div>
+    <!-- Hover actions: archive + menu (minimal: h-4 w-4 each) -->
+    <div class="hover-actions">
+      <button class="action-btn" title="Archive">📦</button>
+      <button class="action-btn" title="More options">⋯</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPECTED: With sufficient padding (pr-12 = 48px) -->
+<div class="card">
+  <h3>✅ EXPECTED: With pr-12 (48px) padding</h3>
+  <p>Hover over the row below. Badge is visible and does NOT overlap with actions.</p>
+  <p style="color:#22c55e;font-size:11px;">pr-12 provides enough clearance for the hover actions.</p>
+  <div class="row">
+    <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;margin-right:6px;"></div>
+    <div class="row-button better-padding">
+      <div class="row-content">
+        <span class="title">Fix login form validation</span>
+        <div class="date-container">
+          <span class="date-label">2h ago</span>
+        </div>
+        <span class="permission-badge">
+          <span class="shield-icon"></span>
+          <span>1</span>
+        </span>
+      </div>
+    </div>
+    <div class="hover-actions">
+      <button class="action-btn" title="Archive">📦</button>
+      <button class="action-btn" title="More options">⋯</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXPECTED: Badge hides on hover (like the date label does) -->
+<div class="card">
+  <h3>✅ EXPECTED: Badge hides on hover</h3>
+  <p>Hover over the row. Badge fades out on hover (like the date label).</p>
+  <p style="color:#22c55e;font-size:11px;">Adding group-hover:opacity-0 to the badge.</p>
+  <div class="row">
+    <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;margin-right:6px;"></div>
+    <div class="row-button">
+      <div class="row-content">
+        <span class="title">Fix login form validation</span>
+        <div class="date-container">
+          <span class="date-label">2h ago</span>
+        </div>
+        <span class="permission-badge hide-on-hover">
+          <span class="shield-icon"></span>
+          <span>1</span>
+        </span>
+      </div>
+    </div>
+    <div class="hover-actions">
+      <button class="action-btn" title="Archive">📦</button>
+      <button class="action-btn" title="More options">⋯</button>
+    </div>
+  </div>
+</div>
+
+<!-- Standard mode with quick archive for comparison -->
+<div class="card">
+  <h3>Standard Mode (quick archive)</h3>
+  <p>pr-12 (48px) hover padding — adequate clearance.</p>
+  <div class="row">
+    <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;margin-right:6px;"></div>
+    <div class="row-button standard-mode">
+      <div class="row-content">
+        <span class="title">Fix login form validation</span>
+        <span class="permission-badge">
+          <span class="shield-icon"></span>
+          <span>1</span>
+        </span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;font-size:10px;color:#888;margin-top:4px;">
+        <span>2h ago</span>
+      </div>
+    </div>
+    <div class="hover-actions" style="gap:2px;">
+      <button class="action-btn" style="width:24px;height:24px;" title="Archive">📦</button>
+      <button class="action-btn" style="width:24px;height:24px;" title="More">⋯</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edge case: Multiple badges (e.g., permission count "3") -->
+<div class="card">
+  <h3>🐛 Edge Case: Badge with count "3"</h3>
+  <p>Wider badge overlaps even more. Non-VSCode minimal mode.</p>
+  <div class="row">
+    <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;margin-right:6px;"></div>
+    <div class="row-button">
+      <div class="row-content">
+        <span class="title">Refactor auth middleware</span>
+        <div class="date-container">
+          <span class="date-label">5m ago</span>
+        </div>
+        <span class="permission-badge">
+          <span class="shield-icon"></span>
+          <span>3</span>
+        </span>
+      </div>
+    </div>
+    <div class="hover-actions">
+      <button class="action-btn" title="Archive">📦</button>
+      <button class="action-btn" title="More">⋯</button>
+    </div>
+  </div>
+</div>
+
+<style>
+/* Highlight on hover for clarity */
+.row {
+  outline: 1px solid transparent;
+  transition: outline-color 0.15s, background 0.15s;
+}
+.row:hover {
+  outline: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Add a debug overlay on hover to show the overlap zone */
+.row:hover .hover-actions::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: -4px;
+  bottom: -4px;
+  width: 48px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px dashed rgba(239, 68, 68, 0.4);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: -1;
+}
+.row:nth-child(3):hover .hover-actions::after {
+  /* For the "expected" row, use green */
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+</style>
+
+</body>
+</html>
