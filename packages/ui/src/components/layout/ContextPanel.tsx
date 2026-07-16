@@ -25,6 +25,7 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 import { refreshRuntimeUrlAuthToken } from '@/lib/runtime-auth';
 import { getRuntimeUrlResolver } from '@/lib/runtime-url';
 import { getRuntimeApiBaseUrl } from '@/lib/runtime-switch';
+import { getPreviewTargetRecoveryAction } from '@/lib/preview/proxy-response';
 import { Icon } from "@/components/icon/Icon";
 import { OpenChamberLogo } from "@/components/ui/OpenChamberLogo";
 import { invokeDesktopCommand } from '@/lib/desktopNative';
@@ -951,13 +952,14 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ rawUrl, onNavigate }) => {
 
   // Out-of-band upstream probe: iframes don't expose HTTP status to the parent,
   // so when the proxy returns a 502 (upstream dev server is offline) the iframe
-  // would just render the raw JSON error body. Probe the proxy URL with a HEAD
+  // would just render the raw JSON error body. Probe the proxy URL with a GET
   // request and surface a friendly overlay when the upstream is unreachable.
   type UpstreamState = 'unknown' | 'starting' | 'reachable' | 'unreachable';
   const [upstreamState, setUpstreamState] = React.useState<UpstreamState>('unknown');
   const upstreamProbeStartedAtRef = React.useRef<number>(0);
   const upstreamProbeAttemptRef = React.useRef<number>(0);
   const upstreamProbeKeyRef = React.useRef<string>('');
+  const proxyRecoveryAttemptedKeyRef = React.useRef<string>('');
   const PREVIEW_STARTUP_GRACE_MS = 15_000;
 
   React.useEffect(() => {
@@ -1007,16 +1009,31 @@ const PreviewPane: React.FC<PreviewPaneProps> = ({ rawUrl, onNavigate }) => {
         return;
       }
 
-      if (response.status === 403 || response.status === 404) {
+      const recoveryAction = getPreviewTargetRecoveryAction(
+        response.headers,
+        proxyRecoveryAttemptedKeyRef.current === proxyCacheKey,
+      );
+      if (recoveryAction !== 'none') {
         previewProxyTargetCache.delete(proxyCacheKey);
-        setProxyState({ status: 'loading' });
-        bumpProxyRegistration();
+        if (recoveryAction === 'retry-registration') {
+          proxyRecoveryAttemptedKeyRef.current = proxyCacheKey;
+          setProxyState({ status: 'loading' });
+          bumpProxyRegistration();
+        } else {
+          const errorBody = await response.json().catch(() => ({}));
+          if (cancelled) return;
+          const message = typeof errorBody?.error === 'string'
+            ? errorBody.error
+            : `HTTP ${response.status}`;
+          setProxyState({ status: 'error', message });
+        }
         return;
       }
 
       // The proxy emits 502 when the upstream is unreachable. Anything else
       // (including 4xx from the upstream) means the upstream answered.
       if (response.status !== 502) {
+        proxyRecoveryAttemptedKeyRef.current = '';
         setUpstreamState('reachable');
         return;
       }

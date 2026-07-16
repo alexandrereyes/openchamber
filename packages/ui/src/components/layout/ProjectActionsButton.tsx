@@ -157,7 +157,6 @@ export const ProjectActionsButton = ({
   const loadDesktopSsh = useDesktopSshStore((state) => state.load);
 
   const setBottomTerminalOpen = useUIStore((state) => state.setBottomTerminalOpen);
-  const isBottomTerminalOpen = useUIStore((state) => state.isBottomTerminalOpen);
   const setActiveMainTab = useUIStore((state) => state.setActiveMainTab);
   const setSettingsPage = useUIStore((state) => state.setSettingsPage);
   const setSettingsDialogOpen = useUIStore((state) => state.setSettingsDialogOpen);
@@ -369,7 +368,7 @@ export const ProjectActionsButton = ({
     });
   }, [displayActions, openContextPreview, openExternal, projectActionRuns, removeProjectActionRun, setTabPreviewUrl, t, updateProjectActionRunStatus]);
 
-  const getOrCreateActionTab = React.useCallback(async (action: OpenChamberProjectAction, options: { revealTerminal?: boolean; activateTab?: boolean } = {}) => {
+  const getOrCreateActionTab = React.useCallback(async (action: OpenChamberProjectAction, options: { revealTerminal?: boolean } = {}) => {
     if (!normalizedDirectory) {
       throw new Error(t('projectActions.error.noActiveDirectory'));
     }
@@ -392,9 +391,7 @@ export const ProjectActionsButton = ({
 
     setTabLabel(normalizedDirectory, tabId, `Action: ${action.name}`);
     setTabIconKey(normalizedDirectory, tabId, action.icon || 'play');
-    if (options.activateTab !== false) {
-      setActiveTab(normalizedDirectory, tabId);
-    }
+    setActiveTab(normalizedDirectory, tabId);
     if (options.revealTerminal !== false) {
       setBottomTerminalOpen(true);
       setActiveMainTab('terminal');
@@ -460,8 +457,7 @@ export const ProjectActionsButton = ({
 
       const hasCustomOpenUrl = discovered.autoOpenUrl === true && (discovered.openUrl || '').trim().length > 0;
       const revealTerminal = !hasCustomOpenUrl && action.id !== AUTO_DISCOVER_ACTION_ID;
-      const activateTab = revealTerminal || (action.id === AUTO_DISCOVER_ACTION_ID && isBottomTerminalOpen);
-      const { key, tabId, sessionId } = await getOrCreateActionTab(discovered, { revealTerminal, activateTab });
+      const { key, tabId, sessionId } = await getOrCreateActionTab(discovered, { revealTerminal });
       let activeSessionId = sessionId;
 
       if (!activeSessionId) {
@@ -597,7 +593,6 @@ export const ProjectActionsButton = ({
     allowMobile,
     isMobile,
     isDesktopShellApp,
-    isBottomTerminalOpen,
     normalizedDirectory,
     openExternal,
     openContextPreview,

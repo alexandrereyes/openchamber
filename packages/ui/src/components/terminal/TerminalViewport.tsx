@@ -84,6 +84,26 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     let fitFrame: number | null = null;
     let subscriptions: Array<{ dispose: () => void }> = [];
+    const handleFocusIn = () => {
+      if (terminal && visibleRef.current) terminal.options.cursorBlink = true;
+    };
+    const handleFocusOut = (event: FocusEvent) => {
+      if (event.relatedTarget instanceof Node && container.contains(event.relatedTarget)) return;
+      if (terminal) terminal.options.cursorBlink = false;
+    };
+    const handleWindowFocus = () => {
+      if (terminal && visibleRef.current && container.contains(document.activeElement)) {
+        terminal.options.cursorBlink = true;
+      }
+    };
+    const handleWindowBlur = () => {
+      if (terminal) terminal.options.cursorBlink = false;
+    };
+
+    container.addEventListener('focusin', handleFocusIn);
+    container.addEventListener('focusout', handleFocusOut);
+    window.addEventListener('focus', handleWindowFocus);
+    window.addEventListener('blur', handleWindowBlur);
 
     loadGhostty().then((ghostty) => {
       if (disposed) return;
@@ -108,6 +128,10 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
       observer?.disconnect();
       if (resizeTimeout) clearTimeout(resizeTimeout);
       if (fitFrame !== null) cancelAnimationFrame(fitFrame);
+      container.removeEventListener('focusin', handleFocusIn);
+      container.removeEventListener('focusout', handleFocusOut);
+      window.removeEventListener('focus', handleWindowFocus);
+      window.removeEventListener('blur', handleWindowBlur);
       subscriptions.forEach((subscription) => subscription.dispose());
       terminal?.dispose();
       terminalRef.current = null;
@@ -118,6 +142,13 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
       writingRef.current = false;
     };
   }, [fit, fontFamily, fontSize, theme]);
+
+  React.useEffect(() => {
+    const terminal = terminalRef.current;
+    const container = containerRef.current;
+    if (!terminal || !container) return;
+    terminal.options.cursorBlink = isVisible && document.hasFocus() && container.contains(document.activeElement);
+  }, [isVisible, ready]);
 
   React.useEffect(() => {
     const terminal = terminalRef.current;

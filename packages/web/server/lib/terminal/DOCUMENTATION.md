@@ -23,6 +23,7 @@ HTTP remains the authenticated command plane for create, resize, appearance upda
 - IDs are client-provided or generated with `randomUUID()`.
 - Concurrent creates for one ID are single-flight, and an existing ID cannot be reused for another working directory.
 - Dimensions are bounded to 1-1000 columns and 1-500 rows; input is capped at 64 KiB.
+- PTY children explicitly clear `NODE_CHANNEL_FD`; daemon IPC descriptors are host-private and invalid after PTY descriptor cleanup.
 - PTY data and exit callbacks enter one FIFO queue. Stale callbacks from replaced processes are ignored.
 - Scrollback is retained on the server and capped at 512 KiB with UTF-8-safe trimming. Device-status, device-attribute, cursor-position reply, and color-query exchanges are removed from replay history with incomplete control sequences carried across PTY chunks; live output remains byte-for-byte unchanged.
 - Exited sessions remain attachable until explicit close or idle cleanup.

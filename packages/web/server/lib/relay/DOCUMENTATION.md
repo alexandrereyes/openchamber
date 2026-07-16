@@ -58,7 +58,7 @@ The host dispatcher restricts tunneled traffic to explicit path allowlists (one 
 2. **Presence.** When the relay is enabled, the host opens one outbound control connection and waits.
 3. **Connect.** The client connects for a given routing id; the relay notifies the host over the control connection; the host opens a matching per-client data connection.
 4. **Handshake.** Over that connection pair, client and host run the E2EE handshake and derive a shared encrypted channel the relay cannot read.
-5. **Traffic.** All normal app traffic is multiplexed and encrypted through that channel. On the host, decrypted requests are dispatched to the local server over loopback; responses stream back encrypted. Reconnects re-establish a fresh channel and the app's existing retry machinery recovers.
+5. **Traffic.** All normal app traffic is multiplexed and encrypted through that channel. On the host, decrypted requests are dispatched to the local server over loopback with the actual loopback origin, so normal origin checks still apply without trusting client-supplied origin metadata; responses stream back encrypted. Reconnects re-establish a fresh channel and the app's existing retry machinery recovers.
 
 ## Candidate refresh (staying off the relay when direct works)
 

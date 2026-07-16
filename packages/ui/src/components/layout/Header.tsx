@@ -1775,7 +1775,8 @@ export const Header: React.FC<HeaderProps> = ({
   }, [shortcutOverrides]);
 
   useEffect(() => {
-    if (!isMobile && (activeMainTab === 'git' || activeMainTab === 'terminal' || activeMainTab === 'diff' || activeMainTab === 'files' || activeMainTab === 'context')) {
+    // Project actions may intentionally promote the terminal to the desktop main view.
+    if (!isMobile && (activeMainTab === 'git' || activeMainTab === 'diff' || activeMainTab === 'files' || activeMainTab === 'context')) {
       setActiveMainTab('chat');
     }
   }, [activeMainTab, isMobile, setActiveMainTab]);

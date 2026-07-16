@@ -67,6 +67,9 @@ export function createTerminalRuntime({
     for (const shell of shellCandidates()) {
       try {
         const env = { ...process.env, PATH: buildAugmentedPath(), TERM: 'xterm-256color', COLORTERM: 'truecolor', COLORFGBG: themeMode === 'light' ? '0;15' : '15;0' };
+        // The daemon's IPC fd is closed inside the PTY. An explicit override is
+        // required because bun-pty also inherits Bun's native process environment.
+        env.NODE_CHANNEL_FD = '';
         delete env.BASH_XTRACEFD; delete env.BASH_ENV; delete env.ENV; delete env.ELECTRON_RUN_AS_NODE;
         const options = { name: 'xterm-256color', cwd, cols, rows, env, ...(process.platform === 'win32' ? { useConpty: true } : {}) };
         return { process: provider.spawn(shell, [], options), backend: provider.backend, shell };
