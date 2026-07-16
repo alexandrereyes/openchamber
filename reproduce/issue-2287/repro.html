@@ -1,0 +1,330 @@
+<!doctype html>
+<!--
+  Reproduction: iOS PWA bottom gap cutting off the message box
+  Issue: https://github.com/openchamber/openchamber/issues/2287
+
+  How to use:
+    1. Serve this file (e.g. `python3 -m http.server 8080`).
+    2. Open on iOS Safari, then "Add to Home Screen".
+    3. Launch the PWA – the bottom "chin" gap will be visible in the
+       "Current (h-full)" panel, obscuring the message box area.
+    4. The "Fixed (100vh)" panel shows the intended behavior.
+
+  Root cause:
+    - `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />`
+      pushes the viewport behind the status bar (true edge-to-edge).
+    - `viewport-fit=cover` enables that expansion.
+    - `html, body { height: 100% }` (Tailwind `h-full`) measures against the
+      containing block, which is the layout viewport — NOT the true visual viewport.
+    - iOS Safari's `black-translucent` mode offsets visual content down by the
+      status bar height (~44px on notch devices, ~54px on Dynamic Island), but
+      `height: 100%` does not grow to compensate, leaving a dead band at the bottom.
+    - `height: 100vh` / `height: 100dvh` on the root elements uses the true
+      viewport, filling edge-to-edge as intended.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Simulated iOS PWA viewport config (mirrors packages/web/index.html) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Repro-2287" />
+    <title>Repro: Issue 2287 - iOS PWA bottom gap</title>
+
+    <!--
+      Simulate iOS Safari's viewport offset in `black-translucent` mode.
+      On a real device the status bar region at the top is transparent and the
+      viewport is extended upward behind it. Content is then pushed down by
+      `env(safe-area-inset-top)` (~44-54px). The layout viewport height stays
+      the same while the visual viewport effectively shrinks by the status bar
+      height, but `height: 100%` doesn't adapt.
+
+      We mimic this by adding a fixed status-bar overlay and padding the
+      viewport down with a `safe-area-inset-top` simulation.
+    -->
+    <style>
+      /* ── Simulated iOS PWA environment ── */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --safe-area-inset-top: 54px;   /* approximates Dynamic Island */
+        --safe-area-inset-bottom: 34px; /* typical home indicator */
+        --status-bar-bg: rgba(0, 0, 0, 0.3);
+      }
+
+      /* Simulated status bar overlay (iOS draws content behind this) */
+      body::before {
+        content: "⏱︎ 9:41  ●";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: var(--safe-area-inset-top);
+        background: var(--status-bar-bg);
+        color: white;
+        font: 12px -apple-system, sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        letter-spacing: 0.3px;
+        backdrop-filter: blur(4px);
+      }
+
+      /* ── Panel layout ── */
+      .repro-container {
+        padding-top: var(--safe-area-inset-top);
+        padding-bottom: var(--safe-area-inset-bottom);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        background: #1a1a1a;
+        color: #e0e0e0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      .panel-row {
+        flex: 1;
+        display: flex;
+        flex-direction: row;
+        gap: 8px;
+        min-height: 0;
+        padding: 0 8px;
+      }
+      @media (max-width: 600px) {
+        .panel-row { flex-direction: column; }
+      }
+
+      .panel {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #222;
+        border: 1px solid #333;
+      }
+
+      .panel-header {
+        padding: 8px 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        background: #2a2a2a;
+        border-bottom: 1px solid #333;
+      }
+
+      .panel-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        padding: 12px;
+      }
+
+      /* ── Chat area simulation ── */
+      .messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+        background: #161616;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        min-height: 0;
+      }
+
+      .message {
+        padding: 8px 12px;
+        margin-bottom: 6px;
+        background: #2a2a2a;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .message.user {
+        background: #1e3a5f;
+        text-align: right;
+      }
+
+      .message-box {
+        display: flex;
+        gap: 6px;
+        padding: 8px;
+        background: #2a2a2a;
+        border-radius: 10px;
+        border: 1px solid #444;
+        flex-shrink: 0;
+        align-items: center;
+      }
+      .message-box input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: #e0e0e0;
+        font-size: 14px;
+        outline: none;
+        padding: 4px 0;
+      }
+      .message-box input::placeholder { color: #666; }
+      .message-box button {
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 6px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      /* ── Current reproduction (html/body height: 100%) ── */
+      .current .panel-content {
+        /* content area itself is fine; the bug is at the root level */
+        height: 100%;
+      }
+
+      /* ── Visual indicator of bottom gap ── */
+      .gap-indicator {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: var(--safe-area-inset-bottom);
+        background: repeating-linear-gradient(
+          45deg,
+          #ff4444 0px,
+          #ff4444 4px,
+          #cc0000 4px,
+          #cc0000 8px
+        );
+        opacity: 0.5;
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        pointer-events: none;
+      }
+
+      /* ── Legend ── */
+      .legend {
+        padding: 8px 16px 12px;
+        font-size: 11px;
+        color: #999;
+        text-align: center;
+        border-top: 1px solid #333;
+        background: #1a1a1a;
+        flex-shrink: 0;
+      }
+      .legend code {
+        background: #333;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-size: 10px;
+      }
+      .legend .label-bug { color: #ff6b6b; }
+      .legend .label-fix { color: #51cf66; }
+    </style>
+  </head>
+
+  <!--
+    ═══════════════════════════════════════════════════════════════════════
+    REPRODUCTION: CURRENT BEHAVIOR
+
+    <html> and <body> use `h-full` → height: 100%
+    With black-translucent + viewport-fit=cover, the containing block
+    (layout viewport) does NOT account for the status bar offset, so the
+    bottom of the page extends past the true visual viewport, creating a
+    "chin" gap below the message box that the user cannot see or reach.
+    ═══════════════════════════════════════════════════════════════════════
+  -->
+  <body style="height: 100%; margin: 0; background: #1a1a1a;">
+    <!--
+      This gap-indicator shows where the dead band lands.
+      In the real bug, the message input is partially or fully hidden
+      behind this area, making it unusable.
+    -->
+    <div class="gap-indicator">⚠ CHIN GAP (content hidden here)</div>
+
+    <div class="repro-container">
+      <div style="padding: 8px 16px 0; text-align: center;">
+        <h1 style="font-size: 16px; color: #e0e0e0; margin: 0;">iOS PWA Bottom Gap</h1>
+        <p style="font-size: 11px; color: #888; margin: 4px 0 0;">
+          Issue <a href="https://github.com/openchamber/openchamber/issues/2287" style="color: #3b82f6;">#2287</a>
+          &nbsp;·&nbsp;
+          <span class="label-bug">⬤ Current: html/body height: 100%</span>
+          &nbsp;·&nbsp;
+          <span class="label-fix">⬤ Fixed: html/body height: 100vh</span>
+        </p>
+      </div>
+
+      <div class="panel-row">
+        <!-- ── PANEL: Current (h-full / height: 100%) ── -->
+        <div class="panel current">
+          <div class="panel-header" style="color: #ff6b6b;">
+            ⬤ Current (h-full — height: 100%)
+          </div>
+          <div class="panel-content">
+            <div class="messages">
+              <div class="message user">What does the code do?</div>
+              <div class="message">It processes the request and returns a response.</div>
+              <div class="message user">Can you show me an example?</div>
+              <div class="message">Sure! Here's how you'd call the API...</div>
+            </div>
+            <div class="message-box">
+              <input type="text" placeholder="Type a message..." value="This input is cut off by the chin gap" />
+              <button>Send</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── PANEL: Fixed (100vh) ── -->
+        <div class="panel" style="height: 100%;">
+          <div class="panel-header" style="color: #51cf66;">
+            ⬤ Fixed (html/body height: 100vh)
+          </div>
+          <div class="panel-content" style="height: 100%;">
+            <div class="messages">
+              <div class="message user">What does the code do?</div>
+              <div class="message">It processes the request and returns a response.</div>
+              <div class="message user">Can you show me an example?</div>
+              <div class="message">Sure! Here's how you'd call the API...</div>
+            </div>
+            <div class="message-box">
+              <input type="text" placeholder="Type a message..." value="✓ This input is fully visible" />
+              <button>Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <div style="margin-bottom: 4px;">
+          <strong>On a real iOS device:</strong> The "Current" panel's message box is partially or fully hidden
+          behind the home indicator area — the chat becomes unusable.
+        </div>
+        <div>
+          Affected files:
+          <code>packages/web/index.html</code> lines 2, 519–520 ·
+          <code>packages/web/mobile.html</code> lines 2, 68–69 ·
+          <code>packages/web/mini-chat.html</code> lines 2, 79–80
+        </div>
+        <div style="margin-top: 4px; font-size: 10px;">
+          <code style="background: #3a1a1a;">&lt;html class="h-full"&gt;</code>
+          <code style="background: #3a1a1a;">&lt;body class="h-full ..."&gt;</code>
+          →
+          replace with
+          <code style="background: #1a3a1a;">style="height: 100vh;"</code>
+          or a custom class that sets <code>height: 100vh</code>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
