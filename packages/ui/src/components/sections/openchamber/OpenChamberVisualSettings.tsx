@@ -1667,12 +1667,12 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                             <SettingsSection
                                 title={t('settings.openchamber.visual.section.chatFeatures')}
                                 divider={showBehaviorDisplaySettings || showTransportSection || showBehaviorMessageOptions || behaviorSectionDivider}
-                                contentClassName={SETTINGS_OPTION_STACK_CLASS}
+                                contentClassName="space-y-5"
                             >
                                 {shouldShow('expandedTools') && (
                                     <SettingsControlGroup
                                         title={t('settings.openchamber.visual.section.showToolsOpenedByDefault')}
-                                        className="pb-2"
+                                        contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                     >
                                         <SettingsCheckboxRow
                                             checked={showExpandedBashTools}
@@ -1692,6 +1692,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     <SettingsControlGroup
                                         title={t('settings.openchamber.visual.section.sessionAssistance')}
                                         settingsItem="chat.session-assistance"
+                                    contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                     >
                                         {shouldShow('sessionAssist') && (
                                             <>
@@ -1739,6 +1740,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                                 </Tooltip>
                                             </span>
                                         )}
+                                        contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                     >
                                         <SettingsCheckboxRow
                                             checked={sessionGoalEnabled}
@@ -1775,6 +1777,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                     <SettingsControlGroup
                                         title={t('settings.openchamber.visual.section.reasoning')}
                                         settingsItem="chat.reasoning"
+                                    contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                     >
                                         <SettingsCheckboxRow
                                             checked={showReasoningTraces}
@@ -1798,6 +1801,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 <SettingsControlGroup
                                     title={t('settings.openchamber.visual.section.messageAppearance')}
                                     settingsItem="chat.message-appearance"
+                                    contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                 >
                                 {shouldShow('collapsibleUserMessages') && (
                                     <SettingsCheckboxRow
@@ -1875,6 +1879,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 <SettingsControlGroup
                                     title={t('settings.openchamber.visual.section.toolsAndFiles')}
                                     settingsItem="chat.tools-and-files"
+                                    contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                 >
                                 {shouldShow('showToolFileIcons') && (
                                     <SettingsCheckboxRow
@@ -1921,6 +1926,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                 <SettingsControlGroup
                                     title={t('settings.openchamber.visual.section.composer')}
                                     settingsItem="chat.composer"
+                                    contentClassName={SETTINGS_OPTION_STACK_CLASS}
                                 >
                                 {shouldShow('persistDraft') && (
                                     <SettingsCheckboxRow
