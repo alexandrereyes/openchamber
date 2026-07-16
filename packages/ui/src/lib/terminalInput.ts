@@ -1,4 +1,4 @@
-export type TerminalModifier = 'ctrl' | 'cmd';
+export type TerminalModifier = 'ctrl' | 'alt';
 export type TerminalQuickKey = 'esc' | 'tab' | 'enter' | 'arrow-up' | 'arrow-down' | 'arrow-left' | 'arrow-right';
 
 const sequences: Record<TerminalQuickKey, string> = {
@@ -19,4 +19,10 @@ export const terminalControlCharacter = (value: string): string | null => {
   const character = value[0]?.toUpperCase();
   if (!character || character < 'A' || character > 'Z') return null;
   return String.fromCharCode(character.charCodeAt(0) & 0b11111);
+};
+
+export const applyTerminalModifier = (value: string, modifier: TerminalModifier): string => {
+  if (!value) return value;
+  if (modifier === 'ctrl') return terminalControlCharacter(value) ?? value;
+  return value.length === 1 && value !== '\u001b' ? `\u001b${value}` : value;
 };

@@ -20,13 +20,17 @@ import { extractTerminalPreviewUrl, isTerminalPreviewUrlAvailable } from '@/lib/
 import { useI18n } from '@/lib/i18n';
 import { PROJECT_ACTION_ICON_MAP, type ProjectActionIconKey } from '@/lib/projectActions';
 import { useInlineCommentDraftStore } from '@/stores/useInlineCommentDraftStore';
-import { terminalControlCharacter, terminalSequenceForKey, type TerminalModifier as Modifier, type TerminalQuickKey as MobileKey } from '@/lib/terminalInput';
+import { applyTerminalModifier, terminalControlCharacter, terminalSequenceForKey, type TerminalModifier as Modifier, type TerminalQuickKey as MobileKey } from '@/lib/terminalInput';
 
-export const TerminalView: React.FC = () => {
+type TerminalViewProps = {
+    visible?: boolean;
+};
+
+export const TerminalView: React.FC<TerminalViewProps> = ({ visible }) => {
     const { t } = useI18n();
     const { terminal, runtime } = useRuntimeAPIs();
     const { currentTheme } = useThemeSystem();
-    const terminalAppearanceRef = React.useRef({ themeMode: currentTheme.metadata.variant === 'light' ? 'light' as const : 'dark' as const, terminalBackground: currentTheme.colors.surface.background, terminalForeground: currentTheme.colors.syntax.base.foreground });
+    const terminalAppearanceRef = React.useRef<{ themeMode: 'light' | 'dark'; terminalBackground: string; terminalForeground: string }>({ themeMode: 'dark', terminalBackground: '', terminalForeground: '' });
     terminalAppearanceRef.current = { themeMode: currentTheme.metadata.variant === 'light' ? 'light' : 'dark', terminalBackground: currentTheme.colors.surface.background, terminalForeground: currentTheme.colors.syntax.base.foreground };
     const { monoFont } = useFontPreferences();
     const terminalFontSize = useUIStore(state => state.terminalFontSize);
@@ -146,7 +150,7 @@ export const TerminalView: React.FC = () => {
     const setBottomTerminalOpen = useUIStore((state) => state.setBottomTerminalOpen);
     const setBottomTerminalExpanded = useUIStore((state) => state.setBottomTerminalExpanded);
     const isTerminalActive = activeMainTab === 'terminal';
-    const isTerminalVisible = isTerminalActive || isBottomTerminalOpen;
+    const isTerminalVisible = visible ?? (isTerminalActive || isBottomTerminalOpen);
     const [hasOpenedTerminalViewport, setHasOpenedTerminalViewport] = React.useState(isTerminalVisible);
 
     React.useEffect(() => {
@@ -666,18 +670,8 @@ export const TerminalView: React.FC = () => {
             let modifierConsumed = false;
 
             if (activeModifier && data.length > 0) {
-                const firstChar = data[0];
-                if (firstChar.length === 1 && /[a-zA-Z]/.test(firstChar)) {
-                    const upper = firstChar.toUpperCase();
-                    if (activeModifier === 'ctrl' || activeModifier === 'cmd') {
-                        payload = terminalControlCharacter(upper) ?? data;
-                        modifierConsumed = true;
-                    }
-                }
-
-                if (!modifierConsumed) {
-                    modifierConsumed = true;
-                }
+                payload = applyTerminalModifier(data, activeModifier);
+                modifierConsumed = true;
             }
 
             const terminalId = terminalIdRef.current;
@@ -838,6 +832,23 @@ export const TerminalView: React.FC = () => {
     }, [focusTerminalWhenWindowActive, isTerminalVisible, useTouchTerminalInput, terminalViewportKey, terminalSessionId]);
 
     React.useEffect(() => {
+        if (!isTerminalVisible || !useTouchTerminalInput) return;
+        let fitFrame: number | null = null;
+        const handleKeyboardSettled = () => {
+            if (fitFrame !== null) window.cancelAnimationFrame(fitFrame);
+            fitFrame = window.requestAnimationFrame(() => {
+                fitFrame = null;
+                terminalControllerRef.current?.fit();
+            });
+        };
+        window.addEventListener('oc:keyboard-settled', handleKeyboardSettled);
+        return () => {
+            window.removeEventListener('oc:keyboard-settled', handleKeyboardSettled);
+            if (fitFrame !== null) window.cancelAnimationFrame(fitFrame);
+        };
+    }, [isTerminalVisible, terminalViewportKey, useTouchTerminalInput]);
+
+    React.useEffect(() => {
         if (useTouchTerminalInput || !isTerminalVisible || !isBottomTerminalOpen) {
             return;
         }
@@ -890,13 +901,18 @@ export const TerminalView: React.FC = () => {
     const quickKeysDisabled = !terminalSessionId || isConnecting || isRestarting || isReconnectPending;
     const shouldRenderViewport = hasOpenedTerminalViewport;
     const showBottomDockControls = !isTouchTerminal && isBottomTerminalOpen && !isTerminalActive;
+    const quickKeySize: 'lg' | 'xs' = isTouchTerminal ? 'lg' : 'xs';
+    const quickKeyIconClass = isTouchTerminal ? 'w-10 p-0' : 'w-9 p-0';
+    const preserveTerminalFocus = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (isTouchTerminal) event.preventDefault();
+    };
     const quickKeysControls = (
         <>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 px-2 text-xs"
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('esc')}
                 disabled={quickKeysDisabled}
             >
@@ -904,9 +920,10 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 w-9 p-0"
+                className={quickKeyIconClass}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('tab')}
                 disabled={quickKeysDisabled}
             >
@@ -915,10 +932,11 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="chip"
                 aria-pressed={activeModifier === 'ctrl'}
-                className="h-6 w-9 p-0"
+                className={isTouchTerminal ? 'px-3' : 'px-2'}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleModifierToggle('ctrl')}
                 disabled={quickKeysDisabled}
             >
@@ -927,21 +945,23 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="chip"
-                aria-pressed={activeModifier === 'cmd'}
-                className="h-6 w-9 p-0"
-                onClick={() => handleModifierToggle('cmd')}
+                aria-pressed={activeModifier === 'alt'}
+                className={isTouchTerminal ? 'px-3' : 'px-2'}
+                onPointerDown={preserveTerminalFocus}
+                onClick={() => handleModifierToggle('alt')}
                 disabled={quickKeysDisabled}
             >
-                <Icon name="command"/>
-                <span className="sr-only">{t('terminalView.quickKeys.commandModifierAria')}</span>
+                <span className="text-xs font-medium">{t('terminalView.quickKeys.altLabel')}</span>
+                <span className="sr-only">{t('terminalView.quickKeys.altModifierAria')}</span>
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 w-9 p-0"
+                className={quickKeyIconClass}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('arrow-up')}
                 disabled={quickKeysDisabled}
             >
@@ -950,9 +970,10 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 w-9 p-0"
+                className={quickKeyIconClass}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('arrow-left')}
                 disabled={quickKeysDisabled}
             >
@@ -961,9 +982,10 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 w-9 p-0"
+                className={quickKeyIconClass}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('arrow-down')}
                 disabled={quickKeysDisabled}
             >
@@ -972,9 +994,10 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 w-9 p-0"
+                className={quickKeyIconClass}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('arrow-right')}
                 disabled={quickKeysDisabled}
             >
@@ -983,9 +1006,10 @@ export const TerminalView: React.FC = () => {
             </Button>
             <Button
                 type="button"
-                size="sm"
+                size={quickKeySize}
                 variant="outline"
-                className="h-6 w-9 p-0"
+                className={quickKeyIconClass}
+                onPointerDown={preserveTerminalFocus}
                 onClick={() => handleMobileKeyPress('enter')}
                 disabled={quickKeysDisabled}
             >
@@ -1084,13 +1108,13 @@ export const TerminalView: React.FC = () => {
                     </div>
                 ) : null}
 
-                {!isMobile && showQuickKeys && enableTabs && directoryTerminalState ? (
+                {!isTouchTerminal && showQuickKeys && enableTabs && directoryTerminalState ? (
                     <div className="mt-2 flex flex-wrap items-center gap-1 pl-1 pr-1">
                         {quickKeysControls}
                     </div>
                 ) : null}
 
-                {showQuickKeys && (isMobile || !enableTabs || !directoryTerminalState) ? (
+                {!isTouchTerminal && showQuickKeys && (!enableTabs || !directoryTerminalState) ? (
                     <div className="mt-2 flex flex-wrap items-center gap-1">
                         {quickKeysControls}
                     </div>
@@ -1124,7 +1148,7 @@ export const TerminalView: React.FC = () => {
                 {!isReconnectPending && connectionError && (
                     <div className="absolute inset-x-0 bottom-0 bg-[var(--status-error-background)] px-3 py-2 text-xs text-[var(--status-error-foreground)] flex items-center justify-between gap-2">
                         <span>{connectionError}</span>
-                        {isFatalError && isMobile && (
+                        {isFatalError && isTouchTerminal && (
                             <Button
                                 size="sm"
                                 variant="secondary"
@@ -1140,6 +1164,13 @@ export const TerminalView: React.FC = () => {
                     </div>
                 )}
             </div>
+            {isTouchTerminal && showQuickKeys ? (
+                <div className="shrink-0 overflow-x-auto border-t border-border/40 bg-[var(--surface-background)] px-2 pt-1.5 pb-[max(0.375rem,calc(var(--oc-app-bottom-safe,0px)-var(--oc-keyboard-inset,0px)))] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <div className="flex min-w-max items-center gap-1.5">
+                        {quickKeysControls}
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 };

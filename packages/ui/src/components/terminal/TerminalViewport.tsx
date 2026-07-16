@@ -4,6 +4,15 @@ import { FitAddon, Ghostty, Terminal as GhosttyTerminal } from 'ghostty-web';
 import { cn } from '@/lib/utils';
 import type { TerminalTheme } from '@/lib/terminalTheme';
 import { getGhosttyTerminalOptions } from '@/lib/terminalTheme';
+import {
+  getGhosttySafeResetSequence,
+  rewriteGhosttyDefaultBackgroundResets,
+} from '@/lib/terminalOutput';
+import {
+  getTerminalCellFromPoint,
+  getTerminalWordRange,
+  type TerminalCellPosition,
+} from '@/lib/terminalTouchSelection';
 import type { TerminalChunk } from '@/stores/useTerminalStore';
 
 let ghosttyPromise: Promise<Ghostty> | null = null;
@@ -41,12 +50,17 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
   const lastSizeRef = React.useRef<{ cols: number; rows: number } | null>(null);
   const lastChunkRef = React.useRef<number | null>(null);
   const writeQueueRef = React.useRef('');
+  const outputRewriteCarryRef = React.useRef('');
+  const safeResetRef = React.useRef(getGhosttySafeResetSequence(theme.background));
   const writingRef = React.useRef(false);
   const visibleRef = React.useRef(isVisible);
+  const rendererReadyRef = React.useRef(false);
   const [ready, setReady] = React.useState(0);
+  const [rendererGeneration, setRendererGeneration] = React.useState(0);
   inputRef.current = onInput;
   resizeRef.current = onResize;
   visibleRef.current = isVisible;
+  safeResetRef.current = getGhosttySafeResetSequence(theme.background);
 
   const fit = React.useCallback(() => {
     const container = containerRef.current;
@@ -61,18 +75,42 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
         lastSizeRef.current = next;
         resizeRef.current(next.cols, next.rows);
       }
+      if (!rendererReadyRef.current) {
+        rendererReadyRef.current = true;
+        setReady((value) => value + 1);
+      }
     } catch { /* hidden or detached */ }
   }, []);
 
   const flush = React.useCallback(() => {
     if (writingRef.current || !writeQueueRef.current || !terminalRef.current) return;
-    const data = writeQueueRef.current;
+    const terminal = terminalRef.current;
+    const pending = writeQueueRef.current;
     writeQueueRef.current = '';
+    const rewritten = rewriteGhosttyDefaultBackgroundResets(
+      pending,
+      outputRewriteCarryRef.current,
+      safeResetRef.current,
+    );
+    outputRewriteCarryRef.current = rewritten.carry;
+    if (!rewritten.data) {
+      if (writeQueueRef.current) flush();
+      return;
+    }
     writingRef.current = true;
-    terminalRef.current.write(data, () => {
+    terminal.write(rewritten.data, () => {
+      if (terminalRef.current !== terminal) return;
       writingRef.current = false;
       if (writeQueueRef.current) flush();
     });
+  }, []);
+
+  const recreateRenderer = React.useCallback(() => {
+    lastChunkRef.current = null;
+    writeQueueRef.current = '';
+    outputRewriteCarryRef.current = '';
+    writingRef.current = false;
+    setRendererGeneration((value) => value + 1);
   }, []);
 
   React.useEffect(() => {
@@ -119,7 +157,9 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
         resizeTimeout = setTimeout(fit, 80);
       });
       observer.observe(container);
-      setReady((value) => value + 1);
+      fit();
+      const safeReset = safeResetRef.current;
+      if (safeReset) terminal.write(`${safeReset}\u001b[2J\u001b[H`);
       fitFrame = requestAnimationFrame(fit);
     });
 
@@ -139,9 +179,11 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
       lastSizeRef.current = null;
       lastChunkRef.current = null;
       writeQueueRef.current = '';
+      outputRewriteCarryRef.current = '';
       writingRef.current = false;
+      rendererReadyRef.current = false;
     };
-  }, [fit, fontFamily, fontSize, theme]);
+  }, [fit, fontFamily, fontSize, rendererGeneration, theme]);
 
   React.useEffect(() => {
     const terminal = terminalRef.current;
@@ -153,30 +195,22 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
   React.useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
-    terminal.reset();
-    lastChunkRef.current = null;
-    writeQueueRef.current = '';
-    writingRef.current = false;
-    fit();
-  }, [fit, ready, sessionKey]);
-
-  React.useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) return;
     if (chunks.length === 0) {
-      if (lastChunkRef.current !== null) terminal.reset();
-      lastChunkRef.current = null;
+      if (lastChunkRef.current !== null) recreateRenderer();
       return;
     }
     const previous = lastChunkRef.current;
     const previousIndex = previous === null ? -1 : chunks.findIndex((chunk) => chunk.id === previous);
-    if (previous !== null && previousIndex < 0) terminal.reset();
+    if (previous !== null && previousIndex < 0) {
+      recreateRenderer();
+      return;
+    }
     const isReplay = previousIndex < 0;
     const pending = previousIndex >= 0 ? chunks.slice(previousIndex + 1) : chunks;
     writeQueueRef.current += pending.map((chunk) => isReplay ? (chunk.replayData ?? chunk.data) : chunk.data).join('');
     lastChunkRef.current = chunks.at(-1)?.id ?? null;
     flush();
-  }, [chunks, flush, ready]);
+  }, [chunks, flush, ready, recreateRenderer]);
 
   React.useEffect(() => {
     if (!autoFocus || !isVisible) return;
@@ -189,39 +223,136 @@ const TerminalViewport = React.forwardRef<TerminalController, Props>(({
     const terminal = terminalRef.current;
     if (!enableTouchScroll || !container || !terminal) return;
     let pointerId: number | null = null;
+    let longPressTimeout: ReturnType<typeof setTimeout> | null = null;
+    let gesture: 'idle' | 'pending' | 'scrolling' | 'selecting' = 'idle';
+    let startX = 0;
+    let startY = 0;
     let lastY = 0;
     let remainder = 0;
-    let moved = false;
+    let selectionFocus: TerminalCellPosition | null = null;
     const lineHeight = Math.max(12, fontSize + 2);
+    const clearLongPress = () => {
+      if (!longPressTimeout) return;
+      clearTimeout(longPressTimeout);
+      longPressTimeout = null;
+    };
+    const cellFromPoint = (clientX: number, clientY: number) => {
+      const canvas = container.querySelector('canvas');
+      if (!canvas) return null;
+      return getTerminalCellFromPoint(clientX, clientY, canvas.getBoundingClientRect(), terminal.cols, terminal.rows);
+    };
+    const dispatchSelectionMouseEvent = (
+      type: 'mousedown' | 'mousemove',
+      cell: TerminalCellPosition,
+    ) => {
+      const canvas = container.querySelector('canvas');
+      if (!canvas) return;
+      const bounds = canvas.getBoundingClientRect();
+      const clientX = bounds.left + ((cell.column + 0.5) / terminal.cols) * bounds.width;
+      const clientY = bounds.top + ((cell.row + 0.5) / terminal.rows) * bounds.height;
+      canvas.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX,
+        clientY,
+      }));
+    };
+    const finishSelection = () => {
+      document.dispatchEvent(new MouseEvent('mouseup', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 0,
+      }));
+    };
     const down = (event: PointerEvent) => {
-      if (event.pointerType !== 'touch') return;
-      pointerId = event.pointerId; lastY = event.clientY; moved = false;
+      if (event.pointerType !== 'touch' || pointerId !== null) return;
+      pointerId = event.pointerId;
+      gesture = 'pending';
+      startX = event.clientX;
+      startY = event.clientY;
+      lastY = event.clientY;
+      remainder = 0;
+      selectionFocus = null;
       container.setPointerCapture(event.pointerId);
+      longPressTimeout = setTimeout(() => {
+        longPressTimeout = null;
+        if (pointerId !== event.pointerId || gesture !== 'pending') return;
+        const cell = cellFromPoint(startX, startY);
+        if (!cell) return;
+
+        const buffer = terminal.buffer.active;
+        const lineIndex = Math.max(0, buffer.length - terminal.rows - buffer.viewportY + cell.row);
+        const line = buffer.getLine(lineIndex);
+        const cells = Array.from({ length: terminal.cols }, (_, column) => line?.getCell(column)?.getChars() ?? '');
+        const word = getTerminalWordRange(cells, cell.column);
+        const selectionAnchor = { column: word.startColumn, row: cell.row };
+        selectionFocus = { column: word.endColumn, row: cell.row };
+        gesture = 'selecting';
+        dispatchSelectionMouseEvent('mousedown', selectionAnchor);
+        dispatchSelectionMouseEvent('mousemove', selectionFocus);
+      }, 350);
     };
     const move = (event: PointerEvent) => {
       if (pointerId !== event.pointerId) return;
+
+      if (gesture === 'selecting') {
+        const focus = cellFromPoint(event.clientX, event.clientY);
+        if (focus && (!selectionFocus || focus.column !== selectionFocus.column || focus.row !== selectionFocus.row)) {
+          selectionFocus = focus;
+          dispatchSelectionMouseEvent('mousemove', focus);
+        }
+        if (event.cancelable) event.preventDefault();
+        return;
+      }
+
+      if (gesture === 'pending') {
+        const distance = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (distance < 8) return;
+        clearLongPress();
+        gesture = 'scrolling';
+      }
+
+      if (gesture !== 'scrolling') return;
       const delta = lastY - event.clientY;
       lastY = event.clientY;
-      if (Math.abs(delta) > 2) moved = true;
       remainder += delta;
       const lines = Math.trunc(remainder / lineHeight);
       if (lines) { terminal.scrollLines(lines); remainder -= lines * lineHeight; }
-      if (moved && event.cancelable) event.preventDefault();
+      if (event.cancelable) event.preventDefault();
     };
     const up = (event: PointerEvent) => {
       if (pointerId !== event.pointerId) return;
+      const shouldFocus = gesture === 'pending';
+      const shouldFinishSelection = gesture === 'selecting';
+      clearLongPress();
+      if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
       pointerId = null;
-      if (!moved) terminal.focus();
+      gesture = 'idle';
+      if (shouldFinishSelection) finishSelection();
+      if (shouldFocus) terminal.focus();
+    };
+    const cancel = (event: PointerEvent) => {
+      if (pointerId !== event.pointerId) return;
+      const shouldFinishSelection = gesture === 'selecting';
+      clearLongPress();
+      if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
+      pointerId = null;
+      gesture = 'idle';
+      if (shouldFinishSelection) finishSelection();
     };
     container.addEventListener('pointerdown', down);
     container.addEventListener('pointermove', move, { passive: false });
     container.addEventListener('pointerup', up);
-    container.addEventListener('pointercancel', up);
+    container.addEventListener('pointercancel', cancel);
     return () => {
+      clearLongPress();
       container.removeEventListener('pointerdown', down);
       container.removeEventListener('pointermove', move);
       container.removeEventListener('pointerup', up);
-      container.removeEventListener('pointercancel', up);
+      container.removeEventListener('pointercancel', cancel);
     };
   }, [enableTouchScroll, fontSize, ready]);
 
