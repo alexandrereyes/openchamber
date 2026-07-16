@@ -18,6 +18,7 @@ The mobile package reuses the web build, then rewrites `mobile.html` to `index.h
 Run these from `packages/mobile`, or use the root `mobile:*` aliases.
 
 - `bun run build`: builds `packages/web` and prepares mobile web assets.
+- `bun run build:assets`: prepares mobile assets from an existing `packages/web/dist` build; the root workspace build uses this to avoid rebuilding web.
 - `bun run sync`: prepares assets and runs `cap sync`.
 - `bun run add:ios`: creates the native iOS project.
 - `bun run add:android`: creates the native Android project.
