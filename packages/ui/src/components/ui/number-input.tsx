@@ -59,7 +59,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     ref
   ) => {
     const { t } = useI18n()
-    const [draft, setDraft] = React.useState(() => (value === undefined ? '' : String(value)))
+    const [draft, setDraft] = React.useState(() => (value == null ? '' : String(value)))
     const { isMobile } = useDeviceInfo()
     const ignoreNextClickRef = React.useRef(false)
     const swallowNextClickCleanupRef = React.useRef<(() => void) | null>(null)
@@ -100,7 +100,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     }, [])
 
     React.useEffect(() => {
-      setDraft(value === undefined ? '' : String(value))
+      setDraft(value == null ? '' : String(value))
     }, [value])
 
     const baseValue = React.useMemo(() => {
@@ -158,7 +158,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
       (event: React.FocusEvent<HTMLInputElement>) => {
         if (draft.trim() === '') {
           if (!onClear) {
-            setDraft(value === undefined ? '' : String(value))
+            setDraft(value == null ? '' : String(value))
           }
           onBlur?.(event)
           return
@@ -166,7 +166,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
 
         const parsed = Number(draft)
         if (!Number.isFinite(parsed)) {
-          setDraft(value === undefined ? '' : String(value))
+          setDraft(value == null ? '' : String(value))
         } else {
           const clamped = clamp(parsed, min, max)
           const normalized = normalizeToStep(clamped, step)
@@ -258,7 +258,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
             )}
             aria-live="polite"
           >
-            {value === undefined ? emptyLabel : draft}
+            {value == null ? emptyLabel : draft}
           </div>
 
           <button

@@ -17,6 +17,7 @@ import {
   SettingsStackedField,
   SettingsChipGroup,
   SETTINGS_SELECT_SIZE,
+  SETTINGS_SELECT_ROW_TRIGGER_CLASS,
   SETTINGS_ICON_BUTTON_CLASS,
   SETTINGS_CUSTOM_TRIGGER_CLASS,
 } from '@/components/sections/shared/SettingsSection';
@@ -99,13 +100,11 @@ export const AgentsPage: React.FC = () => {
 
   const variantOptions = React.useMemo(() => getVariantOptionsForModel(providers, model), [model, providers]);
   const hasVariantOptions = variantOptions.length > 0;
-  const selectedVariantValue = React.useMemo(() => {
-    if (!variant || !variantOptions.includes(variant)) {
-      return '__default';
-    }
-    return variant;
-  }, [variant, variantOptions]);
-  const shouldUseVariantSelect = hasVariantOptions && (!variant || variantOptions.includes(variant));
+  const selectedVariantValue = variant || '__default';
+  const shouldUseVariantSelect = hasVariantOptions;
+  const variantSelectOptions = React.useMemo(() => (
+    variant && !variantOptions.includes(variant) ? [variant, ...variantOptions] : variantOptions
+  ), [variant, variantOptions]);
 
   React.useEffect(() => {
     if (isNewAgent && agentDraft) {
@@ -150,8 +149,8 @@ export const AgentsPage: React.FC = () => {
         ? `${selectedAgent.model.providerID}/${selectedAgent.model.modelID}`
         : '';
       const variantValue = selectedAgent.variant || '';
-      const temperatureValue = selectedAgent.temperature;
-      const topPValue = selectedAgent.topP;
+      const temperatureValue = selectedAgent.temperature ?? undefined;
+      const topPValue = selectedAgent.topP ?? undefined;
       const promptValue = selectedAgent.prompt || '';
 
       setDescription(descriptionValue);
@@ -351,7 +350,7 @@ export const AgentsPage: React.FC = () => {
 
       <SettingsSection
         title={t('settings.agents.page.section.modelParameters')}
-        contentClassName="space-y-0"
+        contentClassName="space-y-3"
       >
         <SettingsFieldRow
           settingsItem="agents.model"
@@ -387,14 +386,14 @@ export const AgentsPage: React.FC = () => {
               value={selectedVariantValue}
               onValueChange={(value) => setVariant(value === '__default' ? '' : value)}
             >
-              <SelectTrigger size={SETTINGS_SELECT_SIZE} className="w-fit min-w-[10rem] max-w-full">
+              <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_ROW_TRIGGER_CLASS}>
                 <SelectValue placeholder={t('settings.agents.page.field.variantPlaceholder')}>
                   {(value) => value === '__default' ? t('chat.modelControls.default') : value}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__default">{t('chat.modelControls.default')}</SelectItem>
-                {variantOptions.map((variantOption) => (
+                {variantSelectOptions.map((variantOption) => (
                   <SelectItem key={variantOption} value={variantOption}>{variantOption}</SelectItem>
                 ))}
               </SelectContent>
