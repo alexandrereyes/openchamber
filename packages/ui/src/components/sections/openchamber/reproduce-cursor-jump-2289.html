@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Reproduction: Controlled Input Cursor Jump</title>
+</head>
+<body>
+  <h2>Reproduction: Notifications Settings Input Cursor Jump</h2>
+  <p>
+    This reproduces the bug reported in <a href="https://github.com/openchamber/openchamber/issues/2289">issue #2289</a>.
+    The NotificationSettings component uses a controlled input pattern similar to this demo.
+    When the React component re-renders (due to state update), the input's cursor jumps to the end.
+  </p>
+
+  <div id="root">
+    <h3>Instructions:</h3>
+    <ol>
+      <li>Type something in the input below</li>
+      <li>Place the cursor in the <em>middle</em> of the text</li>
+      <li>Type a character — the cursor will jump to the end</li>
+      <li>This mimics the NotificationSettings controlled input issue</li>
+    </ol>
+    <div>
+      <label>Controlled Input (like NotificationSettings):</label><br>
+      <input id="controlled-input" type="text" style="width:400px; padding:4px;">
+    </div>
+    <div style="margin-top:8px; color:#666; font-size:12px;">
+      Value in state: <span id="state-display"></span>
+    </div>
+  </div>
+
+  <script>
+    // This simulates the exact pattern used in NotificationSettings.tsx
+    // where updateTemplate creates a new object via spread on every keystroke.
+    
+    // Simulate the Zustand store
+    const store = {
+      notificationTemplates: {
+        completion: { title: '', message: '' },
+        error: { title: '', message: '' },
+        question: { title: '', message: '' },
+        subtask: { title: '', message: '' },
+      },
+      listeners: new Set(),
+      getState() { return this.notificationTemplates; },
+      setState(newTemplates) {
+        this.notificationTemplates = newTemplates;
+        this.listeners.forEach(fn => fn(this.notificationTemplates));
+      },
+      subscribe(fn) {
+        this.listeners.add(fn);
+        return () => this.listeners.delete(fn);
+      }
+    };
+
+    // Simulate React rendering: on state change, update the input's value
+    let currentValue = '';
+    store.subscribe((templates) => {
+      const newValue = templates.completion.title;
+      const input = document.getElementById('controlled-input');
+      const display = document.getElementById('state-display');
+      
+      if (display) {
+        display.textContent = JSON.stringify(templates.completion);
+      }
+      
+      // THIS IS THE KEY: React sets input.value on every re-render
+      // This is what happens when the controlled input re-renders
+      if (input && newValue !== undefined) {
+        // React sets the DOM value property - this is what causes cursor jump
+        input.value = newValue;
+      }
+      
+      currentValue = newValue;
+    });
+
+    // Simulate the updateTemplate function from NotificationSettings.tsx
+    function updateTemplate(event, field, value) {
+      const templates = store.getState();
+      store.setState({
+        ...templates,
+        [event]: {
+          ...templates[event],
+          [field]: value,
+        },
+      });
+    }
+
+    // Wire up the input
+    const input = document.getElementById('controlled-input');
+    input.addEventListener('input', (e) => {
+      // This simulates React's onChange -> updateTemplate
+      updateTemplate('completion', 'title', e.target.value);
+    });
+
+    // Initialize
+    store.setState({ ...store.getState() });
+
+    console.log('Reproduction ready. Type in the input and insert cursor mid-text to see the jump.');
+  </script>
+</body>
+</html>
