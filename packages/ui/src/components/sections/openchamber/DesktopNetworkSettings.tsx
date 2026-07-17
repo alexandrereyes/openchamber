@@ -1,6 +1,7 @@
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/icon/Icon';
 import { Input } from '@/components/ui/input';
 import {
   getDesktopLanAddress,
@@ -27,6 +28,8 @@ import {
   SettingsChipGroup,
   SettingsFieldRow,
   SETTINGS_OPTION_STACK_CLASS,
+  SettingsStackedField,
+  SETTINGS_ICON_BUTTON_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 
 const WINDOW_CONTROLS_POSITION_OPTIONS: Array<{ id: DesktopWindowControlsPosition; labelKey: string }> = [
@@ -46,6 +49,7 @@ export const DesktopNetworkSettings: React.FC = () => {
   const [draftValue, setDraftValue] = React.useState(false);
   const [savedPassword, setSavedPassword] = React.useState('');
   const [draftPassword, setDraftPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const [lanAccessActive, setLanAccessActive] = React.useState(false);
   const [lanAccessBlockedReason, setLanAccessBlockedReason] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -424,7 +428,7 @@ export const DesktopNetworkSettings: React.FC = () => {
               </div>
             ) : null}
 
-            <SettingsFieldRow
+            <SettingsStackedField
               settingsItem="sessions.desktop-ui-password"
               label={(
                 <label htmlFor="desktop-ui-password">
@@ -432,13 +436,11 @@ export const DesktopNetworkSettings: React.FC = () => {
                 </label>
               )}
               info={t('settings.openchamber.desktopPassword.field.passwordDescription')}
-              alignEnd={false}
-              controlClassName="flex-col items-stretch"
             >
               <Input
                 id="desktop-ui-password"
-                type="password"
-                className="h-9 max-w-sm"
+                type={showPassword ? 'text' : 'password'}
+                className="h-8 min-w-0 flex-1"
                 value={draftPassword}
                 onChange={(event) => handlePasswordChange(event.target.value)}
                 placeholder={t('settings.openchamber.desktopPassword.field.passwordPlaceholder')}
@@ -446,7 +448,18 @@ export const DesktopNetworkSettings: React.FC = () => {
                 required={draftValue}
                 aria-invalid={lanRequiresPassword}
               />
-            </SettingsFieldRow>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                onClick={() => setShowPassword((current: boolean) => !current)}
+                className={SETTINGS_ICON_BUTTON_CLASS}
+                aria-label={t(showPassword ? 'settings.openchamber.desktopPassword.actions.hidePassword' : 'settings.openchamber.desktopPassword.actions.showPassword')}
+                aria-pressed={showPassword}
+              >
+                <Icon name={showPassword ? 'eye-off' : 'eye'} className="h-4 w-4" />
+              </Button>
+            </SettingsStackedField>
 
             <div className={SETTINGS_OPTION_STACK_CLASS}>
               <SettingsCheckboxRow

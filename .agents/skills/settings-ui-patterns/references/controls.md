@@ -7,11 +7,11 @@ for every visible or accessible string. All primitives/constants come from
 
 ## Standard Sizes And Widths
 
-One control size across Settings — `h-9`:
+One control size across Settings — `h-8`:
 
-- `SelectTrigger`: `size={SETTINGS_SELECT_SIZE}` ('settings' → h-9, rounded-md, px-3).
+- `SelectTrigger`: `size={SETTINGS_SELECT_SIZE}` ('settings' → h-8, rounded-md, px-3).
 - Custom dropdown triggers (ModelSelector / AgentSelector): `SETTINGS_CUSTOM_TRIGGER_CLASS`.
-- Text `Input` next to dropdowns: `h-9 rounded-md px-3` (match the trigger footprint).
+- Text `Input` next to dropdowns: `h-8 rounded-md px-3` (match the trigger footprint).
 - Icon action next to a control: `SETTINGS_ICON_BUTTON_CLASS`.
 
 Widths are capped — never let controls span the pane:

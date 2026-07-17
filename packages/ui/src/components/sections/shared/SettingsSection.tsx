@@ -6,19 +6,19 @@ import { cn } from '@/lib/utils';
 import { SettingsInfoHint } from './SettingsInfoHint';
 
 /** Settings select trigger: full column width in stacked cells; capped in field rows via parent. */
-export const SETTINGS_SELECT_TRIGGER_CLASS = 'w-full min-w-40';
+export const SETTINGS_SELECT_TRIGGER_CLASS = 'w-full min-w-40 max-w-48';
 export const SETTINGS_SELECT_SIZE = 'settings' as const;
 
 /** Fixed-width select used inside full-width SettingsFieldRow control columns. */
-export const SETTINGS_SELECT_ROW_TRIGGER_CLASS = 'w-full min-w-40 @xl:w-56';
+export const SETTINGS_SELECT_ROW_TRIGGER_CLASS = 'w-full min-w-40 max-w-48';
 
-/** Compact reset / icon action next to a settings control (matches h-9 controls). */
+/** Compact reset / icon action next to a settings control (matches h-8 controls). */
 export const SETTINGS_ICON_BUTTON_CLASS =
-  'h-9 w-9 px-0 text-muted-foreground hover:text-foreground';
+  'h-8 w-8 px-0 text-muted-foreground hover:text-foreground';
 
 /** Custom dropdown triggers (ModelSelector / AgentSelector) in settings field rows. */
 export const SETTINGS_CUSTOM_TRIGGER_CLASS =
-  'h-9 min-h-9 w-full min-w-40 @xl:w-56 rounded-md px-3';
+  'h-8 min-h-8 w-full min-w-40 max-w-48 rounded-md px-3';
 
 /** Shared width for stacked control clusters (select/input + reset). */
 export const SETTINGS_CONTROL_CLUSTER_CLASS = 'w-full max-w-[24rem]';
@@ -37,10 +37,10 @@ export const SETTINGS_NUMBER_UNIT_CLASS =
   'typography-meta shrink-0 text-muted-foreground tabular-nums';
 
 /** Vertical stack spacing for fields inside a column. */
-export const SETTINGS_FIELDS_STACK_CLASS = 'space-y-3';
+export const SETTINGS_FIELDS_STACK_CLASS = 'space-y-4';
 
 /** Compact checkbox / radio list stack. */
-export const SETTINGS_OPTION_STACK_CLASS = 'space-y-0.5';
+export const SETTINGS_OPTION_STACK_CLASS = 'space-y-1.5';
 
 /**
  * Settings heading classes by context (size + default color).
@@ -115,7 +115,7 @@ export const SettingsSection: React.FC<SettingsSectionProps> = ({
     <section
       data-settings-item={settingsItem}
       className={cn(
-        'space-y-4',
+        'space-y-5',
         divider ? 'border-t border-border/60 py-8' : 'pb-8',
         className,
       )}
@@ -204,7 +204,7 @@ export const SettingsControlGroup: React.FC<SettingsControlGroupProps> = ({
   settingsItem,
 }) => {
   return (
-    <div data-settings-item={settingsItem} className={cn('space-y-1.5', className)}>
+    <div data-settings-item={settingsItem} className={cn('space-y-2', className)}>
       {title != null || description != null || info != null ? (
         <div className="space-y-0.5">
           {title != null ? (
@@ -256,7 +256,7 @@ export const SettingsStackedField: React.FC<SettingsStackedFieldProps> = ({
     ) : null;
 
   return (
-    <div data-settings-item={settingsItem} className={cn('space-y-1.5', className)}>
+    <div data-settings-item={settingsItem} className={cn('space-y-2', className)}>
       <div className="space-y-0.5">
         <div className="flex items-center gap-1.5">
           <div className={SETTINGS_FIELD_LABEL_CLASS}>{label}</div>

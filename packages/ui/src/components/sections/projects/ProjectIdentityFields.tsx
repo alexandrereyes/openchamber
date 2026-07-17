@@ -70,7 +70,7 @@ export const ProjectIdentityFields: React.FC<ProjectIdentityFieldsProps> = ({ fo
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder={t('settings.projects.page.field.projectNamePlaceholder')}
-          className={cn('h-9 rounded-md px-3', PROJECT_SETTINGS_CONTROL_WIDTH)}
+          className={cn('h-8 rounded-md px-3', PROJECT_SETTINGS_CONTROL_WIDTH)}
         />
       </ProjectSettingsSubsection>
 
@@ -83,7 +83,7 @@ export const ProjectIdentityFields: React.FC<ProjectIdentityFieldsProps> = ({ fo
           providerId={parsedDefaultModel.providerId}
           modelId={parsedDefaultModel.modelId}
           onChange={handleDefaultModelChange}
-          className={cn('h-9 min-h-9 rounded-md px-3', PROJECT_SETTINGS_CONTROL_WIDTH)}
+          className={cn('h-8 min-h-8 rounded-md px-3 max-w-48', PROJECT_SETTINGS_CONTROL_WIDTH)}
         />
       </ProjectSettingsSubsection>
 
@@ -126,6 +126,7 @@ export const ProjectIdentityFields: React.FC<ProjectIdentityFieldsProps> = ({ fo
       <ProjectSettingsSubsection
         title={t('settings.projects.page.field.projectIcon')}
         settingsItem="projects.icon"
+        contentClassName="space-y-3"
       >
         <input
           ref={fileInputRef}
@@ -177,7 +178,7 @@ export const ProjectIdentityFields: React.FC<ProjectIdentityFieldsProps> = ({ fo
           })}
         </div>
         {effectiveHasImageIcon && showImagePreview && (
-          <div className="flex items-center gap-2 pt-1">
+          <div className="flex items-center gap-2">
             <span className="typography-meta text-muted-foreground">{t('settings.projects.page.field.preview')}</span>
             <span className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-[var(--surface-elevated)] p-1">
               <span

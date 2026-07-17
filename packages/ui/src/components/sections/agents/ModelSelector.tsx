@@ -90,7 +90,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }), [placeholder, t]);
 
     const selectedModel = providerId && modelId ? { providerID: providerId, modelID: modelId } : null;
-    const triggerLabel = providerId && modelId ? `${providerId}/${modelId}` : (placeholder || t('settings.agents.modelSelector.notSelected'));
+    // Show the model's display name (as in the picker list), not the raw provider/model id.
+    const triggerLabel = React.useMemo(() => {
+        if (!providerId || !modelId) {
+            return placeholder || t('settings.agents.modelSelector.notSelected');
+        }
+        const provider = providers.find((entry) => entry.id === providerId);
+        const model = provider?.models?.find((entry) => entry.id === modelId);
+        return (typeof model?.name === 'string' && model.name.trim()) || modelId;
+    }, [modelId, placeholder, providerId, providers, t]);
 
     const picker = (
         <ModelPickerList

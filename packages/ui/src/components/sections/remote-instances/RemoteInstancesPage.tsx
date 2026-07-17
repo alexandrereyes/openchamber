@@ -35,6 +35,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Radio } from '@/components/ui/radio';
 import { Icon } from "@/components/icon/Icon";
 import { cn } from '@/lib/utils';
+import { formatDateTimeForPreference } from '@/lib/timeFormat';
 import { copyTextToClipboard } from '@/lib/clipboard';
 import { openExternalUrl } from '@/lib/url';
 import { useI18n, type I18nKey } from '@/lib/i18n';
@@ -380,6 +381,7 @@ const normalizeForSave = (instance: DesktopSshInstance): DesktopSshInstance => {
 
 export const RemoteInstancesPage: React.FC = () => {
   const { t } = useI18n();
+  const timeFormatPreference = useUIStore((state) => state.timeFormatPreference);
   const { clientAuth } = useRuntimeAPIs();
   const showInstanceManagement = isDesktopShell();
   const instances = useDesktopSshStore((state) => state.instances);
@@ -1399,7 +1401,7 @@ export const RemoteInstancesPage: React.FC = () => {
                   {t('settings.remoteInstances.clientAuth.actions.addDevice')}
                 </Button>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-2.5">
                 {revokedClientCount > 0 ? (
                   <div className="flex justify-end">
                     <Button type="button" variant="ghost" size="xs" className="!font-normal" onClick={() => void purgeRevokedRemoteClients()}>
@@ -1415,7 +1417,7 @@ export const RemoteInstancesPage: React.FC = () => {
                   <>
                     {pendingPairings.map((pending) => (
                       <div key={`pending-${pending.id}`} className="flex items-center justify-between gap-3 py-1.5">
-                        <div className="min-w-0">
+                        <div className="min-w-0 space-y-0.5">
                           <div className="flex min-w-0 items-center gap-2">
                             <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--status-warning)] animate-pulse" />
                             <p className="typography-ui-label text-foreground truncate">{pending.label || t('settings.remoteInstances.clientAuth.field.labelPlaceholder')}</p>
@@ -1445,13 +1447,20 @@ export const RemoteInstancesPage: React.FC = () => {
                           ? (client.lastTransport === 'relay' && !isLocalDesktopClient
                             ? t('settings.remoteInstances.clientAuth.state.connectedRelay')
                             : t('settings.remoteInstances.clientAuth.state.connectedDirect'))
-                          : client.lastUsedAt
-                            ? t('settings.remoteInstances.clientAuth.lastUsed', { date: client.lastUsedAt })
+                          : Number.isFinite(lastUsedMs)
+                            ? t('settings.remoteInstances.clientAuth.lastUsed', {
+                                date: formatDateTimeForPreference(lastUsedMs, timeFormatPreference, {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                }),
+                              })
                             : t('settings.remoteInstances.clientAuth.neverUsed');
                       return (
                         <div key={client.id} className="flex items-center justify-between gap-3 py-1.5">
                           <div className="min-w-0">
-                            <div className="flex min-w-0 items-center gap-2">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                               <span className={cn(
                                 'h-2 w-2 shrink-0 rounded-full',
                                 client.revokedAt ? 'bg-muted-foreground/20' : isOnline ? 'bg-[var(--status-success)]' : 'bg-muted-foreground/30',
@@ -1467,8 +1476,8 @@ export const RemoteInstancesPage: React.FC = () => {
                                   {t('settings.remoteInstances.clientAuth.state.thisDevice')}
                                 </span>
                               ) : null}
+                              <span className={cn('typography-micro truncate', isOnline && !client.revokedAt ? 'text-[var(--status-success)]' : 'text-muted-foreground')}>{statusText}</span>
                             </div>
-                            <p className={cn('typography-micro truncate', isOnline && !client.revokedAt ? 'text-[var(--status-success)]' : 'text-muted-foreground')}>{statusText}</p>
                           </div>
                           <Button type="button" variant="ghost" size="xs" className="!font-normal" onClick={() => void revokeRemoteClient(client)} disabled={Boolean(client.revokedAt)}>
                             {t('settings.remoteInstances.clientAuth.actions.revoke')}
@@ -1503,7 +1512,7 @@ export const RemoteInstancesPage: React.FC = () => {
             </div>
           )}
         >
-            <div className="space-y-1">
+            <div className="space-y-2.5">
               {directLoading ? (
                 <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.direct.state.loading')}</p>
               ) : directHosts.length === 0 ? (
@@ -1527,7 +1536,7 @@ export const RemoteInstancesPage: React.FC = () => {
                 return (
                 <div key={host.id} className="py-1.5">
                   <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
+                      <div className="min-w-0 space-y-0.5">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className={cn(
                             'h-2 w-2 shrink-0 rounded-full',
@@ -1770,7 +1779,7 @@ export const RemoteInstancesPage: React.FC = () => {
               {t('settings.remoteInstances.sidebar.actions.addSshInstance')}
             </Button>
           )}
-          contentClassName="space-y-1"
+          contentClassName="space-y-2.5"
         >
             {isLoading ? (
               <p className="typography-meta text-muted-foreground">{t('settings.remoteInstances.page.import.loading')}</p>
@@ -1783,7 +1792,7 @@ export const RemoteInstancesPage: React.FC = () => {
               const ready = phase === 'ready';
               return (
                 <div key={instance.id} className="flex items-center justify-between gap-3 py-1.5">
-                  <div className="min-w-0">
+                  <div className="min-w-0 space-y-0.5">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className={`h-2 w-2 rounded-full ${phaseDotClass(phase)}`} />
                       <p className="typography-ui-label text-foreground truncate">{title}</p>

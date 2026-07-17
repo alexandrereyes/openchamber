@@ -817,7 +817,7 @@ export const AgentsPage: React.FC = () => {
                 onChange={(event) => setVariant(event.target.value)}
                 placeholder={t('settings.agents.page.field.variantPlaceholder')}
                 disabled={!model && !variant}
-                className="h-9 w-40 rounded-md px-3"
+                className="h-8 w-40 rounded-md px-3"
               />
               {variant && (
                 <Button

@@ -61,7 +61,7 @@ pattern when touching nav.
 ## Spacing
 
 - Sections own vertical rhythm: divider + `py-8` come from `SettingsSection`.
-- Fields inside a column: `SETTINGS_FIELDS_STACK_CLASS` (`space-y-3`).
-- Checkbox/radio lists: `SETTINGS_OPTION_STACK_CLASS` (`space-y-0.5`).
+- Fields inside a column: `SETTINGS_FIELDS_STACK_CLASS` (`space-y-4`).
+- Checkbox/radio lists: `SETTINGS_OPTION_STACK_CLASS` (`space-y-1.5`).
 - Two-column areas: `SettingsTwoColumn` (`@3xl:grid-cols-2`); use `SettingsStackedField` inside cells (a `SettingsFieldRow` overflows half-width columns).
 - No elevated backgrounds, rounded rows, or hover fills without explicit UX value.

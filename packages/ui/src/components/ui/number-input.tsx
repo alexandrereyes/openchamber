@@ -228,7 +228,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
         <div
           className={cn(
             // NOTE: mobile.css enforces min-height:36px on buttons; match it to avoid clipping.
-            "flex h-9 shrink-0 items-stretch overflow-x-hidden overflow-y-hidden rounded-lg border border-border bg-transparent select-none overscroll-contain",
+            "flex h-8 shrink-0 items-stretch overflow-x-hidden overflow-y-hidden rounded-lg border border-border bg-transparent select-none overscroll-contain",
             "[-webkit-user-select:none] [-webkit-touch-callout:none]",
             "disabled:pointer-events-none disabled:opacity-50",
             containerClassName
@@ -283,7 +283,7 @@ const NumberInput = React.forwardRef<HTMLInputElement, NumberInputProps>(
     return (
       <div
         className={cn(
-          "flex h-9 shrink-0 items-stretch overflow-x-hidden overflow-y-hidden rounded-md border border-border bg-transparent",
+          "flex h-8 shrink-0 items-stretch overflow-x-hidden overflow-y-hidden rounded-md border border-border bg-transparent",
           "disabled:pointer-events-none disabled:opacity-50",
           "transition-[background-color,border-color,box-shadow] duration-150 ease-in-out",
           containerClassName

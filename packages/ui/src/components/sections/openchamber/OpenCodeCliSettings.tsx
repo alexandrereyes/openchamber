@@ -127,7 +127,7 @@ export const OpenCodeCliSettings: React.FC = () => {
             onChange={(e) => setValue(e.target.value)}
             placeholder={t('settings.openchamber.opencodeCli.field.binaryPathPlaceholder')}
             disabled={isLoading || isSaving}
-            className="h-9 min-w-0 flex-1 font-mono text-xs"
+            className="h-8 min-w-0 flex-1 font-mono text-xs"
           />
           <Button
             type="button"

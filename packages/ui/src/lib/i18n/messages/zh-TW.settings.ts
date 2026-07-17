@@ -1904,6 +1904,8 @@
   'settings.openchamber.desktopNetwork.field.keepAwakeAria': 'OpenChamber 執行時保持電腦喚醒',
   'settings.openchamber.desktopNetwork.field.keepAwake': 'OpenChamber 執行時保持電腦喚醒',
   'settings.openchamber.desktopNetwork.field.keepAwakeDescription': '讓手機可以持續開啟此應用程式。螢幕仍可關閉。',
+  'settings.openchamber.desktopPassword.actions.showPassword': '顯示密碼',
+  'settings.openchamber.desktopPassword.actions.hidePassword': '隱藏密碼',
   'settings.openchamber.desktopPassword.field.password': '桌面 UI 密碼',
   'settings.openchamber.desktopPassword.field.passwordDescription': 'OpenChamber 會在重新啟動後要求輸入密碼，之後會在登入工作階段過期時再次要求：12 小時後，或選擇「信任此裝置」後 7 天。留空可停用登入。',
   'settings.openchamber.desktopPassword.field.passwordPlaceholder': '不需要密碼',
