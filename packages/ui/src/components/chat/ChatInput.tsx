@@ -2355,6 +2355,12 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
 
             console.error('Message send failed:', rawMessage || error);
 
+            const currentInput = textareaRef.current?.value ?? messageRef.current;
+            if (newSessionDraftOpen && inputSnapshot.message && (!currentInput || currentInput === inputSnapshot.message)) {
+                setMessage(inputSnapshot.message);
+                saveStoredDraft(null, inputSnapshot.message);
+            }
+
             const isSoftNetworkError =
                 normalized.includes('timeout') ||
                 normalized.includes('timed out') ||
