@@ -39,8 +39,6 @@ import { OpenChamberPage } from '@/components/sections/openchamber/OpenChamberPa
 import { AboutSettings } from '@/components/sections/openchamber/AboutSettings';
 import { SettingsPageLayout } from '@/components/sections/shared/SettingsPageLayout';
 import {
-  SETTINGS_DESCRIPTION_CLASS,
-  SETTINGS_PAGE_TITLE_CLASS,
   SETTINGS_SECTION_TITLE_CLASS,
 } from '@/components/sections/shared/SettingsSection';
 import { useDeviceInfo } from '@/lib/device';
@@ -232,82 +230,6 @@ export function getSettingsNavIcon(slug: SettingsPageSlug): IconName | null {
   }
 }
 
-const SettingsHome: React.FC<{ onOpen: (slug: SettingsPageSlug) => void }> = ({ onOpen }) => {
-  const { t } = useI18n();
-  return (
-    <div className="h-full overflow-auto">
-      <div className="mx-auto w-full max-w-[840px] px-6 py-6 sm:px-12 sm:py-8 space-y-6">
-        <div className="space-y-1">
-          <h1 className={SETTINGS_PAGE_TITLE_CLASS}>{t('settings.view.home.title')}</h1>
-          <p className={SETTINGS_DESCRIPTION_CLASS}>{t('settings.view.home.description')}</p>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => onOpen('providers')}
-            className={cn(
-              'rounded-lg border border-border bg-[var(--surface-elevated)] p-4 text-left',
-              'hover:bg-[var(--interactive-hover)] transition-colors'
-            )}
-          >
-            <div className="typography-ui-label text-foreground">{t('settings.view.home.cards.providers.title')}</div>
-            <div className="typography-micro text-muted-foreground/70">{t('settings.view.home.cards.providers.description')}</div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpen('agents')}
-            className={cn(
-              'rounded-lg border border-border bg-[var(--surface-elevated)] p-4 text-left',
-              'hover:bg-[var(--interactive-hover)] transition-colors'
-            )}
-          >
-            <div className="typography-ui-label text-foreground">{t('settings.view.home.cards.agents.title')}</div>
-            <div className="typography-micro text-muted-foreground/70">{t('settings.view.home.cards.agents.description')}</div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpen('skills.catalog')}
-            className={cn(
-              'rounded-lg border border-border bg-[var(--surface-elevated)] p-4 text-left',
-              'hover:bg-[var(--interactive-hover)] transition-colors'
-            )}
-          >
-            <div className="typography-ui-label text-foreground">{t('settings.view.home.cards.skillsCatalog.title')}</div>
-            <div className="typography-micro text-muted-foreground/70">{t('settings.view.home.cards.skillsCatalog.description')}</div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpen('mcp')}
-            className={cn(
-              'rounded-lg border border-border bg-[var(--surface-elevated)] p-4 text-left',
-              'hover:bg-[var(--interactive-hover)] transition-colors'
-            )}
-          >
-            <div className="typography-ui-label text-foreground">{t('settings.view.home.cards.mcp.title')}</div>
-            <div className="typography-micro text-muted-foreground/70">{t('settings.view.home.cards.mcp.description')}</div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => onOpen('usage')}
-            className={cn(
-              'rounded-lg border border-border bg-[var(--surface-elevated)] p-4 text-left',
-              'hover:bg-[var(--interactive-hover)] transition-colors'
-            )}
-          >
-            <div className="typography-ui-label text-foreground">{t('settings.view.home.cards.usage.title')}</div>
-            <div className="typography-micro text-muted-foreground/70">{t('settings.view.home.cards.usage.description')}</div>
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile, isWindowed, visiblePageSlugs, initialMobileStage = 'nav' }) => {
   const { t } = useI18n();
   const deviceInfo = useDeviceInfo();
@@ -320,6 +242,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
 
   const [mobileStage, setMobileStage] = React.useState<MobileStage>(initialMobileStage);
   const autoNavSlugRef = React.useRef<string | null>(null);
+
+  // No starter page on desktop: 'home' (fresh state) resolves to General.
+  // settingsPage persists in the UI store, so subsequent opens restore the
+  // last visited page. Mobile keeps 'home' — its entry stage is the nav list.
+  React.useEffect(() => {
+    if (!isMobile && settingsSlug === 'home') {
+      setSettingsPage('general');
+    }
+  }, [isMobile, setSettingsPage, settingsSlug]);
 
   const [settingsSearchQuery, setSettingsSearchQuery] = React.useState('');
   const [pendingSearchItemId, setPendingSearchItemId] = React.useState<string | null>(null);
@@ -726,8 +657,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     }
 
     switch (slug) {
-      case 'home':
-        return <SettingsHome onOpen={openPage} />;
       case 'projects':
         return <ProjectsPage />;
       case 'remote-instances':
@@ -773,10 +702,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
         const section = openChamberSectionBySlug[slug] ?? 'visual';
         return <OpenChamberPage section={section} />;
       }
+      case 'home':
       default:
-        return <SettingsHome onOpen={openPage} />;
+        return null;
     }
-  }, [openChamberSectionBySlug, openPage, renderUnavailable, runtimeCtx, t]);
+  }, [openChamberSectionBySlug, renderUnavailable, runtimeCtx, t]);
 
   // Mobile: if opened via deep-link / palette to a non-home page, jump into it once.
   React.useEffect(() => {
@@ -1105,7 +1035,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
 
   const renderDesktopContent = () => {
     if (!activePageMeta || settingsSlug === 'home') {
-      return <SettingsHome onOpen={openPage} />;
+      return null;
     }
 
     if (activePageMeta.kind === 'split') {
