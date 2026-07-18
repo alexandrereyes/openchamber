@@ -29,13 +29,13 @@ import {
  * and stays gateway/WebSocket-free for isolated unit testing.
  */
 
-const VERB_LEVEL_PREFIX = 'otto-verb-level:';
-const VERB_SCOPE_PREFIX = 'otto-verb-scope:';
-const AGENT_PICK_PREFIX = 'otto-agent-pick:';
-const AGENT_SCOPE_PREFIX = 'otto-agent-scope:';
-const SKILL_PICK_PREFIX = 'otto-skill-pick:';
-const PERM_MODE_PREFIX = 'otto-perm-mode:';
-const PERM_SCOPE_PREFIX = 'otto-perm-scope:';
+const VERB_LEVEL_PREFIX = 'openchamber-agent-verb-level:';
+const VERB_SCOPE_PREFIX = 'openchamber-agent-verb-scope:';
+const AGENT_PICK_PREFIX = 'openchamber-agent-pick:';
+const AGENT_SCOPE_PREFIX = 'openchamber-agent-scope:';
+const SKILL_PICK_PREFIX = 'openchamber-agent-skill-pick:';
+const PERM_MODE_PREFIX = 'openchamber-agent-perm-mode:';
+const PERM_SCOPE_PREFIX = 'openchamber-agent-perm-scope:';
 
 const VERBOSITY_DESCRIPTIONS = {
   quiet: 'Final answer only — hides reasoning + tool activity',
@@ -115,7 +115,7 @@ export function createDiscordCommandWizards({ restCall, bridge }) {
     await respond(state.token, interaction, {
       type: 4,
       data: {
-        content: '**Set output verbosity**\nHow much of each turn should Otto stream back here?',
+        content: '**Set output verbosity**\nHow much of each turn should OpenChamber agent stream back here?',
         flags: 64,
         components: [verbosityLevelSelect(hash)],
       },
@@ -234,7 +234,7 @@ export function createDiscordCommandWizards({ restCall, bridge }) {
       type: 4,
       data: {
         content:
-          '**Set tool permission mode**\nHow should Otto handle approval requests (shell, edits, …)?\nYou can still stop any run with `/abort`.',
+          '**Set tool permission mode**\nHow should OpenChamber agent handle approval requests (shell, edits, …)?\nYou can still stop any run with `/abort`.',
         flags: 64,
         components: [permissionModeSelect(hash)],
       },
@@ -541,7 +541,7 @@ export function createDiscordCommandWizards({ restCall, bridge }) {
     // streamed response lands in the channel/thread like any other prompt.
     await respond(wizard.token, interaction, {
       type: 7,
-      data: { content: `▶ Handing the **${value}** skill to Otto…`, flags: 64, components: [] },
+      data: { content: `▶ Handing the **${value}** skill to OpenChamber agent…`, flags: 64, components: [] },
     });
 
     try {

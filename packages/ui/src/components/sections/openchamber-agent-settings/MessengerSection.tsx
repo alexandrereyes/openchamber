@@ -24,7 +24,7 @@ import {
   type MessengerDiagnosisCheck,
   type MessengerInboundMessage,
 } from '@/stores/useMessengerStore';
-import { useOttoEventsStore, type OttoUiRealtimeEvent } from '@/stores/useOttoEventsStore';
+import { useOpenChamberAgentEventsStore, type OpenChamberAgentUiRealtimeEvent } from '@/stores/useOpenChamberAgentEventsStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
@@ -70,7 +70,7 @@ const MESSENGER_META: Record<MessengerType, MessengerMeta> = {
         >
           discord.com/developers <RiExternalLinkLine className="size-3" />
         </a>{' '}
-        → Bot → Reset Token. Enable the <em>Message Content</em> intent so Otto can read replies.
+        → Bot → Reset Token. Enable the <em>Message Content</em> intent so OpenChamber agent can read replies.
       </>
     ),
     targetLabel: 'Channel ID',
@@ -176,12 +176,12 @@ function DiscordListenerPanel({
   const running = Boolean(conn.discordListenerRunning);
   const connected = Boolean(conn.discordListenerConnected);
   const autoReply = conn.discordListenerAutoReply !== false;
-  const subscribeToEvents = useOttoEventsStore((s) => s.subscribeToEvents);
+  const subscribeToEvents = useOpenChamberAgentEventsStore((s) => s.subscribeToEvents);
   const ingestDiscordInbound = useMessengerStore((s) => s.ingestDiscordInbound);
 
   useEffect(() => {
     if (!running) return;
-    const handler = (event: OttoUiRealtimeEvent) => {
+    const handler = (event: OpenChamberAgentUiRealtimeEvent) => {
       if (event.eventType !== 'messenger.discord.message_received') return;
       const data = event.data as MessengerInboundMessage | undefined;
       if (data && typeof data === 'object' && 'updateId' in data) {
@@ -375,7 +375,7 @@ function DiscordListenerPanel({
 
       {!running ? (
         <div className="text-[11px] text-muted-foreground leading-snug">
-          Start the listener so Otto can answer messages sent to the bot.
+          Start the listener so OpenChamber agent can answer messages sent to the bot.
         </div>
       ) : inbound.length === 0 ? (
         <div className="text-[11px] text-muted-foreground italic">
@@ -1121,7 +1121,7 @@ function DiscordAdvancedSettings({
         {/* OpenCode bridge — when on, the listeners route inbound messages
             through OpenCode and stream the response back. This is what turns
             the messenger into a real OpenChamber chat surface, instead of the
-            legacy "Otto received: ..." ping echo. */}
+            legacy "OpenChamber agent received: ..." ping echo. */}
         {(hasTarget || conn.discordGuildId) && (
           <BridgePanel
             conn={conn}
@@ -1298,14 +1298,14 @@ function ConnectionCard({ conn }: { conn: MessengerConnection }) {
     const now = new Date().toLocaleString();
     return projects.map((p) => {
       const label = p.label || p.path.split('/').pop() || p.path;
-      const lines = [`🤖 Otto sync — ${label}`, '', `Last synced ${now}`];
+      const lines = [`🤖 OpenChamber agent sync — ${label}`, '', `Last synced ${now}`];
       return { id: p.id, path: p.path, label, body: lines.join('\n') };
     });
   };
 
   const buildSummary = (): string => {
     const lines = [
-      '**🤖 Otto sync summary**',
+      '**🤖 OpenChamber agent sync summary**',
       '',
       `• Projects: ${projects.length}`,
       '',
