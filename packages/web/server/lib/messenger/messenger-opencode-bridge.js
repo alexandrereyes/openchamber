@@ -698,6 +698,7 @@ export function createMessengerOpencodeBridge({
   // longer in `pendingSupersede`), suppress it within this grace window instead of
   // surfacing the teardown of a turn the user intentionally interrupted.
   const SUPERSEDE_ERROR_GRACE_MS = 6000;
+  const USER_ABORT_ERROR_GRACE_MS = 30000;
 
   function resolveInterruptTimeoutMs(type = 'discord') {
     try {
@@ -748,6 +749,16 @@ export function createMessengerOpencodeBridge({
       }
     }, resolveInterruptTimeoutMs(type));
     timer.unref?.();
+  }
+
+  function markSessionAborted(sessionId) {
+    const ctx = sessionContexts.get(sessionId);
+    if (!ctx) return false;
+    ctx.userAbortedAt = Date.now();
+    ctx.errored = true;
+    ctx.hasAssistantOutput = false;
+    stopTypingPulse(ctx);
+    return true;
   }
 
   // Last user prompt per surface, so the `/model` wizard's "Send last message"
@@ -2774,6 +2785,19 @@ export function createMessengerOpencodeBridge({
       }
       const errText = formatSessionError(props?.error);
       const now = Date.now();
+      if (
+        ctx.userAbortedAt &&
+        now - ctx.userAbortedAt < USER_ABORT_ERROR_GRACE_MS &&
+        isTransientTurnError(errText)
+      ) {
+        stopTypingPulse(ctx);
+        finishTodoMessageForSession(ctx, sessionId);
+        ctx.sentPartIds.clear();
+        ctx.startedAt = Date.now();
+        ctx.errored = true;
+        ctx.idleSettled = true;
+        return;
+      }
       // A turn superseded moments ago can emit a trailing abort error for the
       // cancelled work while the replacement turn is already streaming. Don't
       // surface that teardown as a fault, and keep the typing pulse (the new
@@ -3512,6 +3536,8 @@ export function createMessengerOpencodeBridge({
       async removeProjectBinding() {
         return removeProjectBindingForSurface();
       },
+
+      markSessionAborted,
 
       async gitDiff() {
         let projectPath = stored?.projectPath ?? null;

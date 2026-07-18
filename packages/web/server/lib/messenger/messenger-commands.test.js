@@ -363,13 +363,28 @@ describe('/abort and /model still resolve as known commands', () => {
 describe('/abort clears the queue', () => {
   it('reports cleared queued messages on a successful abort', async () => {
     const clearQueue = vi.fn(async () => 2);
+    const markSessionAborted = vi.fn();
     const { result } = await run('/abort', {
       binding: { sessionId: 'ses-1' },
       opencode: { abortSession: async () => ({ ok: true }) },
-      bridgeOps: { clearQueue },
+      bridgeOps: { clearQueue, markSessionAborted },
     });
+    expect(markSessionAborted).toHaveBeenCalledWith('ses-1');
     expect(clearQueue).toHaveBeenCalled();
     expect(result.reply).toContain('Cleared 2 queued messages');
+  });
+
+  it('does not mark the session aborted when abort fails', async () => {
+    const markSessionAborted = vi.fn();
+    const clearQueue = vi.fn(async () => 1);
+    const { result } = await run('/abort', {
+      binding: { sessionId: 'ses-1' },
+      opencode: { abortSession: async () => ({ ok: false, error: 'not running' }) },
+      bridgeOps: { clearQueue, markSessionAborted },
+    });
+    expect(markSessionAborted).not.toHaveBeenCalled();
+    expect(clearQueue).not.toHaveBeenCalled();
+    expect(result.reply).toContain('Could not abort');
   });
 });
 

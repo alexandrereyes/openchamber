@@ -2476,6 +2476,76 @@ describe('notify-on-complete mentions', () => {
       .map((c) => JSON.parse(c.body).content);
     expect(posted.some((content) => content.startsWith('<@user-mention>'))).toBe(false);
   });
+
+  it('does not mention or post a done footer for an explicitly aborted turn', async () => {
+    const calls = [];
+    globalThis.fetch = vi.fn(async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body });
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+    });
+    const bridge = makeNotifyBridge({ enabled: true });
+
+    await bridge.routeInbound({
+      type: 'discord',
+      token: 'bot-token',
+      channelId: 'chan-notify',
+      threadId: null,
+      text: 'do work',
+      from: { id: 'user-mention', username: 'alice' },
+    });
+    await bridge._handleGlobalEvent({
+      directory: '/p',
+      payload: {
+        type: 'message.updated',
+        properties: { info: { id: 'm-a', role: 'assistant', sessionID: 'ses-notify' } },
+      },
+    });
+    await bridge._handleGlobalEvent({
+      directory: '/p',
+      payload: {
+        type: 'message.part.updated',
+        properties: {
+          part: {
+            id: 'p-a',
+            type: 'text',
+            messageID: 'm-a',
+            sessionID: 'ses-notify',
+            text: 'partial answer',
+            time: { end: Date.now() },
+          },
+        },
+      },
+    });
+
+    await bridge.routeInbound({
+      type: 'discord',
+      token: 'bot-token',
+      channelId: 'chan-notify',
+      threadId: null,
+      text: '/abort',
+      from: { id: 'user-mention', username: 'alice' },
+    });
+    await bridge._handleGlobalEvent({
+      directory: '/p',
+      payload: {
+        type: 'session.error',
+        properties: { sessionID: 'ses-notify', error: { data: { message: 'streaming response failed' } } },
+      },
+    });
+    await bridge._handleGlobalEvent({
+      directory: '/p',
+      payload: { type: 'session.idle', properties: { sessionID: 'ses-notify' } },
+    });
+    await flush();
+
+    const posted = calls
+      .filter((c) => c.method === 'POST' && c.url.includes('/channels/chan-notify/messages'))
+      .map((c) => JSON.parse(c.body).content);
+    expect(posted.some((content) => content.startsWith('<@user-mention>'))).toBe(false);
+    expect(posted.some((content) => content.includes('done ·'))).toBe(false);
+    expect(posted.some((content) => content.startsWith('✗'))).toBe(false);
+    expect(posted.some((content) => content.includes('Aborted session'))).toBe(true);
+  });
 });
 
 describe('getSurfaceModelInfo — concrete model fallback', () => {

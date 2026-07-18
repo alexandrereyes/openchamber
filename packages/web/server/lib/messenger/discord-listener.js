@@ -5,7 +5,7 @@ import { createDiscordCommandWizards } from './discord-command-wizards.js';
 import { createDiscordGatewayProxyAgent } from './discord-proxy-agent.js';
 import { registerApplicationCommands } from './discord-commands.js';
 import { resolveDiscordMentions } from './messenger-attachments.js';
-import { parseLeadingCommand, COMMAND_HELP } from './messenger-commands.js';
+import { parseLeadingCommand, isKnownMessengerCommand } from './messenger-commands.js';
 import {
   evaluateDiscordAccess,
   normalizeDiscordAccessSettings,
@@ -19,8 +19,6 @@ import {
 // reserves `/` for its native slash-command UI, so `!cmd` is the natural
 // text-command prefix; these route through the same bridge command pipeline
 // as `/cmd`.
-const MESSENGER_COMMAND_NAMES = new Set(COMMAND_HELP.map((c) => c.name));
-
 /**
  * Discord Gateway listener registry, keyed by bot token.
  *
@@ -310,7 +308,7 @@ async function dispatchMessageCreate(state, message, broadcastEvent, bridge) {
   // (e.g. `!ping`) stay on the legacy auto-reply path below.
   const bangCommand =
     text.startsWith('!') ? parseLeadingCommand(text, { allowBang: true }) : null;
-  const isKnownBangCommand = Boolean(bangCommand && MESSENGER_COMMAND_NAMES.has(bangCommand.name));
+  const isKnownBangCommand = Boolean(bangCommand && isKnownMessengerCommand(bangCommand.name));
 
   // OpenCode bridge — every non-empty message that isn't an unknown `!cmd`
   // shortcut is forwarded to OpenCode and the streaming response is mirrored
@@ -427,26 +425,13 @@ function dispatchThreadDelete(state, data, bridge, reason = 'deleted') {
   }
 }
 
-/**
- * Known messenger command names that can be handled as native Discord slash commands.
- * Kept in sync with messenger-commands.js COMMAND_HELP.
- */
-const KNOWN_SLASH_COMMANDS = new Set([
-  'help', 'status', 'abort', 'new', 'undo', 'redo',
-  'compact', 'summary', 'init', 'review', 'diff', 'tunnel', 'login', 'usage', 'credits', 'shell',
-  'model', 'agent', 'verbosity', 'yolo', 'permissions', 'skill', 'sessions',
-  'session', 'resume', 'fork', 'share', 'unshare',
-  'btw', 'queue', 'clear-queue', 'mention-mode',
-  'new-worktree', 'merge-worktree', 'schedule',
-]);
-
 async function handleApplicationCommand(state, interaction, broadcastEvent, bridge) {
   const cmdName = interaction.data?.name;
   if (!cmdName || typeof cmdName !== 'string') return;
   const dynamicCommand = state.dynamicSlashCommands?.get(cmdName) ?? null;
 
   // Only handle commands we know about — pass unknown ones through silently.
-  if (!KNOWN_SLASH_COMMANDS.has(cmdName) && !dynamicCommand) return;
+  if (!isKnownMessengerCommand(cmdName) && !dynamicCommand) return;
 
   const user = interaction.member?.user ?? interaction.user ?? {};
   const access = await canProcessDiscordUser(state, {
@@ -801,7 +786,7 @@ function send(ws, payload) {
  * Register the OpenChamber agent slash commands for this listener's bot, once per process.
  * Guild-scoped when a guildId is configured (instant), otherwise global.
  */
-async function ensureSlashCommandsRegistered(state) {
+async function ensureSlashCommandsRegistered(state, bridge) {
   if (state.slashCommandsRegistered) return;
   if (!state.applicationId) return;
   state.slashCommandsRegistered = true; // mark up-front so we don't double-fire
@@ -924,7 +909,7 @@ function startSession(state, broadcastEvent, bridge) {
           // Register native slash commands so dropdown wizards + autocomplete
           // suggestions are available. Best-effort and idempotent (Discord
           // upserts by name); only run once per process per bot.
-          void ensureSlashCommandsRegistered(state);
+          void ensureSlashCommandsRegistered(state, bridge);
           broadcastEvent?.('messenger.discord.listener_ready', {
             botId: state.botId,
             botUsername: state.botUsername,

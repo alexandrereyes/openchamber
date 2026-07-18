@@ -505,6 +505,9 @@ export async function executeMessengerCommand({
     case 'abort': {
       if (!sessionId) return { reply: '✗ No session is active on this conversation.' };
       const r = await opencode.abortSession(sessionId, binding?.projectPath ?? undefined);
+      if (r.ok) {
+        bridgeOps?.markSessionAborted?.(sessionId);
+      }
       // Aborting clears any queued messages for the surface.
       let clearedNote = '';
       if (r.ok && bridgeOps?.clearQueue) {

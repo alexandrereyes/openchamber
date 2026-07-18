@@ -6,6 +6,7 @@ import {
   sanitizeDiscordCommandName,
   DISCORD_APPLICATION_COMMAND_LIMIT,
 } from './discord-commands.js';
+import { isKnownMessengerCommand } from './messenger-commands.js';
 
 describe('buildSlashCommandDefinitions', () => {
   const defs = buildSlashCommandDefinitions();
@@ -77,6 +78,12 @@ describe('buildSlashCommandDefinitions', () => {
       'new-worktree', 'merge-worktree',
     ]) {
       expect(names).toContain(name);
+    }
+  });
+
+  it('keeps every registered built-in routable by the messenger command core', () => {
+    for (const command of defs) {
+      expect(isKnownMessengerCommand(command.name)).toBe(true);
     }
   });
 });
