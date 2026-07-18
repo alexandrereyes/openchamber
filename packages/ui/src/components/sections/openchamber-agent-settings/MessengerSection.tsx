@@ -809,6 +809,7 @@ function DiscordAdvancedSettings({
   const [internalOpen, setInternalOpen] = useState(false);
   const isOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
+  const { t } = useI18n();
 
   const updateConnection = useMessengerStore((s) => s.updateConnection);
   const saveDiscordConfig = useMessengerStore((s) => s.saveDiscordConfig);
@@ -1115,6 +1116,28 @@ function DiscordAdvancedSettings({
             onBlur={() => setTimeout(() => saveDiscordConfig(), 0)}
             placeholder="e.g. 123456789012345678"
             className={inputClass}
+          />
+        </div>
+
+        <div data-settings-item="integrations.discord.trusted-bots" className="space-y-2">
+          <div className="text-xs font-medium text-foreground">
+            {t('settings.integrations.discord.trustedBots.title')}
+          </div>
+          <div className="text-[11px] text-muted-foreground leading-snug">
+            {t('settings.integrations.discord.trustedBots.description')}
+          </div>
+          <textarea
+            value={(conn.trustedBotIds ?? []).join('\n')}
+            onChange={(e) => {
+              const trustedBotIds = e.target.value
+                .split(/[\s,]+/)
+                .map((id) => id.trim())
+                .filter(Boolean);
+              updateConnection('discord', { trustedBotIds });
+            }}
+            onBlur={() => setTimeout(() => saveDiscordConfig(), 0)}
+            placeholder={t('settings.integrations.discord.trustedBots.placeholder')}
+            className={cn(inputClass, 'min-h-16 resize-y')}
           />
         </div>
 

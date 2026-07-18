@@ -13,6 +13,28 @@
  */
 
 const STRING_OPTION = 3;
+export const DISCORD_APPLICATION_COMMAND_LIMIT = 100;
+
+function clipDescription(value, fallback) {
+  const text = String(value ?? '').trim() || fallback;
+  return text.slice(0, 100);
+}
+
+export function sanitizeDiscordCommandName(name, suffix = '') {
+  const suffixText = String(suffix ?? '').trim().toLowerCase();
+  const maxBaseLength = Math.max(1, 32 - suffixText.length);
+  const base = String(name ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+    .slice(0, maxBaseLength)
+    .replace(/^[-_]+|[-_]+$/g, '');
+  if (!base) return null;
+  const full = `${base}${suffixText}`;
+  return /^[a-z0-9_-]{1,32}$/.test(full) ? full : null;
+}
 
 /**
  * The canonical OpenChamber agent slash command set. Descriptions are kept ≤ 100 chars
@@ -73,6 +95,13 @@ export function buildSlashCommandDefinitions() {
         { type: STRING_OPTION, name: 'message', description: 'List number from /fork (leave empty to list)', required: false },
       ],
     },
+    {
+      name: 'btw',
+      description: 'Ask a side question in a new forked thread without interrupting this run',
+      options: [
+        { type: STRING_OPTION, name: 'question', description: 'The side question for the forked thread', required: true },
+      ],
+    },
     { name: 'share', description: 'Generate a public URL for the current session' },
     { name: 'unshare', description: 'Revoke the public URL for the current session' },
     {
@@ -102,6 +131,73 @@ export function buildSlashCommandDefinitions() {
   ].map((c) => ({ type: 1, ...c }));
 }
 
+export function buildDynamicSlashCommandDefinitions({
+  commands = [],
+  skills = [],
+  existingNames = new Set(),
+  remaining = DISCORD_APPLICATION_COMMAND_LIMIT,
+} = {}) {
+  const defs = [];
+  const map = new Map();
+  const used = new Set(existingNames);
+
+  const add = ({ source, kind, suffix, description }) => {
+    if (defs.length >= remaining) return;
+    const originalName = typeof source?.name === 'string' ? source.name.trim() : '';
+    if (!originalName) return;
+    const name = sanitizeDiscordCommandName(originalName, suffix);
+    if (!name || used.has(name)) return;
+    used.add(name);
+    defs.push({
+      type: 1,
+      name,
+      description: clipDescription(source.description, description),
+      ...(kind === 'cmd'
+        ? {
+            options: [
+              { type: STRING_OPTION, name: 'args', description: 'Optional arguments for the OpenCode command', required: false },
+            ],
+          }
+        : {}),
+    });
+    map.set(name, { kind, name: originalName });
+  };
+
+  for (const command of commands) {
+    if (command?.source === 'skill') continue;
+    add({
+      source: command,
+      kind: 'cmd',
+      suffix: '-cmd',
+      description: 'Run this OpenCode command in the current session',
+    });
+  }
+  for (const skill of skills) {
+    add({
+      source: skill,
+      kind: 'skill',
+      suffix: '-skill',
+      description: 'Hand this skill to OpenChamber agent',
+    });
+  }
+
+  return { definitions: defs, commandMap: map };
+}
+
+export function buildApplicationCommandRegistration({ dynamic = {} } = {}) {
+  const builtIns = buildSlashCommandDefinitions();
+  const existingNames = new Set(builtIns.map((command) => command.name));
+  const remaining = Math.max(0, DISCORD_APPLICATION_COMMAND_LIMIT - builtIns.length);
+  const dynamicBuilt = buildDynamicSlashCommandDefinitions({
+    commands: dynamic.commands ?? [],
+    skills: dynamic.skills ?? [],
+    existingNames,
+    remaining,
+  });
+  const commands = [...builtIns, ...dynamicBuilt.definitions].slice(0, DISCORD_APPLICATION_COMMAND_LIMIT);
+  return { commands, dynamicCommandMap: dynamicBuilt.commandMap };
+}
+
 /**
  * Register the OpenChamber agent slash commands against a bot application.
  *
@@ -112,9 +208,9 @@ export function buildSlashCommandDefinitions() {
  * @param {string|null} [args.guildId]  register guild-scoped when set (instant)
  * @returns {Promise<{ ok: boolean, scope: 'guild'|'global', status?: number, error?: string }>}
  */
-export async function registerApplicationCommands({ restCall, token, applicationId, guildId = null }) {
+export async function registerApplicationCommands({ restCall, token, applicationId, guildId = null, dynamic = {} }) {
   if (!applicationId) return { ok: false, scope: 'global', error: 'no application id' };
-  const commands = buildSlashCommandDefinitions();
+  const { commands, dynamicCommandMap } = buildApplicationCommandRegistration({ dynamic });
   const scope = guildId ? 'guild' : 'global';
   const path = guildId
     ? `/applications/${encodeURIComponent(applicationId)}/guilds/${encodeURIComponent(guildId)}/commands`
@@ -129,7 +225,7 @@ export async function registerApplicationCommands({ restCall, token, application
         error: typeof r.body === 'string' ? r.body.slice(0, 300) : `HTTP ${r.status}`,
       };
     }
-    return { ok: true, scope, status: r.status };
+    return { ok: true, scope, status: r.status, dynamicCommandMap, commandCount: commands.length };
   } catch (err) {
     return { ok: false, scope, error: err?.message ?? 'registration failed' };
   }

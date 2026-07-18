@@ -32,6 +32,8 @@ export interface MessengerConnection {
   discordBotId?: string;
   discordBotUsername?: string;
   discordBotDiscriminator?: string;
+  /** Bot user IDs allowed to talk to OpenChamber agent without the OpenChamber role. */
+  trustedBotIds?: string[];
   discordChannelName?: string;
   discordChannelType?: number;
   discordChannelTypeLabel?: string;
@@ -890,6 +892,7 @@ export const useMessengerStore = create<MessengerState>()(
             bridgeEnabled: conn.bridgeEnabled !== false,
             defaultChannelId: conn.defaultChannelId,
             defaultUserId: conn.defaultUserId,
+            trustedBotIds: conn.trustedBotIds ?? [],
             projectBindings,
           });
         } catch {
@@ -933,6 +936,7 @@ export const useMessengerStore = create<MessengerState>()(
             guildId: conn.discordGuildId,
             defaultChannelId: conn.defaultChannelId,
             defaultUserId: conn.defaultUserId,
+            trustedBotIds: conn.trustedBotIds ?? [],
             // Default OFF — we'd rather show every message the gateway
             // delivers than silently drop messages from a different guild
             // because the saved Server ID is wrong by one digit.

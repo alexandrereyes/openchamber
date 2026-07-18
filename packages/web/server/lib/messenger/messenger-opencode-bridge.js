@@ -2,7 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { MessengerBridgeStore } from './messenger-bridge-store.js';
-import { executeMessengerCommand, parseLeadingCommand, isKnownMessengerCommand } from './messenger-commands.js';
+import {
+  executeMessengerCommand,
+  parseLeadingCommand,
+  isKnownMessengerCommand,
+  stripBtwSuffix,
+  stripQueueSuffix,
+} from './messenger-commands.js';
 import { DEFAULT_VERBOSITY, normalizeVerbosity } from './messenger-verbosity.js';
 import {
   DEFAULT_PERMISSION_MODE,
@@ -1204,6 +1210,24 @@ export function createMessengerOpencodeBridge({
       try {
         const skills = await listSkills({ projectPath: projectPath ?? null });
         return Array.isArray(skills) ? skills : [];
+      } catch {
+        return [];
+      }
+    },
+    async listCommands(directory) {
+      try {
+        const params = directory ? `?directory=${encodeURIComponent(directory)}` : '';
+        const r = await opencodeFetch(`/command${params}`);
+        if (!r.ok) return [];
+        const d = await r.json().catch(() => null);
+        const raw = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : Array.isArray(d?.commands) ? d.commands : [];
+        return raw.map((cmd) => ({
+          name: cmd?.name,
+          description: cmd?.description,
+          agent: cmd?.agent,
+          model: cmd?.model,
+          source: cmd?.source,
+        })).filter((cmd) => typeof cmd.name === 'string' && cmd.name.trim());
       } catch {
         return [];
       }
@@ -3367,6 +3391,76 @@ export function createMessengerOpencodeBridge({
         return { ok: true, threadId: thread.threadId };
       },
 
+      async btwQuestion({ text }) {
+        if (!stored?.sessionId) return { ok: false, error: 'no session bound to this conversation.' };
+        ensureSubscribed();
+        const forked = await opencodeAdapter.forkSession(
+          stored.sessionId,
+          null,
+          stored?.projectPath ?? undefined,
+        );
+        if (!forked.ok) return forked;
+
+        const thread = await createBoundThread({
+          name: `BTW: ${clipBlock(text.replace(/\s+/g, ' ').trim(), 80)}`,
+          sessionId: forked.sessionId,
+          projectPath: stored?.projectPath ?? null,
+          projectLabel: stored?.projectLabel ?? null,
+        });
+        if (!thread.ok) return thread;
+
+        const forkSurface = {
+          type,
+          token,
+          channelId: thread.threadId,
+          threadId: null,
+        };
+        const ctx = {
+          sessionId: forked.sessionId,
+          type,
+          token,
+          channelId: thread.threadId,
+          threadId: null,
+          projectPath: stored?.projectPath ?? null,
+          sentPartIds: new Set(),
+          startedAt: Date.now(),
+          lastError: null,
+          verbosity: resolveVerbosity(forkSurface),
+          from,
+          source: type,
+        };
+        sessionContexts.set(forked.sessionId, ctx);
+        startTypingPulse(ctx);
+        rememberMessengerInbound(forked.sessionId, text);
+
+        const modelOverride = stored?.modelOverride ?? projectDefaults?.modelDefault ?? globals.model ?? null;
+        const variantOverride = stored?.variantOverride ?? projectDefaults?.variantDefault ?? globals.variant ?? null;
+        const agentOverride = stored?.agentOverride ?? projectDefaults?.agentDefault ?? globals.agent ?? null;
+        try {
+          await sendOpencodePrompt({
+            sessionId: forked.sessionId,
+            projectPath: stored?.projectPath ?? null,
+            text,
+            modelOverride,
+            agentOverride,
+            variantOverride,
+          });
+        } catch (err) {
+          stopTypingPulse(ctx);
+          return { ok: false, error: err?.message ?? 'prompt failed' };
+        }
+
+        broadcastEvent?.('messenger.bridge.btw', {
+          type,
+          channelId,
+          threadId: thread.threadId,
+          sourceSessionId: stored.sessionId,
+          sessionId: forked.sessionId,
+          text,
+        });
+        return { ok: true, threadId: thread.threadId, sessionId: forked.sessionId };
+      },
+
       async queueMessage({ text }) {
         const busy = stored?.sessionId ? busySessions.has(stored.sessionId) : false;
         if (busy) {
@@ -3393,9 +3487,15 @@ export function createMessengerOpencodeBridge({
           : { ok: false, error: result.error ?? 'send failed' };
       },
 
-      async clearQueue() {
+      async clearQueue({ position } = {}) {
         const key = queueKeyFor(surface);
         const queue = surfaceQueues.get(key);
+        if (position != null) {
+          if (!queue || position < 1 || position > queue.length) return 0;
+          queue.splice(position - 1, 1);
+          if (queue.length === 0) surfaceQueues.delete(key);
+          return 1;
+        }
         const cleared = queue?.length ?? 0;
         surfaceQueues.delete(key);
         return cleared;
@@ -3725,6 +3825,54 @@ export function createMessengerOpencodeBridge({
         return { ok: true, handledCommand: parsedCmd.name };
       }
       // null → unknown command; fall through.
+    }
+
+    const btwSuffix = stripBtwSuffix(text);
+    if (btwSuffix) {
+      const surface = { type, token, channelId, threadId: threadId ?? null };
+      const result = await executeSurfaceCommand({
+        command: { name: 'btw', args: btwSuffix.text, body: '' },
+        type,
+        token,
+        channelId,
+        threadId: threadId ?? null,
+        sourceMessageId,
+        from,
+      });
+      if (result) {
+        await postMessengerSurface(surface, result.reply);
+        broadcastEvent?.('messenger.bridge.command_handled', {
+          type,
+          channelId,
+          threadId,
+          command: 'btw',
+        });
+        return { ok: true, handledCommand: 'btw' };
+      }
+    }
+
+    const queueSuffix = stripQueueSuffix(text);
+    if (queueSuffix) {
+      const surface = { type, token, channelId, threadId: threadId ?? null };
+      const result = await executeSurfaceCommand({
+        command: { name: 'queue', args: queueSuffix.text, body: '' },
+        type,
+        token,
+        channelId,
+        threadId: threadId ?? null,
+        sourceMessageId,
+        from,
+      });
+      if (result) {
+        await postMessengerSurface(surface, result.reply);
+        broadcastEvent?.('messenger.bridge.command_handled', {
+          type,
+          channelId,
+          threadId,
+          command: 'queue',
+        });
+        return { ok: true, handledCommand: 'queue' };
+      }
     }
 
     // -----------------------------------------------------------------
@@ -4184,6 +4332,42 @@ export function createMessengerOpencodeBridge({
       from,
     });
     return result ?? null;
+  }
+
+  async function runDynamicCommand({ type, token, channelId, threadId, dynamicCommand, args = '', from = null }) {
+    if (!dynamicCommand?.kind || !dynamicCommand?.name) return null;
+    if (dynamicCommand.kind === 'skill') {
+      return runCommand({
+        type,
+        token,
+        channelId,
+        threadId,
+        commandName: 'skill',
+        args: dynamicCommand.name,
+        from,
+      });
+    }
+
+    const hash = tokenHash(token);
+    const stableKey = targetKey({ type, channelId, threadId: threadId ?? null });
+    const stored = bridgeStore.lookup({ type, botTokenHash: hash, targetKey: stableKey });
+    if (!stored?.sessionId) {
+      return { reply: `✗ Send a regular message first so I can spin up a session, then run \`/${dynamicCommand.name}\`.` };
+    }
+    const r = await opencodeAdapter.sendOpencodeCommand(stored.sessionId, dynamicCommand.name, args ?? '');
+    return {
+      reply: r.ok
+        ? `⏳ Running \`/${dynamicCommand.name}\` against the current session…`
+        : `✗ \`/${dynamicCommand.name}\` failed: ${r.error ?? 'unknown error'}`,
+    };
+  }
+
+  async function listDynamicApplicationCommands() {
+    const [commands, skills] = await Promise.all([
+      opencodeAdapter.listCommands(null).catch(() => []),
+      opencodeAdapter.listSkills(null).catch(() => []),
+    ]);
+    return { commands, skills };
   }
 
   /**
@@ -4724,6 +4908,8 @@ export function createMessengerOpencodeBridge({
   return {
     routeInbound,
     runCommand,
+    runDynamicCommand,
+    listDynamicApplicationCommands,
     listSurfaceSkills,
     /** List configured OpenCode agents (for the Discord `/agent` picker). */
     listAgents: () => opencodeAdapter.listAgents(),

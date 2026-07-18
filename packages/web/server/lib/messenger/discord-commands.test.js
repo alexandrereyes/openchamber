@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { buildSlashCommandDefinitions, registerApplicationCommands } from './discord-commands.js';
+import {
+  buildApplicationCommandRegistration,
+  buildSlashCommandDefinitions,
+  registerApplicationCommands,
+  sanitizeDiscordCommandName,
+  DISCORD_APPLICATION_COMMAND_LIMIT,
+} from './discord-commands.js';
 
 describe('buildSlashCommandDefinitions', () => {
   const defs = buildSlashCommandDefinitions();
@@ -33,7 +39,7 @@ describe('buildSlashCommandDefinitions', () => {
   it('declares options only on the parameterised commands', () => {
     const withOptions = defs.filter((d) => Array.isArray(d.options) && d.options.length > 0);
     expect(withOptions.map((d) => d.name).sort()).toEqual(
-      ['fork', 'new-worktree', 'queue', 'resume', 'schedule', 'session', 'shell', 'summary'].sort(),
+      ['btw', 'fork', 'new-worktree', 'queue', 'resume', 'schedule', 'session', 'shell', 'summary'].sort(),
     );
     const summary = defs.find((d) => d.name === 'summary');
     expect(summary.options[0]).toMatchObject({ name: 'topic', required: false, type: 3 });
@@ -49,11 +55,34 @@ describe('buildSlashCommandDefinitions', () => {
     const names = defs.map((d) => d.name);
     for (const name of [
       'session', 'resume', 'fork', 'share', 'unshare',
-      'queue', 'clear-queue', 'mention-mode',
+      'btw', 'queue', 'clear-queue', 'mention-mode',
       'new-worktree', 'merge-worktree',
     ]) {
       expect(names).toContain(name);
     }
+  });
+});
+
+describe('dynamic slash command registration helpers', () => {
+  it('sanitizes dynamic names with suffixes inside Discord limits', () => {
+    expect(sanitizeDiscordCommandName('Review PR!', '-cmd')).toBe('review-pr-cmd');
+    expect(sanitizeDiscordCommandName('A'.repeat(80), '-skill')).toHaveLength(32);
+    expect(sanitizeDiscordCommandName('!!!', '-cmd')).toBeNull();
+  });
+
+  it('keeps built-ins first and caps the total at Discord\'s 100-command limit', () => {
+    const dynamic = {
+      commands: Array.from({ length: 120 }, (_, i) => ({
+        name: `custom command ${i}`,
+        description: `Command ${i}`,
+      })),
+      skills: [{ name: 'theme-system', description: 'Use theme tokens' }],
+    };
+    const registration = buildApplicationCommandRegistration({ dynamic });
+    expect(registration.commands).toHaveLength(DISCORD_APPLICATION_COMMAND_LIMIT);
+    const builtInNames = buildSlashCommandDefinitions().map((command) => command.name);
+    expect(registration.commands.slice(0, builtInNames.length).map((command) => command.name)).toEqual(builtInNames);
+    expect(registration.commands.some((command) => command.name.endsWith('-cmd'))).toBe(true);
   });
 });
 
@@ -75,6 +104,7 @@ describe('registerApplicationCommands', () => {
     expect(calls[0].method).toBe('PUT');
     expect(calls[0].path).toBe('/applications/app-1/guilds/guild-1/commands');
     expect(Array.isArray(calls[0].body)).toBe(true);
+    expect(calls[0].body.length).toBeLessThanOrEqual(DISCORD_APPLICATION_COMMAND_LIMIT);
   });
 
   it('PUTs to the global endpoint when no guildId is given', async () => {
@@ -86,6 +116,20 @@ describe('registerApplicationCommands', () => {
     const r = await registerApplicationCommands({ restCall, token: 't', applicationId: 'app-1' });
     expect(r).toMatchObject({ ok: true, scope: 'global' });
     expect(calls[0].path).toBe('/applications/app-1/commands');
+  });
+
+  it('returns a dynamic command map for interaction dispatch', async () => {
+    const restCall = async () => ({ ok: true, status: 200, body: [] });
+    const r = await registerApplicationCommands({
+      restCall,
+      token: 't',
+      applicationId: 'app-1',
+      dynamic: { skills: [{ name: 'theme-system' }] },
+    });
+    expect(r.dynamicCommandMap.get('theme-system-skill')).toEqual({
+      kind: 'skill',
+      name: 'theme-system',
+    });
   });
 
   it('reports a failure (without throwing) when Discord rejects the request', async () => {

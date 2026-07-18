@@ -776,6 +776,14 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     keywords: ['discord', 'slash', 'commands', 'help', 'status', 'schedule'],
     isAvailable: (ctx) => !ctx.isVSCode,
   },
+  {
+    id: 'integrations.discord.trusted-bots',
+    page: 'integrations',
+    titleKey: 'settings.integrations.discord.trustedBots.title',
+    descriptionKey: 'settings.integrations.discord.trustedBots.description',
+    keywords: ['discord', 'bot', 'trusted', 'allowlist', 'access'],
+    isAvailable: (ctx) => !ctx.isVSCode,
+  },
 ] as const;
 
 interface BuildSettingsSearchResultsOptions {

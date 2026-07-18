@@ -8,6 +8,7 @@ import { createMessengerOpencodeBridge } from './messenger-opencode-bridge.js';
 import { createDiscordAgentRouter } from './discord-agent-api.js';
 import { parseVerbosityLevel, VERBOSITY_LEVELS } from './messenger-verbosity.js';
 import { parsePermissionMode, PERMISSION_MODES } from './messenger-permissions.js';
+import { normalizeTrustedBotIds } from './discord-access.js';
 import { bootstrapProject as bootstrapProjectFn } from '../projects/project-bootstrap.js';
 import { renderPermissionContext, escapeMd } from './messenger-render.js';
 import { discoverSkills } from '../opencode/skills.js';
@@ -1633,7 +1634,7 @@ export function createMessengerSyncRouter({
   });
 
   router.post('/discord/listener/start', async (req, res) => {
-    const { token, guildId, autoReply, scopeToGuild, bridgeEnabled, projectBindings, defaultChannelId, defaultUserId } =
+    const { token, guildId, autoReply, scopeToGuild, bridgeEnabled, projectBindings, defaultChannelId, defaultUserId, trustedBotIds } =
       req.body ?? {};
     if (!token) return res.status(400).json({ error: 'token required' });
     const resolveProject = buildResolveProject(projectBindings);
@@ -1643,6 +1644,7 @@ export function createMessengerSyncRouter({
       scopeToGuild: Boolean(scopeToGuild),
       bridgeEnabled: bridgeEnabled !== false && Boolean(bridge),
       resolveProject,
+      trustedBotIds: normalizeTrustedBotIds(trustedBotIds),
     });
 
     // The bridge mirrors OpenCode output via the shared global event hub —
@@ -1675,6 +1677,8 @@ export function createMessengerSyncRouter({
                 projectLabel: b.projectLabel ? String(b.projectLabel) : undefined,
               }))
           : null;
+        const hasTrustedBotIds = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'trustedBotIds');
+        const normalizedTrustedBotIds = normalizeTrustedBotIds(trustedBotIds);
         await persistSettings({
           discord: {
             ...prev,
@@ -1685,6 +1689,9 @@ export function createMessengerSyncRouter({
             bridgeEnabled: bridgeEnabled !== false,
             defaultChannelId: defaultChannelId || prev.defaultChannelId || undefined,
             defaultUserId: defaultUserId || prev.defaultUserId || undefined,
+            trustedBotIds: hasTrustedBotIds
+              ? normalizedTrustedBotIds
+              : prev.trustedBotIds || undefined,
             projectBindings:
               normalizedBindings && normalizedBindings.length > 0
                 ? normalizedBindings
@@ -1722,7 +1729,7 @@ export function createMessengerSyncRouter({
    * Body matches the start endpoint: { botToken, guildId, autoReply, scopeToGuild, bridgeEnabled, defaultChannelId }.
    */
   router.post('/discord/save-config', async (req, res) => {
-    const { botToken, guildId, autoReply, scopeToGuild, bridgeEnabled, defaultChannelId, defaultUserId, projectBindings } =
+    const { botToken, guildId, autoReply, scopeToGuild, bridgeEnabled, defaultChannelId, defaultUserId, trustedBotIds, projectBindings } =
       req.body ?? {};
     try {
       // Merge with the previous discord block so this best-effort save (fired
@@ -1739,6 +1746,8 @@ export function createMessengerSyncRouter({
               projectLabel: b.projectLabel ? String(b.projectLabel) : undefined,
             }))
         : null;
+      const hasTrustedBotIds = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'trustedBotIds');
+      const normalizedTrustedBotIds = normalizeTrustedBotIds(trustedBotIds);
       await persistSettings({
         discord: {
           ...prev,
@@ -1749,6 +1758,9 @@ export function createMessengerSyncRouter({
           bridgeEnabled: bridgeEnabled !== false,
           defaultChannelId: defaultChannelId || prev.defaultChannelId || undefined,
           defaultUserId: defaultUserId || prev.defaultUserId || undefined,
+          trustedBotIds: hasTrustedBotIds
+            ? normalizedTrustedBotIds
+            : prev.trustedBotIds || undefined,
           projectBindings:
             normalizedBindings && normalizedBindings.length > 0
               ? normalizedBindings
@@ -1803,6 +1815,7 @@ export function createMessengerSyncRouter({
         // Without this, every channel fell back to the first project until
         // the user re-opened Settings and re-sent a manual start.
         resolveProject: buildResolveProject(discord.projectBindings),
+        trustedBotIds: normalizeTrustedBotIds(discord.trustedBotIds),
       });
       res.json({ ok: true, ...result });
     } catch (err) {

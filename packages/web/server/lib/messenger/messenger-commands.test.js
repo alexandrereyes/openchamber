@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { parseLeadingCommand, executeMessengerCommand } from './messenger-commands.js';
+import {
+  parseLeadingCommand,
+  executeMessengerCommand,
+  stripBtwSuffix,
+  stripQueueSuffix,
+} from './messenger-commands.js';
 
 const ctx = { type: 'discord', token: 't', channelId: 'c1', threadId: null };
 
@@ -57,6 +62,36 @@ describe('parseLeadingCommand', () => {
       name: 'verbosity',
       args: 'verbose',
     });
+  });
+});
+
+describe('suffix parsers', () => {
+  it('detects btw only at supported suffix positions', () => {
+    expect(stripBtwSuffix('Can you check the logs. btw')).toEqual({
+      text: 'Can you check the logs',
+      suffix: 'punctuation',
+    });
+    expect(stripBtwSuffix('Is the rollback risky! btw')).toMatchObject({
+      text: 'Is the rollback risky',
+    });
+    expect(stripBtwSuffix('What about metrics btw.')).toMatchObject({
+      text: 'What about metrics',
+    });
+    expect(stripBtwSuffix('Can you test this?\nbtw')).toMatchObject({
+      text: 'Can you test this?',
+      suffix: 'final-line',
+    });
+    expect(stripBtwSuffix('btw fix this')).toBeNull();
+  });
+
+  it('detects queue only as punctuation plus queue suffix', () => {
+    expect(stripQueueSuffix('Add the tests. queue')).toEqual({
+      text: 'Add the tests',
+      suffix: 'punctuation',
+    });
+    expect(stripQueueSuffix('Ship it! queue')).toMatchObject({ text: 'Ship it' });
+    expect(stripQueueSuffix('queue this later')).toBeNull();
+    expect(stripQueueSuffix('Add queue handling')).toBeNull();
   });
 });
 
@@ -335,6 +370,12 @@ describe('/queue and /clear-queue', () => {
     const { result } = await run('/clear-queue', { bridgeOps: { clearQueue: async () => 3 } });
     expect(result.reply).toContain('Cleared 3 queued messages');
   });
+  it('clear-queue can clear one queued position', async () => {
+    const clearQueue = vi.fn(async () => 1);
+    const { result } = await run('/clear-queue 2', { bridgeOps: { clearQueue } });
+    expect(clearQueue).toHaveBeenCalledWith({ position: 2 });
+    expect(result.reply).toContain('queued message 2');
+  });
   it('clear-queue handles an empty queue', async () => {
     const { result } = await run('/clear-queue', { bridgeOps: { clearQueue: async () => 0 } });
     expect(result.reply).toMatch(/already empty/);
@@ -432,6 +473,27 @@ describe('/fork', () => {
   });
 });
 
+describe('/btw', () => {
+  it('starts a side thread without aborting the current session', async () => {
+    const btwQuestion = vi.fn(async () => ({ ok: true, threadId: 'th-side' }));
+    const { result } = await run('/btw should we add a migration?', {
+      binding: { sessionId: 'ses-1', projectPath: '/p' },
+      bridgeOps: { btwQuestion },
+    });
+    expect(btwQuestion).toHaveBeenCalledWith({ text: 'should we add a migration?' });
+    expect(result.reply).toContain('<#th-side>');
+    expect(result.reply).toContain('left alone');
+  });
+
+  it('requires an active session', async () => {
+    const { result } = await run('/btw side task', {
+      binding: { sessionId: null },
+      bridgeOps: { btwQuestion: vi.fn() },
+    });
+    expect(result.reply).toMatch(/No session/);
+  });
+});
+
 describe('worktree commands', () => {
   it('new-worktree reports the created worktree + thread', async () => {
     const newWorktree = vi.fn(async () => ({ ok: true, path: '/wt/feature', branch: 'feature', threadId: 'th-3' }));
@@ -524,7 +586,7 @@ describe('/shell command', () => {
 describe('/help lists the extended command set', () => {
   it('mentions queue, fork, share, resume, worktrees and mention-mode', async () => {
     const { result } = await run('/help');
-    for (const cmd of ['/queue', '/fork', '/share', '/resume', '/new-worktree', '/merge-worktree', '/mention-mode', '/clear-queue', '/session', '/shell']) {
+    for (const cmd of ['/queue', '/btw', '/fork', '/share', '/resume', '/new-worktree', '/merge-worktree', '/mention-mode', '/clear-queue', '/session', '/shell']) {
       expect(result.reply).toContain(cmd);
     }
   });

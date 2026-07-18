@@ -33,6 +33,7 @@ export const DISCORD_COMMANDS: DiscordCommandEntry[] = [
   },
   { name: 'resume', descriptionKey: 'settings.integrations.discord.commands.desc.resume', category: 'chat' },
   { name: 'fork', descriptionKey: 'settings.integrations.discord.commands.desc.fork', category: 'chat' },
+  { name: 'btw', descriptionKey: 'settings.integrations.discord.commands.desc.btw', category: 'chat', suggested: true },
   { name: 'sessions', descriptionKey: 'settings.integrations.discord.commands.desc.sessions', category: 'chat' },
   { name: 'model', descriptionKey: 'settings.integrations.discord.commands.desc.model', category: 'model', suggested: true },
   { name: 'agent', descriptionKey: 'settings.integrations.discord.commands.desc.agent', category: 'model' },

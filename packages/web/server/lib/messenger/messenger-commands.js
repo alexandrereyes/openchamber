@@ -127,14 +127,19 @@ const COMMAND_HELP = [
     usage: '/fork [n]',
     summary: 'Branch from an earlier user message — `/fork` lists messages, `/fork 2` forks in a new thread',
   },
+  {
+    name: 'btw',
+    usage: '/btw <side question>',
+    summary: 'Fork the current session into a new thread and answer a side question without interrupting this run',
+  },
   { name: 'share', usage: '/share', summary: 'Generate a public URL for the current session' },
   { name: 'unshare', usage: '/unshare', summary: 'Revoke the public URL for the current session' },
   {
     name: 'queue',
     usage: '/queue <message>',
-    summary: 'Queue a message to send automatically after the current response finishes',
+    summary: 'Queue a message to send automatically after the current response finishes; suffix with `. queue` too',
   },
-  { name: 'clear-queue', usage: '/clear-queue', summary: 'Clear all queued messages for this conversation' },
+  { name: 'clear-queue', usage: '/clear-queue [n]', summary: 'Clear all queued messages, or one queued position' },
   {
     name: 'mention-mode',
     usage: '/mention-mode',
@@ -204,6 +209,38 @@ export function parseLeadingCommand(text, { allowBang = false } = {}) {
     // where the user pasted additional context.
     body: trimmed.includes('\n') ? trimmed.split('\n').slice(1).join('\n').trim() : '',
   };
+}
+
+export function stripBtwSuffix(text) {
+  if (typeof text !== 'string') return null;
+  const original = text.trim();
+  if (!original) return null;
+
+  const finalLineMatch = original.match(/^(?<body>[\s\S]*?)\n\s*btw\s*$/i);
+  if (finalLineMatch?.groups?.body?.trim()) {
+    return { text: finalLineMatch.groups.body.trim(), suffix: 'final-line' };
+  }
+
+  const punctuationMatch = original.match(/^(?<body>[\s\S]*?)[.!]\s+btw\s*$/i);
+  if (punctuationMatch?.groups?.body?.trim()) {
+    return { text: punctuationMatch.groups.body.trim(), suffix: 'punctuation' };
+  }
+
+  const trailingSentenceMatch = original.match(/^(?<body>[\s\S]*?)\s+btw\.\s*$/i);
+  if (trailingSentenceMatch?.groups?.body?.trim()) {
+    return { text: trailingSentenceMatch.groups.body.trim(), suffix: 'trailing-sentence' };
+  }
+
+  return null;
+}
+
+export function stripQueueSuffix(text) {
+  if (typeof text !== 'string') return null;
+  const original = text.trim();
+  if (!original) return null;
+  const match = original.match(/^(?<body>[\s\S]*?)[.!]\s+queue\s*$/i);
+  if (!match?.groups?.body?.trim()) return null;
+  return { text: match.groups.body.trim(), suffix: 'punctuation' };
 }
 
 function tokenHash(token) {
@@ -872,6 +909,24 @@ export async function executeMessengerCommand({
       };
     }
 
+    case 'btw': {
+      const text = [command.args, command.body].filter(Boolean).join('\n').trim();
+      if (!text) {
+        return { reply: '✗ Usage: `/btw <side question>` — e.g. `/btw how should we test this?`.' };
+      }
+      if (!sessionId) {
+        return { reply: '✗ No session is active on this conversation — send a regular message first, then ask a side question with `/btw`.' };
+      }
+      if (!bridgeOps?.btwQuestion) {
+        return { reply: '✗ `/btw` is not available on this surface.' };
+      }
+      const r = await bridgeOps.btwQuestion({ text });
+      if (!r.ok) return { reply: `✗ Could not start side thread: ${r.error ?? 'unknown error'}` };
+      return {
+        reply: `↪ Side thread started${r.threadId ? ` in <#${r.threadId}>` : ''}. The current run was left alone.`,
+      };
+    }
+
     case 'share': {
       if (!sessionId) return { reply: '✗ No session is active on this conversation.' };
       const r = await opencode.shareSession(sessionId, binding?.projectPath ?? undefined);
@@ -908,10 +963,17 @@ export async function executeMessengerCommand({
       if (!bridgeOps?.clearQueue) {
         return { reply: '✗ `/clear-queue` is not available on this surface.' };
       }
-      const cleared = await bridgeOps.clearQueue().catch(() => 0);
+      const raw = command.args.trim();
+      const position = raw ? Number.parseInt(raw, 10) : null;
+      if (raw && (!Number.isFinite(position) || position < 1)) {
+        return { reply: '✗ Usage: `/clear-queue [n]` where `n` is a queued message position.' };
+      }
+      const cleared = await (position ? bridgeOps.clearQueue({ position }) : bridgeOps.clearQueue()).catch(() => 0);
       return {
         reply: cleared > 0
-          ? `🗑 Cleared ${cleared} queued message${cleared === 1 ? '' : 's'}.`
+          ? position
+            ? `🗑 Cleared queued message ${position}.`
+            : `🗑 Cleared ${cleared} queued message${cleared === 1 ? '' : 's'}.`
           : '_(the queue was already empty)_',
       };
     }

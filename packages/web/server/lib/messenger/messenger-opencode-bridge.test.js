@@ -302,6 +302,34 @@ describe('discord project sync persistence', () => {
       }),
     });
   });
+
+  it('persists an explicit empty trusted bot list instead of keeping stale IDs', async () => {
+    const persistSettings = vi.fn(async () => {});
+    const app = express();
+    app.use(
+      '/',
+      createMessengerSyncRouter({
+        broadcastEvent: () => {},
+        readSettings: async () => ({
+          discord: { botToken: 'old-token', trustedBotIds: ['bot-1', 'bot-2'] },
+        }),
+        persistSettings,
+        sanitizeProjects: (projects) => projects,
+      }).router,
+    );
+
+    await request(app)
+      .post('/discord/save-config')
+      .send({ botToken: 'bot-token', trustedBotIds: [] })
+      .expect(200);
+
+    expect(persistSettings).toHaveBeenCalledWith({
+      discord: expect.objectContaining({
+        botToken: 'bot-token',
+        trustedBotIds: [],
+      }),
+    });
+  });
 });
 
 describe('web session mirroring', () => {
@@ -1736,6 +1764,80 @@ describe('/shell command — agent resolution (regression: empty agent 500s)', (
   });
 });
 
+describe('dynamic Discord slash command handoff', () => {
+  let originalFetch;
+  let calls;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+    calls = [];
+    globalThis.fetch = vi.fn(async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body });
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ id: 'discord-msg' }) };
+    });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
+  });
+
+  function makeDynamicBridge(extra = {}) {
+    const binding = {
+      type: 'discord',
+      token: 'bot-token',
+      targetKey: 'chan-dyn',
+      sessionId: 'ses-dyn',
+      projectPath: '/proj',
+      projectLabel: 'proj',
+    };
+    return makeBridge({
+      store: {
+        ...makeFakeStore(),
+        lookup: () => binding,
+        lookupBySessionId: () => [binding],
+      },
+      ...extra,
+    });
+  }
+
+  it('dispatches dynamic command slash interactions to OpenCode session.command', async () => {
+    const bridge = makeDynamicBridge();
+    const result = await bridge.runDynamicCommand({
+      type: 'discord',
+      token: 'bot-token',
+      channelId: 'chan-dyn',
+      threadId: null,
+      dynamicCommand: { kind: 'cmd', name: 'lint' },
+      args: '--fix',
+    });
+
+    const commandCall = calls.find((c) => c.url.includes('/session/ses-dyn/command'));
+    expect(commandCall).toBeTruthy();
+    expect(JSON.parse(commandCall.body)).toEqual({ command: 'lint', arguments: '--fix' });
+    expect(result.reply).toContain('/lint');
+  });
+
+  it('dispatches dynamic skill slash interactions through the existing /skill handoff', async () => {
+    const bridge = makeDynamicBridge({
+      listSkills: async () => [{ name: 'theme-system', description: 'Use theme tokens' }],
+    });
+
+    const result = await bridge.runDynamicCommand({
+      type: 'discord',
+      token: 'bot-token',
+      channelId: 'chan-dyn',
+      threadId: null,
+      dynamicCommand: { kind: 'skill', name: 'theme-system' },
+    });
+
+    const promptCall = calls.find((c) => c.url.includes('/session/ses-dyn/prompt_async'));
+    expect(promptCall).toBeTruthy();
+    expect(JSON.parse(promptCall.body).parts[0].text).toContain('Use the "theme-system" skill');
+    expect(result.reply).toContain('theme-system');
+  });
+});
+
 describe('plain message supersedes an in-flight turn', () => {
   let originalFetch;
   beforeEach(() => {
@@ -1799,6 +1901,104 @@ describe('plain message supersedes an in-flight turn', () => {
     const sentBodies = promptCalls().map((c) => JSON.parse(c.body).parts[0].text);
     expect(sentBodies).toContain('second');
     expect(promptCalls()).toHaveLength(2);
+  });
+
+  it('queues a suffix-marked message without aborting the running turn', async () => {
+    const calls = [];
+    globalThis.fetch = vi.fn(async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body });
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+    });
+
+    const bridge = makeBridge({
+      store: {
+        ...makeFakeStore(),
+        lookup: ({ targetKey }) =>
+          targetKey === 'chan-queue'
+            ? { sessionId: 'ses-queue', projectPath: '/p', projectLabel: 'P' }
+            : null,
+      },
+    });
+
+    await bridge.routeInbound({
+      type: 'discord', token: 'bot-token', channelId: 'chan-queue', threadId: null, text: 'first',
+    });
+    const queued = await bridge.routeInbound({
+      type: 'discord', token: 'bot-token', channelId: 'chan-queue', threadId: null, text: 'second. queue',
+      from: { username: 'alice', firstName: 'Alice' },
+    });
+
+    const promptCalls = () =>
+      calls.filter((c) => c.method === 'POST' && c.url.includes('/session/ses-queue/prompt_async'));
+    const abortCalls = () =>
+      calls.filter((c) => c.method === 'POST' && c.url.includes('/session/ses-queue/abort'));
+
+    expect(queued).toMatchObject({ ok: true, handledCommand: 'queue' });
+    expect(abortCalls()).toHaveLength(0);
+    expect(promptCalls()).toHaveLength(1);
+
+    await bridge._handleGlobalEvent({
+      directory: '/p',
+      payload: { type: 'session.idle', properties: { sessionID: 'ses-queue' } },
+    });
+    await flush();
+
+    const sentBodies = promptCalls().map((c) => JSON.parse(c.body).parts[0].text);
+    expect(sentBodies).toEqual(['first', 'second']);
+  });
+
+  it('forks a suffix-marked btw question into a new thread without aborting the source session', async () => {
+    const calls = [];
+    globalThis.fetch = vi.fn(async (url, init = {}) => {
+      calls.push({ url: String(url), method: init.method ?? 'GET', body: init.body });
+      const u = String(url);
+      if (u.includes('/session/ses-btw/fork')) {
+        return { ok: true, status: 200, json: async () => ({ id: 'ses-btw-side' }), text: async () => '' };
+      }
+      if (u.includes('/channels/chan-btw/threads')) {
+        return { ok: true, status: 200, json: async () => ({ id: 'thread-btw' }), text: async () => '' };
+      }
+      return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+    });
+
+    const binds = [];
+    const bridge = makeBridge({
+      store: {
+        ...makeFakeStore(),
+        lookup: ({ targetKey }) =>
+          targetKey === 'chan-btw'
+            ? { sessionId: 'ses-btw', projectPath: '/p', projectLabel: 'P' }
+            : null,
+        bind: (row) => binds.push(row),
+      },
+    });
+
+    const result = await bridge.routeInbound({
+      type: 'discord',
+      token: 'bot-token',
+      channelId: 'chan-btw',
+      threadId: null,
+      text: 'Should we add a migration. btw',
+      from: { id: 'user-1', username: 'alice' },
+    });
+
+    expect(result).toMatchObject({ ok: true, handledCommand: 'btw' });
+    expect(calls.filter((c) => c.url.includes('/session/ses-btw/abort'))).toHaveLength(0);
+    expect(calls.filter((c) => c.url.includes('/session/ses-btw/fork'))).toHaveLength(1);
+    expect(binds).toContainEqual(expect.objectContaining({
+      targetKey: 'thread-btw',
+      sessionId: 'ses-btw-side',
+      projectPath: '/p',
+    }));
+
+    const sidePrompt = calls.find((c) => c.url.includes('/session/ses-btw-side/prompt_async'));
+    expect(sidePrompt).toBeTruthy();
+    expect(JSON.parse(sidePrompt.body).parts).toEqual([
+      { type: 'text', text: 'Should we add a migration' },
+    ]);
+
+    const reply = calls.find((c) => c.url.includes('/channels/chan-btw/messages'));
+    expect(JSON.parse(reply.body).content).toContain('<#thread-btw>');
   });
 
   it('suppresses a trailing abort error from the superseded turn (no false failure)', async () => {
