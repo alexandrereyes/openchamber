@@ -1820,7 +1820,7 @@ export const settingsDict = {
   'settings.openchamber.visual.field.followUpBehaviorDescription': 'エージェントが応答している間にフォローアップメッセージで Enter を押したときの動作を選択します。',
   'settings.openchamber.visual.option.followUpBehavior.steer.label': 'ステア',
   'settings.openchamber.visual.option.followUpBehavior.queue.label': 'キュー',
-  ...discordIntegrationI18n.en,
+  ...discordIntegrationI18n.ja,
   'settings.integrations.discord.commands.category.project': 'プロジェクト',
   'settings.integrations.discord.commands.category.mcp': 'MCP サーバー',
   'settings.integrations.discord.commands.category.ops': 'セッション操作',

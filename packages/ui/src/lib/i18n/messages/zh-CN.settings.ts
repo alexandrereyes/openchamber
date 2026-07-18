@@ -1820,7 +1820,7 @@ export const settingsDict = {
   'settings.openchamber.visual.field.followUpBehaviorDescription': 'Choose what happens when you press Enter on a follow-up message while the agent is still responding.',
   'settings.openchamber.visual.option.followUpBehavior.steer.label': 'Steer',
   'settings.openchamber.visual.option.followUpBehavior.queue.label': 'Queue',
-  ...discordIntegrationI18n.en,
+  ...discordIntegrationI18n['zh-CN'],
   'settings.integrations.discord.commands.category.project': '项目',
   'settings.integrations.discord.commands.category.mcp': 'MCP 服务器',
   'settings.integrations.discord.commands.category.ops': '会话操作',
