@@ -350,6 +350,46 @@ describe('preview body URL rewriting', () => {
     expect(output).toContain('fetch("/api/data")');
   });
 
+  it('rewrites relative module import paths in JavaScript responses (issue #2338)', () => {
+    const jsOutput = rewritePreviewBody({
+      bodyText: 'import { defineComponent } from "./DlAUqK2U.js";\nconst mod = await import("./chunk-abc123.js");\nimport("../parent.js").then(m => m.default);',
+      kind: 'javascript',
+      proxyBasePath: '/api/preview/proxy/abc123',
+      targetOrigin: 'http://127.0.0.1:3000',
+      previewToken: 'preview-secret',
+    });
+
+    expect(jsOutput).toContain('from "/api/preview/proxy/abc123/DlAUqK2U.js?oc_preview_token=preview-secret"');
+    expect(jsOutput).toContain('import("./api/preview/proxy/abc123/chunk-abc123.js?oc_preview_token=preview-secret")');
+    expect(jsOutput).toContain('import("/api/preview/proxy/abc123/parent.js?oc_preview_token=preview-secret")');
+  });
+
+  it('strips crossorigin="" from modulepreload <link> tags (issue #2338)', () => {
+    const output = rewritePreviewBody({
+      bodyText: '<link rel="modulepreload" crossorigin="" href="/_nuxt/C2VRKy4g.js">',
+      kind: 'html',
+      proxyBasePath: '/api/preview/proxy/abc123',
+      targetOrigin: 'http://127.0.0.1:3000',
+      previewToken: 'preview-secret',
+    });
+
+    expect(output).not.toMatch(/crossorigin/i);
+    expect(output).toContain('href="/api/preview/proxy/abc123/_nuxt/C2VRKy4g.js?oc_preview_token=preview-secret"');
+  });
+
+  it('strips crossorigin="" from module <script> tags (issue #2338)', () => {
+    const output = rewritePreviewBody({
+      bodyText: '<script crossorigin="" src="/_nuxt/entry.js" type="module"></script>',
+      kind: 'html',
+      proxyBasePath: '/api/preview/proxy/abc123',
+      targetOrigin: 'http://127.0.0.1:3000',
+      previewToken: 'preview-secret',
+    });
+
+    expect(output).not.toMatch(/crossorigin/i);
+    expect(output).toContain('src="/api/preview/proxy/abc123/_nuxt/entry.js?oc_preview_token=preview-secret"');
+  });
+
   it('adds URL auth tokens to CSS and JavaScript rewritten resources', () => {
     const cssOutput = rewritePreviewBody({
       bodyText: '@import "/theme.css"; .hero { background: url(/hero.png); }',
