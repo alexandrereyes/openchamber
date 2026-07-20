@@ -176,6 +176,8 @@ Keep this in sync with `handleDirectoryEvent` in `sync-context.tsx`:
 | `question.asked/replied/rejected` | `question` |
 | `lsp.updated` | `lsp` |
 
+`vcs_status` tracks whether the deferred authoritative `vcs.get()` call is loading, complete, or failed. Consumers must not treat cached or not-yet-loaded VCS metadata as authoritative absence.
+
 ## Adding a new event type
 
 1. Add the case to the event reducer (`event-reducer.ts`)

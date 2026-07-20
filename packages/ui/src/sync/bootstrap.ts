@@ -131,6 +131,7 @@ export async function bootstrapDirectory(input: {
   const { directory, sdk, getState, set, global: g } = input
   const state = getState()
   const loading = state.status !== "complete"
+  set({ vcs_status: "loading" })
 
   // Seed from global state while we fetch directory-specific data
   const seededProject = projectID(directory, g.projects)
@@ -198,15 +199,23 @@ export async function bootstrapDirectory(input: {
     retry(() => sdk.command.list().then((x) => set({ command: unwrap(x, "command.list") }))),
     retry(() => sdk.mcp.status().then((x) => set({ mcp: unwrap(x, "mcp.status") }))),
     retry(() => sdk.lsp.status().then((x) => set({ lsp: unwrap(x, "lsp.status") }))),
-    retry(() =>
-      sdk.vcs.get().then((x) => {
+    retry(async () => {
+      const branchBeforeRequest = getState().vcs?.branch
+      return sdk.vcs.get().then((x) => {
         const current = getState()
         if (x.error) {
           throw new Error(`vcs.get failed: ${String(x.error)}`)
         }
-        set({ vcs: x.data ?? current.vcs })
-      }),
-    ),
+        const next = x.data ?? current.vcs
+        const vcs = current.vcs?.branch !== branchBeforeRequest
+          ? { ...next, branch: current.vcs?.branch }
+          : next
+        set({ vcs, vcs_status: "complete" })
+      })
+    }).catch((error) => {
+      set({ vcs_status: "error" })
+      throw error
+    }),
     retry(async () => {
       const before = getState()
       const beforeSignatures = new Map(

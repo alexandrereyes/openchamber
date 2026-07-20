@@ -51,6 +51,7 @@ import { listGlobalSessionPages } from "@/stores/globalSessions"
 import { areRequestArraysReferentiallyEqual, collectScopedBlockingRequests } from "./scoped-blocking-requests"
 import { EMPTY_USER_MESSAGE_HISTORY_SNAPSHOT, buildUserMessageHistorySnapshot, type UserMessageHistorySnapshot } from "./user-message-history"
 import { runtimeFetch } from "@/lib/runtime-fetch"
+import { sessionEvents } from "@/lib/sessionEvents"
 
 // ---------------------------------------------------------------------------
 // Context
@@ -1472,6 +1473,14 @@ function handleEvent(
     if (toastKey) {
       pendingQuestionToastIds.delete(toastKey)
       toast.dismiss(`question-${toastKey}`)
+    }
+  }
+
+  if (payload.type === "file.watcher.updated" && resolvedDirectory !== "global") {
+    const props = payload.properties as { file?: string }
+    const file = props.file?.replace(/\\/g, "/")
+    if (file && !file.includes("/.git/") && !file.startsWith(".git/")) {
+      sessionEvents.requestVcsDiffRefresh({ directory: resolvedDirectory })
     }
   }
 
