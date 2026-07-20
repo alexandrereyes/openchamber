@@ -1055,7 +1055,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const activeDiffStaged = forcedStaged ?? displayFileStaged;
 
     const isMobileLayout = isMobile || screenWidth <= 768;
-    const showReviewAction = Boolean(currentSessionId) && activeDiffScope !== 'turn' && !isMobileLayout && !isVSCodeRuntime();
+    const showReviewAction = Boolean(currentSessionId) && activeDiffScope !== 'turn' && activeDiffScope !== 'branch' && !isMobileLayout && !isVSCodeRuntime();
     const showFileSidebar = !hideStackedFileSidebar && !isMobileLayout && screenWidth >= 1024;
     const diffScrollRef = React.useRef<HTMLElement | null>(null);
     const fileSectionRefs = React.useRef(new Map<string, HTMLDivElement | null>());
@@ -1078,7 +1078,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
         && (branchDiffState.key !== branchStateKey || branchDiffState.loading);
 
     React.useEffect(() => {
-        if (!isActive || activeDiffScope !== 'branch' || vcsStatus !== 'complete' || branchAvailable) return;
+        if (!isActive || activeDiffScope !== 'branch' || vcsStatus === 'loading' || branchAvailable) return;
         setActiveDiffScope('working');
         onDiffScopeChange?.('working');
     }, [activeDiffScope, branchAvailable, isActive, onDiffScopeChange, vcsStatus]);
