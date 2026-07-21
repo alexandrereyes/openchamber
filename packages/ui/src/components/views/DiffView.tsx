@@ -42,7 +42,7 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useDirectorySync, useSessionMessages, useSessionStatus } from '@/sync/sync-context';
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
-import { isBranchDiffAvailable, loadBranchDiff, mapBranchDiffEntries } from './branchDiff';
+import { isBranchDiffAvailable, loadBranchDiff, mapBranchDiffEntries, shouldPrefetchBranchDiff } from './branchDiff';
 import type { FileDiffMetadata } from '@pierre/diffs';
 import type { VcsFileDiff } from '@opencode-ai/sdk/v2';
 
@@ -1074,6 +1074,8 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const branchStateKey = `${effectiveDirectory ?? ''}\0${vcsBranch ?? ''}\0${vcsDefaultBranch ?? ''}`;
     const branchDiffs = branchDiffState.key === branchStateKey ? branchDiffState.data : null;
     const branchDiffError = branchDiffState.key === branchStateKey ? branchDiffState.error : null;
+    const shouldLoadBranchDiff = activeDiffScope === 'branch'
+        || shouldPrefetchBranchDiff(branchDiffs, branchDiffError);
     const isLoadingBranchDiff = activeDiffScope === 'branch'
         && (branchDiffState.key !== branchStateKey || branchDiffState.loading);
 
@@ -1098,7 +1100,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
     }, [activeDiffScope, currentSessionId, isActive, sessionStatus?.type]);
 
     React.useEffect(() => {
-        if (!isActive || activeDiffScope !== 'branch' || !branchAvailable || !effectiveDirectory) return;
+        if (!isActive || !shouldLoadBranchDiff || !branchAvailable || !effectiveDirectory) return;
 
         let cancelled = false;
         let controller: AbortController | undefined;
@@ -1154,7 +1156,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             controller?.abort();
             window.clearTimeout(timer);
         };
-    }, [activeDiffScope, branchAvailable, branchRefreshNonce, branchStateKey, effectiveDirectory, isActive, lastStatusFetch]);
+    }, [branchAvailable, branchRefreshNonce, branchStateKey, effectiveDirectory, isActive, lastStatusFetch, shouldLoadBranchDiff]);
 
     const cancelPendingScrollAlignment = React.useCallback(() => {
         pendingScrollTargetRef.current = null;

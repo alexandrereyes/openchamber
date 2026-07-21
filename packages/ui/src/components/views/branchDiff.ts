@@ -52,6 +52,11 @@ export const isBranchDiffAvailable = (vcs: VcsInfo | undefined): boolean => {
   return Boolean(branch && defaultBranch && branch !== defaultBranch);
 };
 
+export const shouldPrefetchBranchDiff = (
+  diffs: readonly VcsFileDiff[] | null,
+  error: string | null,
+): boolean => diffs === null && error === null;
+
 export const loadBranchDiff = async (
   request: (
     input: { mode: 'branch'; context: number; directory: string },

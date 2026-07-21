@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
-import { isBranchDiffAvailable, loadBranchDiff, mapBranchDiffEntries } from './branchDiff';
+import {
+  isBranchDiffAvailable,
+  loadBranchDiff,
+  mapBranchDiffEntries,
+  shouldPrefetchBranchDiff,
+} from './branchDiff';
 
 describe('getFirstChangedModifiedLineFromPatch', () => {
   test('returns the first added line instead of the hunk context start', () => {
@@ -32,6 +37,12 @@ describe('branch diff scope', () => {
     expect(isBranchDiffAvailable({ branch: 'trunk', default_branch: 'trunk' })).toBe(false);
     expect(isBranchDiffAvailable({ branch: 'feature' })).toBe(false);
     expect(isBranchDiffAvailable({ default_branch: 'trunk' })).toBe(false);
+  });
+
+  test('prefetches an unknown branch count once without retrying a failed request', () => {
+    expect(shouldPrefetchBranchDiff(null, null)).toBe(true);
+    expect(shouldPrefetchBranchDiff([], null)).toBe(false);
+    expect(shouldPrefetchBranchDiff(null, 'request failed')).toBe(false);
   });
 
   test('requests the branch diff with bounded context and preserves an empty success', async () => {
