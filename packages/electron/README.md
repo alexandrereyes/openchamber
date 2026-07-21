@@ -111,6 +111,7 @@ Use an explicit override when testing a different OpenCode CLI build or when a u
 |----------|-----|
 | `OPENCHAMBER_ELECTRON_DEV=1` | Marks the runtime as desktop development mode |
 | `OPENCHAMBER_ELECTRON_USE_BUNDLED_UI=1` | Uses staged web assets instead of the HMR dev server |
+| `OPENCHAMBER_SKIP_LOCAL_SERVER=1` | Skips the in-process local OpenChamber server and uses the configured default remote instance; packaged/bundled UI remains available for connection recovery |
 | `OPENCHAMBER_HMR_UI_PORT` | Preferred Vite UI port for desktop dev, default `5173` |
 | `OPENCHAMBER_HMR_API_PORT` | Preferred API port for desktop dev, default `3901` |
 | `OPENCHAMBER_RUNTIME=desktop` | Set by Electron before starting the web server |
