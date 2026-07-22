@@ -90,6 +90,8 @@ A loopback-only updater fixture is available for contributor QA of N-to-N+1 AppI
 
 The package supports macOS, Windows, and Linux desktop features. Linux AppImage builds include in-app window controls and auto-update; system tray and launch-at-login remain macOS/Windows only. Some native discovery helpers are platform-specific. For example, app icon fetching and app filtering currently only work on macOS, while opening files in installed apps and installed-app discovery work on macOS and Windows (Linux returns an empty list without errors).
 
+The macOS menu bar item is enabled by default and can be disabled in General settings. The setting applies after restart; while disabled, Desktop does not create the native tray controller or start the renderer subscriptions, polling, quota refresh, or IPC updates that feed it.
+
 ## Bundled OpenCode CLI
 
 Packaged Desktop builds include the official OpenCode CLI that matches the pinned `@opencode-ai/sdk` version in the root `package.json`. `prepare:opencode-cli` downloads the platform-specific release artifact, caches it under `packages/electron/.cache/opencode-cli`, stages `opencode` or `opencode.exe` into `resources/opencode-cli`, and verifies `opencode --version` before packaging. Re-running the step is fast when the staged binary already matches the pinned version.

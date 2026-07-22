@@ -1977,6 +1977,7 @@ export const dict: Record<I18nKey, string> = {
   'chat.chatInput.toast.addedFileMentions': '已加入 {count} 個檔案提及',
   'chat.chatInput.toast.attachFileFailed': '附加檔案失敗',
   'chat.chatInput.toast.attachNamedFailed': '附加 {name} 失敗',
+  'chat.chatInput.toast.unsupportedAttachmentModalities': '{model} 不支援 {files} 所需的 {modalities} 輸入。你仍可傳送訊息，但這些附件可能會被忽略。',
   'chat.chatInput.toast.someFilesSkipped': '部分檔案被跳過：\n{summary}',
   'chat.chatInput.toast.vscodePickFailed': '在 VS Code 中選擇檔案失敗',
   'chat.chatInput.toast.openSessionFirst': '請先開啟一個會話',

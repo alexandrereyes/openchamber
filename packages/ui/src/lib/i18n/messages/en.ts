@@ -2007,6 +2007,7 @@ export const dict = {
   'chat.chatInput.toast.addedFileMentions': 'Added {count} file mention(s)',
   'chat.chatInput.toast.attachFileFailed': 'Failed to attach file',
   'chat.chatInput.toast.attachNamedFailed': 'Failed to attach {name}',
+  'chat.chatInput.toast.unsupportedAttachmentModalities': '{model} does not support {modalities} input required by {files}. You can still send the message, but these attachments may be ignored.',
   'chat.chatInput.toast.someFilesSkipped': 'Some files were skipped:\n{summary}',
   'chat.chatInput.toast.vscodePickFailed': 'Failed to pick files in VS Code',
   'chat.chatInput.toast.openSessionFirst': 'Open a session first',

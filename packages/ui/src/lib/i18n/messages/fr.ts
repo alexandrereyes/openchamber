@@ -1785,6 +1785,7 @@ export const dict = {
   'chat.chatInput.toast.addedFileMentions': 'Ajout des mentions du fichier {count}',
   'chat.chatInput.toast.attachFileFailed': 'Impossible de joindre le fichier',
   'chat.chatInput.toast.attachNamedFailed': 'Échec de la connexion du {name}',
+  'chat.chatInput.toast.unsupportedAttachmentModalities': '{model} ne prend pas en charge l’entrée {modalities} requise par {files}. Vous pouvez tout de même envoyer le message, mais ces pièces jointes risquent d’être ignorées.',
   'chat.chatInput.toast.someFilesSkipped': 'Certains fichiers ont été ignorés :\n{summary}',
   'chat.chatInput.toast.vscodePickFailed': 'Échec de la sélection des fichiers dans VS Code',
   'chat.chatInput.toast.openSessionFirst': 'Ouvrir d\'abord une session',

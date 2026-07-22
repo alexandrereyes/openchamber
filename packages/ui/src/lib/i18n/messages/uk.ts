@@ -1973,6 +1973,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.chatInput.toast.addedFileMentions": "Додано згадки файлів {count}",
   "chat.chatInput.toast.attachFileFailed": "Не вдалося прикріпити файл",
   "chat.chatInput.toast.attachNamedFailed": "Не вдалося прикріпити {name}",
+  "chat.chatInput.toast.unsupportedAttachmentModalities": "{model} не підтримує вхідні дані {modalities}, потрібні для {files}. Повідомлення все одно можна надіслати, але ці вкладення можуть бути проігноровані.",
   "chat.chatInput.toast.someFilesSkipped": "Деякі файли були пропущені:\n{summary}",
   "chat.chatInput.toast.vscodePickFailed": "Не вдалося вибрати файли в VS Code",
   "chat.chatInput.toast.openSessionFirst": "Спочатку відкрийте сесію",

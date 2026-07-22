@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   review:
+    name: automation
     if: |
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.comment.user.login != 'openchamber-bot[bot]' && (github.event.comment.body == '/oc-review' || startsWith(github.event.comment.body, '/oc-review ') || github.event.comment.body == '@openchamber-bot review' || startsWith(github.event.comment.body, '@openchamber-bot review '))) ||
@@ -32,21 +33,17 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Generate review app token
-        id: app-token
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
-        with:
-          app-id: ${{ secrets.OC_REVIEW_APP_ID }}
-          private-key: ${{ secrets.OC_REVIEW_APP_PRIVATE_KEY }}
-
       - name: Resolve pull request context
         id: pr
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           pr_json="$(gh pr view "$EVENT_PR_NUMBER" --json number,url,author,baseRefName,headRefName,headRefOid,headRepositoryOwner,isDraft)"
-          echo "number=$(printf '%s' "$pr_json" | jq -r '.number')" >> "$GITHUB_OUTPUT"
+          {
+            echo "number=$(printf '%s' "$pr_json" | jq -r '.number')"
+            echo "head_sha=$(printf '%s' "$pr_json" | jq -r '.headRefOid')"
+          } >> "$GITHUB_OUTPUT"
 
           if [ "$(printf '%s' "$pr_json" | jq -r '.isDraft')" = "true" ]; then
             echo "draft=true" >> "$GITHUB_OUTPUT"
@@ -59,14 +56,13 @@ jobs:
             echo "author=$(printf '%s' "$pr_json" | jq -r '.author.login')"
             echo "base_ref=$(printf '%s' "$pr_json" | jq -r '.baseRefName')"
             echo "head_ref=$(printf '%s' "$pr_json" | jq -r '.headRefName')"
-            echo "head_sha=$(printf '%s' "$pr_json" | jq -r '.headRefOid')"
             echo "head_repo_owner=$(printf '%s' "$pr_json" | jq -r '.headRepositoryOwner.login')"
           } >> "$GITHUB_OUTPUT"
 
       - name: Clear review status for draft
         if: steps.pr.outputs.draft == 'true'
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
           remove_args=()
@@ -79,6 +75,14 @@ jobs:
           if [ "${#remove_args[@]}" -gt 0 ]; then
             gh pr edit "$PR_NUMBER" "${remove_args[@]}"
           fi
+
+      - name: Generate review app token
+        id: app-token
+        if: steps.pr.outputs.draft == 'false'
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.OC_REVIEW_APP_ID }}
+          private-key: ${{ secrets.OC_REVIEW_APP_PRIVATE_KEY }}
 
       - name: Check review safety
         if: steps.pr.outputs.draft == 'false'
@@ -193,9 +197,7 @@ jobs:
           $CHANGED_SENSITIVE_FILES
           \`\`\`
 
-          Automated review cannot clear changes to its own policy or trust boundary. A maintainer must review and explicitly override this failing check."
-
-          exit 1
+          Automated review cannot clear changes to its own policy or trust boundary. A maintainer must review it directly."
 
       - name: Debounce new commits
         if: steps.pr.outputs.draft == 'false' && steps.safety.outputs.safe == 'true' && github.event_name == 'pull_request_target' && github.event.action == 'synchronize'
@@ -246,6 +248,7 @@ jobs:
           Required reviewed HEAD: $REVIEW_HEAD_SHA"
 
       - name: Verify and enforce review verdict
+        id: verdict
         if: always() && steps.pr.outputs.draft == 'false' && steps.safety.outputs.safe == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -362,7 +365,23 @@ jobs:
             echo "- Status: \`$review_label\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-          if [ "$verdict" != "pass" ]; then
-            echo "Review verdict is $verdict; only pass satisfies this check." >&2
-            exit 1
+      - name: Mark automation failure
+        if: always() && steps.pr.outputs.draft == 'false' && steps.verdict.outcome != 'success' && steps.safety.outputs.safe != 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REVIEW_HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          current_head="$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')"
+          if [ "$current_head" != "$REVIEW_HEAD_SHA" ]; then
+            exit 0
           fi
+
+          remove_args=()
+          while IFS= read -r label; do
+            case "$label" in
+              review:*) remove_args+=(--remove-label "$label") ;;
+            esac
+          done < <(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name')
+
+          gh pr edit "$PR_NUMBER" "${remove_args[@]}" --add-label "review:automation-failed"

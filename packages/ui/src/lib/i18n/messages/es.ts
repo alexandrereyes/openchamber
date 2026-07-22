@@ -1973,6 +1973,7 @@ export const dict: Record<I18nKey, string> = {
   "chat.chatInput.toast.addedFileMentions": "Se añadieron {count} mención(es) de archivo",
   "chat.chatInput.toast.attachFileFailed": "No se pudo adjuntar el archivo",
   "chat.chatInput.toast.attachNamedFailed": "No se pudo adjuntar {name}",
+  "chat.chatInput.toast.unsupportedAttachmentModalities": "{model} no admite la entrada de {modalities} necesaria para {files}. Aún puedes enviar el mensaje, pero estos adjuntos podrían ignorarse.",
   "chat.chatInput.toast.someFilesSkipped": "Algunos archivos se omitieron:\n{summary}",
   "chat.chatInput.toast.vscodePickFailed": "No se pudieron seleccionar archivos en VS Code",
   "chat.chatInput.toast.openSessionFirst": "Abre una sesión primero",
