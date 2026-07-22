@@ -59,13 +59,12 @@ export const shouldPrefetchBranchDiff = (
 
 export const loadBranchDiff = async (
   request: (
-    input: { mode: 'branch'; context: number; directory: string },
+    input: { mode: 'branch'; context: number },
     options?: { signal?: AbortSignal },
   ) => Promise<BranchDiffResult>,
-  directory: string,
   signal?: AbortSignal,
 ): Promise<VcsFileDiff[]> => {
-  const result = await request({ mode: 'branch', context: 3, directory }, { signal });
+  const result = await request({ mode: 'branch', context: 3 }, { signal });
   if (result.error) {
     const status = result.response?.status;
     throw new Error(`Branch diff failed${status ? ` (${status})` : ''}: ${formatSdkError(result.error)}`);

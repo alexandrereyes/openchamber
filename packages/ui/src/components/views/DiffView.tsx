@@ -1126,7 +1126,6 @@ export const DiffView: React.FC<DiffViewProps> = ({
                     const data = await Promise.race([
                         loadBranchDiff(
                             (input, options) => sdk.vcs.diff(input, options),
-                            effectiveDirectory,
                             controller.signal,
                         ),
                         timeoutPromise,
