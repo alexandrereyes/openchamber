@@ -53,6 +53,35 @@ describe("bootstrapDirectory", () => {
     expect(state.vcs_status).toBe("complete")
   })
 
+  test("preserves authoritative VCS metadata while rebootstrap refreshes it", async () => {
+    let state: State = {
+      ...createState(),
+      status: "complete",
+      vcs: { branch: "feature", default_branch: "main" },
+      vcs_status: "complete",
+    }
+    let resolveSessions!: () => void
+    const sessions = new Promise<void>((resolve) => {
+      resolveSessions = resolve
+    })
+    const bootstrapping = bootstrapDirectory({
+      directory: "/repo",
+      sdk: createSdk(),
+      getState: () => state,
+      set: (patch) => {
+        state = { ...state, ...patch }
+      },
+      global: { config: {}, projects: [project] },
+      loadSessions: () => sessions,
+    })
+
+    expect(state.vcs_status).toBe("complete")
+    expect(state.vcs).toEqual({ branch: "feature", default_branch: "main" })
+
+    resolveSessions()
+    expect(await bootstrapping).toBe("complete")
+  })
+
   test("prioritizes session loading without waiting for deferred fields", async () => {
     let state = createState()
     let deferredStarted = false

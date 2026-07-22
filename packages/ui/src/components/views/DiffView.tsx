@@ -1006,10 +1006,6 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const isGitRepo = useIsGitRepo(effectiveDirectory ?? null);
     const status = useGitStatus(effectiveDirectory ?? null);
     const isLoadingStatus = useGitLoadingStatus(effectiveDirectory ?? null);
-    const lastStatusFetch = useGitStore(React.useCallback(
-        (state) => effectiveDirectory ? state.directories.get(effectiveDirectory)?.lastStatusFetch ?? 0 : 0,
-        [effectiveDirectory],
-    ));
     const setActiveDirectory = useGitStore((state) => state.setActiveDirectory);
     const ensureStatus = useGitStore((state) => state.ensureStatus);
     const fetchStatus = useGitStore((state) => state.fetchStatus);
@@ -1158,7 +1154,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             controller?.abort();
             window.clearTimeout(timer);
         };
-    }, [branchAvailable, branchRefreshNonce, branchStateKey, effectiveDirectory, isActive, lastStatusFetch, shouldLoadBranchDiff]);
+    }, [branchAvailable, branchRefreshNonce, branchStateKey, effectiveDirectory, isActive, shouldLoadBranchDiff]);
 
     const cancelPendingScrollAlignment = React.useCallback(() => {
         pendingScrollTargetRef.current = null;
