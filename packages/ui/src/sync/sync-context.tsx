@@ -1873,7 +1873,7 @@ export function SyncProvider(props: {
             sdk: props.sdk,
             getState: () => store.getState(),
             set: (patch) => {
-              if (!context.isCurrent()) return
+              if (!context.isLatest()) return
               store.setState(patch)
               if (patch.session_status) {
                 applyGlobalSessionStatusSnapshot(directory, patch.session_status, store.getState().session.map((session) => session.id))
@@ -1882,7 +1882,7 @@ export function SyncProvider(props: {
                 ingestDirectoryStateIntoRoutingIndex(routingIndex, directory, store.getState())
               }
             },
-            isStale: () => !context.isCurrent(),
+            isStale: () => !context.isLatest(),
             global: {
               config: globalState.config,
               projects: globalState.projects,

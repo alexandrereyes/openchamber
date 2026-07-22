@@ -137,7 +137,7 @@ export async function bootstrapDirectory(input: {
   }
   const state = getState()
   const loading = state.status !== "complete"
-  commit({ vcs_status: "loading" })
+  if (state.vcs_status !== "complete") commit({ vcs_status: "loading" })
 
   // Seed from global state while we fetch directory-specific data
   const seededProject = projectID(directory, g.projects)
