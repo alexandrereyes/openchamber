@@ -2006,6 +2006,7 @@ export const dict: Record<I18nKey, string> = {
   'gitView.commit.aiHighlights.insertTooltip': '挿入のツールチップ',
   'gitView.commit.commitAria': 'コミットのariaラベル',
   'chat.chatInput.toast.attachNamedFailed': '{name}の添付に失敗しました',
+  'chat.chatInput.toast.unsupportedAttachmentModalities': '{model} は {files} に必要な {modalities} 入力をサポートしていません。メッセージは送信できますが、これらの添付ファイルは無視される可能性があります。',
   'chat.chatInput.toast.someFilesSkipped': '一部のファイルがスキップされました:\n{summary}',
   'chat.chatInput.toast.vscodePickFailed': 'VS Codeでのファイル選択に失敗しました',
   'chat.chatInput.toast.openSessionFirst': '先にセッションを開いてください',

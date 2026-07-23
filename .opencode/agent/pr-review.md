@@ -179,7 +179,7 @@ Choose exactly one review verdict:
 - `blocked`: at least one concrete correctness, security, mandatory-guidance, or contribution-contract blocker must be fixed.
 - `human-review-required`: the PR changes review policy/automation or another trust boundary that automation must not clear by itself, or safe automated review is otherwise impossible.
 
-Verdict precedence is `human-review-required`, `blocked`, `needs-evidence`, then `pass`. CI status is intentionally outside this verdict: a review may return `pass` while a separate required check fails, and both gates must pass independently before merge.
+Verdict precedence is `human-review-required`, `blocked`, `needs-evidence`, then `pass`. CI status is intentionally outside this verdict: a review may return `pass` while a separate required check fails. The AI verdict is advisory, is communicated through the `review:*` label and review comment, and must not fail the pull request check.
 
 ## Comment style
 

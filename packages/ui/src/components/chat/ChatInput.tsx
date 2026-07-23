@@ -11,6 +11,12 @@ import { useAutoReviewStore } from '@/stores/useAutoReviewStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useSelectionStore } from '@/sync/selection-store';
 import { useInputStore } from '@/sync/input-store';
+import {
+    ACCEPTED_ATTACHMENT_EXTENSIONS,
+    ATTACHMENT_ACCEPT,
+    getUnsupportedAttachmentInputs,
+    type AttachmentInputModality,
+} from '@/sync/attachment-files';
 import type { AttachedFile } from '@/stores/types/sessionTypes';
 import * as sessionActions from '@/sync/session-actions';
 import { useDirectorySync, useUserMessageHistory } from '@/sync/sync-context';
@@ -1093,6 +1099,13 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
 
     const currentProviderId = useConfigStore((state) => state.currentProviderId);
     const currentModelId = useConfigStore((state) => state.currentModelId);
+    const getModelMetadata = useConfigStore((state) => state.getModelMetadata);
+    // Subscribe to both sources read by getModelMetadata so async metadata and provider updates are observed.
+    useConfigStore((state) => state.modelsMetadata);
+    useConfigStore((state) => state.providers);
+    const currentModelMetadata = currentProviderId && currentModelId
+        ? getModelMetadata(currentProviderId, currentModelId)
+        : undefined;
     const currentVariant = useConfigStore((state) => state.currentVariant);
     const currentAgentName = useConfigStore((state) => state.currentAgentName);
     const setAgent = useConfigStore((state) => state.setAgent);
@@ -1128,6 +1141,53 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         title: '',
         content: '',
     });
+    const attachmentCompatibilityRef = React.useRef({
+        modelKey: `${currentProviderId ?? ''}/${currentModelId ?? ''}`,
+        modalitySignature: currentModelMetadata?.modalities?.input?.slice().sort().join(',') ?? null,
+        attachmentIds: new Set<string>(),
+    });
+
+    React.useEffect(() => {
+        const modelKey = `${currentProviderId ?? ''}/${currentModelId ?? ''}`;
+        const inputModalities = currentModelMetadata?.modalities?.input;
+        const modalitySignature = inputModalities?.slice().sort().join(',') ?? null;
+        const previous = attachmentCompatibilityRef.current;
+        const modelChanged = previous.modelKey !== modelKey;
+        const metadataBecameAvailable = previous.modalitySignature === null && modalitySignature !== null;
+        const filesToCheck = modelChanged || metadataBecameAvailable
+            ? attachedFiles
+            : attachedFiles.filter((file) => !previous.attachmentIds.has(file.id));
+
+        attachmentCompatibilityRef.current = {
+            modelKey,
+            modalitySignature,
+            attachmentIds: new Set(attachedFiles.map((file) => file.id)),
+        };
+
+        if (!inputModalities || filesToCheck.length === 0) return;
+
+        const incompatibleFiles = getUnsupportedAttachmentInputs(filesToCheck, inputModalities);
+        if (incompatibleFiles.length === 0) return;
+
+        const unsupportedModalities = Array.from(new Set(incompatibleFiles.map(({ modality }) => modality)));
+        const modalityLabels: Record<AttachmentInputModality, string> = {
+            text: t('chat.modelControls.modality.text'),
+            image: t('chat.modelControls.modality.image'),
+            pdf: t('chat.modelControls.modality.pdf'),
+            audio: t('chat.modelControls.modality.audio'),
+            video: t('chat.modelControls.modality.video'),
+        };
+        const filenames = incompatibleFiles.map(({ attachment }) => attachment.filename);
+        const fileSummary = filenames.length > 3
+            ? `${filenames.slice(0, 3).join(', ')} (+${filenames.length - 3})`
+            : filenames.join(', ');
+
+        toast.warning(t('chat.chatInput.toast.unsupportedAttachmentModalities', {
+            model: currentModelMetadata.name ?? currentModelId ?? '',
+            modalities: unsupportedModalities.map((modality) => modalityLabels[modality]).join(', '),
+            files: fileSummary,
+        }), { id: `attachment-modalities:${modelKey}` });
+    }, [attachedFiles, currentModelId, currentModelMetadata, currentProviderId, t]);
 
     const handleShowAttachmentPreview = React.useCallback((content: ToolPopupContent) => {
         if (!content.image) return;
@@ -1214,8 +1274,6 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         observer.observe(element);
         return () => observer.disconnect();
     }, []);
-
-    const sendableAttachedFiles = attachedFiles;
 
     const knownAgentNames = React.useMemo(
         () => new Set(agents.map((agent) => agent.name.toLowerCase())),
@@ -1317,18 +1375,18 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
     }, [inputMode, message, knownAgentNames]);
 
     const attachmentCitationRanges = React.useMemo<HighlightRange[]>(() => {
-        if (!message || !message.includes('[') || inputMode === 'shell' || sendableAttachedFiles.length === 0) {
+        if (!message || !message.includes('[') || inputMode === 'shell' || attachedFiles.length === 0) {
             return [];
         }
 
         return findAttachmentCitationRanges(
             message,
-            sendableAttachedFiles.map((file) => file.filename),
+            attachedFiles.map((file) => file.filename),
         ).map((range) => ({
             ...range,
             style: 'mentionFile' as const,
         }));
-    }, [inputMode, message, sendableAttachedFiles]);
+    }, [attachedFiles, inputMode, message]);
 
     // Combined source-mode highlight: markdown syntax + @mentions. Returns null
     // when there's nothing to highlight so the overlay stays off for plain text.
@@ -1757,7 +1815,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         }
     }, [pendingInputText, consumePendingInputText]);
 
-    const hasContent = message.trim().length > 0 || sendableAttachedFiles.length > 0 || hasDrafts;
+    const hasContent = message.trim().length > 0 || attachedFiles.length > 0 || hasDrafts;
     const hasQueuedMessages = queuedMessages.length > 0;
     const canSend = hasContent || hasQueuedMessages;
 
@@ -1767,9 +1825,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         const currentMessage = textareaRef.current?.value ?? message;
         return {
             message: currentMessage,
-            hasContent: currentMessage.trim().length > 0 || sendableAttachedFiles.length > 0 || hasDrafts,
+            hasContent: currentMessage.trim().length > 0 || attachedFiles.length > 0 || hasDrafts,
         };
-    }, [hasDrafts, message, sendableAttachedFiles.length]);
+    }, [attachedFiles.length, hasDrafts, message]);
 
     // Keep a ref to handleSubmit so callbacks don't depend on it.
     type SubmitOptions = {
@@ -1794,7 +1852,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         if (drafts.length > 0) {
             messageToQueue = appendInlineComments(messageToQueue, drafts);
         }
-        const attachmentsToQueue = sanitizeAttachmentsForSend(sendableAttachedFiles);
+        const attachmentsToQueue = sanitizeAttachmentsForSend(attachedFiles);
 
         addToQueue(messageQueueTarget, {
             content: messageToQueue,
@@ -1819,7 +1877,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         if (!isMobile) {
             textareaRef.current?.focus();
         }
-    }, [getCurrentInputSnapshot, currentSessionId, messageQueueTarget, inlineDraftTarget, sendableAttachedFiles, sanitizeAttachmentsForSend, addToQueue, clearAttachedFiles, isMobile, consumeDrafts, currentProviderId, currentModelId, currentAgentName, currentVariant]);
+    }, [getCurrentInputSnapshot, currentSessionId, messageQueueTarget, inlineDraftTarget, attachedFiles, sanitizeAttachmentsForSend, addToQueue, clearAttachedFiles, isMobile, consumeDrafts, currentProviderId, currentModelId, currentAgentName, currentVariant]);
 
     const handleQueuedMessageEdit = React.useCallback((content: string) => {
         setMessage(content);
@@ -1856,7 +1914,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         const inputSnapshot = options?.presetText != null
             ? {
                 message: options.presetText,
-                hasContent: options.presetText.trim().length > 0 || sendableAttachedFiles.length > 0 || hasDrafts,
+                hasContent: options.presetText.trim().length > 0 || attachedFiles.length > 0 || hasDrafts,
             }
             : getCurrentInputSnapshot();
         const queuedMessagesToSend = queuedMessageId
@@ -1958,7 +2016,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             const messageToSend = inputSnapshot.message.replace(/^\n+|\n+$/g, '');
             const { sanitizedText, mention } = parseAgentMentions(messageToSend, agents);
             const { sanitizedText: messageText, attachments: mentionAttachments } = extractInlineFileMentions(sanitizedText);
-            const attachmentsToSend = sanitizeAttachmentsForSend(sendableAttachedFiles);
+            const attachmentsToSend = sanitizeAttachmentsForSend(attachedFiles);
             addMentionedSkills(messageText);
 
             if (!agentMentionName && mention?.name) {
@@ -3716,14 +3774,15 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         }
 
         if (files.length > 0) {
+            let attached = false;
             for (const file of files) {
                 try {
-                    await addAttachedFile(file);
+                    attached = (await addAttachedFile(file)) || attached;
                 } catch (error) {
                     console.error('File attach failed', error);
-                    toast.error(error instanceof Error ? error.message : t('chat.chatInput.toast.attachFileFailed'));
                 }
             }
+            if (!attached) toast.error(t('chat.chatInput.toast.attachFileFailed'));
         }
         clearDropTextSuppression();
     };
@@ -3744,20 +3803,23 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
 
     const attachFiles = React.useCallback(async (files: FileList | File[]) => {
         const list = Array.isArray(files) ? files : Array.from(files);
+        let attached = false;
 
         for (const file of list) {
             try {
-                await addAttachedFile(file);
+                attached = (await addAttachedFile(file)) || attached;
             } catch (error) {
                 console.error('File attach failed', error);
-                toast.error(error instanceof Error ? error.message : t('chat.chatInput.toast.attachFileFailed'));
             }
+        }
+        if (list.length > 0 && !attached) {
+            toast.error(t('chat.chatInput.toast.attachFileFailed'));
         }
     }, [addAttachedFile, t]);
 
     const handleVSCodePickFiles = React.useCallback(async () => {
         try {
-            const data = (await vscodeApi?.pickFiles?.()) as {
+            const data = (await vscodeApi?.pickFiles?.({ extensions: ACCEPTED_ATTACHMENT_EXTENSIONS })) as {
                 files?: Array<{ name: string; mimeType?: string; dataUrl?: string }>;
                 skipped?: Array<{ name?: string; reason?: string }>;
             } | undefined;
@@ -5592,7 +5654,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             multiple
             className="hidden"
             onChange={handleLocalFileSelect}
-            accept="*/*"
+            accept={ATTACHMENT_ACCEPT}
         />
 
         {/* Mobile attachment sheet: replaces the dropdown (which stole focus and

@@ -219,6 +219,11 @@ the previous readiness label before it starts, and only `review:ready` means
 the pull request is ready to enter the maintainer review queue. Draft pull
 requests have no readiness label.
 
+AI review verdicts are advisory and never fail the pull request check. Readiness
+is communicated only through the `review:*` label and immutable review comment.
+The `automation` job fails only when the workflow itself cannot complete or
+verify a trustworthy result, in which case it applies `review:automation-failed`.
+
 Each completed review creates a new comment tied to its reviewed HEAD so the
 conversation remains chronological. Previous review comments are not rewritten.
 

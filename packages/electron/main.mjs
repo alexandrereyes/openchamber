@@ -183,8 +183,6 @@ const DISCORD_INVITE_URL = 'https://discord.gg/ZYRSdnwwKA';
 const INSTALLED_APPS_CACHE_TTL_SECS = 60 * 60 * 24;
 const INSTALLED_APPS_CACHE_FILE = 'discovered-apps.json';
 const OPENCODE_SHUTDOWN_GRACE_MS = 100;
-const SKIP_LOCAL_SERVER = process.env.OPENCHAMBER_SKIP_LOCAL_SERVER === '1';
-
 const { autoUpdater } = updaterPkg;
 
 const state = {
@@ -215,6 +213,7 @@ const state = {
   sshStatuses: new Map(),
   sshLogs: new Map(),
   trayController: null,
+  trayFocusListener: null,
   lastFocusedWindowId: null,
   keepAwakeBlockerId: null,
 };
@@ -328,6 +327,10 @@ const prepareForQuit = ({ installingUpdate = false } = {}) => {
     } catch {
     }
     state.trayController = null;
+  }
+  if (state.trayFocusListener) {
+    app.removeListener('browser-window-focus', state.trayFocusListener);
+    state.trayFocusListener = null;
   }
 
   if (state.mainWindow && !state.mainWindow.isDestroyed()) {
@@ -1320,6 +1323,11 @@ const inheritUserShellEnv = () => {
   }
 };
 
+const shouldSkipLocalServer = () => {
+  inheritUserShellEnv();
+  return process.env.OPENCHAMBER_SKIP_LOCAL_SERVER === '1';
+};
+
 const spawnLocalServer = async () => {
   inheritUserShellEnv();
 
@@ -2221,6 +2229,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url, runtimeConfig = {} }
   const usesCustomTitleBar = process.platform === 'darwin' || usesFramelessChrome;
   // macOS vibrancy, on by default; users can disable it (Appearance settings).
   const useVibrancy = process.platform === 'darwin' && readSettingsRoot().desktopVibrancy !== false;
+  const trayEnabled = process.platform !== 'darwin' || readSettingsRoot().desktopMacMenuBarEnabled !== false;
   const titleBarOverlayEnabled = false;
   const autoHidesNativeMenuBar = process.platform !== 'darwin';
   const windowIconPath = getWindowIconPath();
@@ -2256,6 +2265,7 @@ const createBrowserWindow = ({ label, restoreGeometry, url, runtimeConfig = {} }
         `--openchamber-home=${desktopHome}`,
         `--openchamber-macos-major=${desktopMacosMajor}`,
         `--openchamber-mac-vibrancy=${useVibrancy ? '1' : '0'}`,
+        `--openchamber-tray-enabled=${trayEnabled ? '1' : '0'}`,
         `--openchamber-boot-outcome=${JSON.stringify(state.bootOutcome || null)}`,
         `--openchamber-relay-host-id=${rendererRuntimeConfig.relayHostId || ''}`,
       ],
@@ -2619,6 +2629,7 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
   const usesFramelessChrome = process.platform === 'win32' || process.platform === 'linux';
   // macOS vibrancy, on by default; users can disable it (Appearance settings).
   const useVibrancy = process.platform === 'darwin' && readSettingsRoot().desktopVibrancy !== false;
+  const trayEnabled = process.platform !== 'darwin' || readSettingsRoot().desktopMacMenuBarEnabled !== false;
   const browserWindow = new BrowserWindow({
     title: 'OpenChamber Mini Chat',
     width: MINI_CHAT_WINDOW_WIDTH,
@@ -2644,6 +2655,7 @@ const createMiniChatWindow = async ({ mode, sessionId = '', directory = '', proj
         `--openchamber-runtime-headers=${JSON.stringify(desktopRequestHeaders)}`,
         `--openchamber-home=${desktopHome}`,
         `--openchamber-macos-major=${desktopMacosMajor}`,
+        `--openchamber-tray-enabled=${trayEnabled ? '1' : '0'}`,
       ],
       preload: isDev ? path.join(__dirname, 'preload.mjs') : path.join(app.getAppPath(), 'preload.mjs'),
       backgroundThrottling: false,
@@ -2760,7 +2772,8 @@ const resolveInitialUrl = async () => {
   const hmrUiPort = process.env.OPENCHAMBER_HMR_UI_PORT || '5173';
   const hmrApiUrl = `http://127.0.0.1:${hmrApiPort}`;
   const hmrUiUrl = `http://127.0.0.1:${hmrUiPort}`;
-  const localUrl = SKIP_LOCAL_SERVER
+  const skipLocalServer = shouldSkipLocalServer();
+  const localUrl = skipLocalServer
     ? null
     : isDev && await waitForHealth(hmrApiUrl, 5_000, 100)
       ? hmrApiUrl
@@ -4634,15 +4647,6 @@ ipcMain.handle('openchamber:file:grant-existing', async (event, filePath) => {
 // Icon assets: a calm outline (idle), a statically filled cube (a finished
 // session left unread), and an eased sequence the busy state breathes through.
 const TRAY_BREATH_FRAME_COUNT = 16;
-// Track the most recently focused window (main or mini-chat) so tray actions
-// can target the surface the user was last using, even when the tray menu is
-// open and nothing is focused right now.
-app.on('browser-window-focus', (_event, browserWindow) => {
-  if (browserWindow && !browserWindow.isDestroyed()) {
-    state.lastFocusedWindowId = browserWindow.id;
-  }
-});
-
 // The window the user is "on" for tray routing: the focused one, else the last
 // focused that is still alive.
 const resolveTraySurface = () => {
@@ -4692,6 +4696,7 @@ const trayIconAssets = () => {
 
 const setupTray = () => {
   if (!['darwin', 'win32'].includes(process.platform) || state.trayController) return;
+  if (process.platform === 'darwin' && readSettingsRoot().desktopMacMenuBarEnabled === false) return;
   const assets = trayIconAssets();
   if (!fs.existsSync(assets.idleIconPath)) {
     log.warn('[electron] tray icon missing, skipping tray setup', { iconPath: assets.idleIconPath });
@@ -4705,6 +4710,14 @@ const setupTray = () => {
     // Seed an empty snapshot so the icon appears immediately; the renderer
     // pushes the real state once the sync stores are mounted.
     state.trayController.update({ sessions: [], approvals: [] });
+    if (!state.trayFocusListener) {
+      state.trayFocusListener = (_event, browserWindow) => {
+        if (browserWindow && !browserWindow.isDestroyed()) {
+          state.lastFocusedWindowId = browserWindow.id;
+        }
+      };
+      app.on('browser-window-focus', state.trayFocusListener);
+    }
   } catch (error) {
     log.warn('[electron] failed to set up tray', error);
     state.trayController = null;
@@ -4916,7 +4929,7 @@ app.whenReady().then(async () => {
     state.requestHeaders = sanitizeRuntimeRequestHeaders(requestHeaders || {});
     // Serverless background startup re-probes the remote when a window is
     // eventually opened instead of trusting reachability from login time.
-    state.startupResolved = !SKIP_LOCAL_SERVER;
+    state.startupResolved = !shouldSkipLocalServer();
     state.initScript = buildInitScript(localOrigin, state.bootOutcome, apiBaseUrl, clientToken, state.requestHeaders);
     log.info('[electron] started in background without window');
     return;

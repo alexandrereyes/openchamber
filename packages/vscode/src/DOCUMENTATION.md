@@ -39,6 +39,8 @@ Keep `bridge.ts` as a thin orchestration layer that delegates message handling t
     - dropped-file parsing and attachment reading
     - models metadata fetch helper
 
+The webview CSP permits `blob:` only for `worker-src` so shared UI parsers can run bounded local decompression off the main thread. Blob scripts remain disallowed by `script-src`.
+
 - `bridge-localfs-proxy-runtime.ts`
   - Local `/api/fs/read` and `/api/fs/raw` proxy helpers and shared proxy utility helpers.
 
