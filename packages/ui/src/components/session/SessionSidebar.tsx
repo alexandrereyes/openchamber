@@ -78,6 +78,7 @@ import {
   orderSessionsByLifecycleScopes,
   useSessionOrderingStore,
 } from '@/sync/session-ordering';
+import { useGlobalSessionStatusStore } from '@/sync/global-session-status';
 import {
   refreshGlobalSessions,
   refreshGlobalSessionsForDirectories,
@@ -270,6 +271,10 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     (state) => isVisible ? state.rankById : EMPTY_SESSION_ORDER_RANKS,
     [isVisible],
   ));
+  const activeSessionIds = useGlobalSessionStatusStore(useShallow(
+    (state) => isVisible ? [...state.statusById.keys()].sort() : EMPTY_STRING_ARRAY,
+  ));
+  const activeSessionIdSet = React.useMemo(() => new Set(activeSessionIds), [activeSessionIds]);
   const togglePinnedSession = useSessionPinnedStore((state) => state.toggle);
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => {
     try {
@@ -1263,16 +1268,16 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     return meta;
   }, [projectSections, homeDirectory]);
 
-  const activeNowSessions = React.useMemo(() => {
+  const recentSessions = React.useMemo(() => {
     if (!showRecentSection || isVSCode) {
       return [];
     }
 
-    return deriveRecentSessions(sessions)
+    return deriveRecentSessions(sessions, activeSessionIdSet)
       .sort((a, b) => compareSessionsByLifecycleOrder(a, b, pinnedSessionIds, sessionOrderRanks));
-  }, [isVSCode, pinnedSessionIds, sessionOrderRanks, sessions, showRecentSection]);
+  }, [activeSessionIdSet, isVSCode, pinnedSessionIds, sessionOrderRanks, sessions, showRecentSection]);
 
-  // Prefetch is wired below, after recentSessionIds is computed.
+  // Prefetch is wired below, after recentSessions is computed.
 
   const activitySections = React.useMemo(() => {
     // VS Code renders the full grouped project view (one group per open
@@ -1281,8 +1286,6 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     if (isVSCode || !showRecentSection) {
       return [];
     }
-
-    const recentSessions = activeNowSessions;
 
     const toItem = (session: Session) => {
       const existing = sessionSidebarMetaById.get(session.id);
@@ -1316,7 +1319,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
     return [
       { key: 'active-now' as const, title: t('sessions.sidebar.activity.recentTitle'), items },
     ];
-  }, [activeNowSessions, filterSessionNodesForSearch, hasSessionSearchQuery, isVSCode, normalizedSessionSearchQuery, sessionSidebarMetaById, showRecentSection, t]);
+  }, [filterSessionNodesForSearch, hasSessionSearchQuery, isVSCode, normalizedSessionSearchQuery, recentSessions, sessionSidebarMetaById, showRecentSection, t]);
 
   const hasActivitySectionItems = React.useMemo(
     () => activitySections.some((section) => section.items.length > 0),
@@ -1728,7 +1731,7 @@ const SessionSidebarComponent: React.FC<SessionSidebarProps> = ({
       <SessionPrefetchEffect
         enabled={isVisible}
         sortedSessions={orderedSessions}
-        recentSessions={activeNowSessions}
+        recentSessions={recentSessions}
         prefetchSession={sync.prefetchSession}
       />
       <SidebarHeader
