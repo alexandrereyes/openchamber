@@ -248,6 +248,12 @@ export const createSettingsHelpers = (dependencies) => {
       }
       result.draftStarters = starters;
     }
+    if (typeof candidate.draftStartersCraftGoalAdded === 'boolean') {
+      result.draftStartersCraftGoalAdded = candidate.draftStartersCraftGoalAdded;
+    }
+    if (typeof candidate.draftStartersScheduleTaskAdded === 'boolean') {
+      result.draftStartersScheduleTaskAdded = candidate.draftStartersScheduleTaskAdded;
+    }
 
 
     if (typeof candidate.uiFont === 'string' && candidate.uiFont.length > 0) {
@@ -478,6 +484,9 @@ export const createSettingsHelpers = (dependencies) => {
     }
     if (typeof candidate.showOpenCodeUpdateNotifications === 'boolean') {
       result.showOpenCodeUpdateNotifications = candidate.showOpenCodeUpdateNotifications;
+    }
+    if (typeof candidate.agentControlToolEnabled === 'boolean') {
+      result.agentControlToolEnabled = candidate.agentControlToolEnabled;
     }
     if (typeof candidate.openCodeUpdateToastDismissedVersion === 'string') {
       const version = candidate.openCodeUpdateToastDismissedVersion.trim();

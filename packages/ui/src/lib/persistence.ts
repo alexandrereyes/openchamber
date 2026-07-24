@@ -548,6 +548,7 @@ const materializeAuthoritativeUiSettings = (settings: DesktopSettings): DesktopS
     maxLastMessageLength: defaults.maxLastMessageLength,
     inputSpellcheckEnabled: defaults.inputSpellcheckEnabled,
     showOpenCodeUpdateNotifications: defaults.showOpenCodeUpdateNotifications,
+    agentControlToolEnabled: defaults.agentControlToolEnabled,
     showToolFileIcons: defaults.showToolFileIcons,
     codeBlockLineWrap: defaults.codeBlockLineWrap,
     showTurnChangedFiles: defaults.showTurnChangedFiles,
@@ -703,6 +704,12 @@ const applyDesktopUiPreferences = (settings: DesktopSettings) => {
   ) {
     store.setShowOpenCodeUpdateNotifications(settings.showOpenCodeUpdateNotifications);
   }
+  if (
+    typeof settings.agentControlToolEnabled === 'boolean'
+    && settings.agentControlToolEnabled !== store.agentControlToolEnabled
+  ) {
+    store.setAgentControlToolEnabled(settings.agentControlToolEnabled);
+  }
   if (typeof settings.showToolFileIcons === 'boolean' && settings.showToolFileIcons !== store.showToolFileIcons) {
     store.setShowToolFileIcons(settings.showToolFileIcons);
   }
@@ -804,17 +811,33 @@ const applyDesktopUiPreferences = (settings: DesktopSettings) => {
         ...nextStarters.slice(insertAt),
       ];
     }
+    if (settings.draftStartersScheduleTaskAdded !== true && !nextStarters.some((starter) => starter.type === 'command' && starter.name === 'schedule-task')) {
+      const goalIndex = nextStarters.findIndex((starter) => starter.type === 'command' && starter.name === 'craft-goal');
+      const insertAt = goalIndex >= 0 ? goalIndex + 1 : nextStarters.length;
+      nextStarters = [
+        ...nextStarters.slice(0, insertAt),
+        { type: 'command', name: 'schedule-task' },
+        ...nextStarters.slice(insertAt),
+      ];
+    }
     if (JSON.stringify(store.globalDraftStarters) !== JSON.stringify(nextStarters)) {
       store.setGlobalDraftStarters(nextStarters);
     }
-    if (settings.draftStartersCraftGoalAdded !== true) {
+    if (settings.draftStartersCraftGoalAdded !== true || settings.draftStartersScheduleTaskAdded !== true) {
       settings.draftStarters = nextStarters;
       settings.draftStartersCraftGoalAdded = true;
+      settings.draftStartersScheduleTaskAdded = true;
     }
-  } else if (settings.draftStartersCraftGoalAdded !== true) {
-    // The built-in default already contains Craft a Goal; only persist the marker
-    // so removing it later remains a durable user choice.
-    settings.draftStartersCraftGoalAdded = true;
+  } else {
+    // The built-in default already contains Craft a Goal and Schedule a Task;
+    // only persist the markers so removing them later remains a durable user
+    // choice.
+    if (settings.draftStartersCraftGoalAdded !== true) {
+      settings.draftStartersCraftGoalAdded = true;
+    }
+    if (settings.draftStartersScheduleTaskAdded !== true) {
+      settings.draftStartersScheduleTaskAdded = true;
+    }
   }
   if (typeof settings.terminalFontSize === 'number' && Number.isFinite(settings.terminalFontSize) && settings.terminalFontSize !== store.terminalFontSize) {
     store.setTerminalFontSize(settings.terminalFontSize);
@@ -1022,6 +1045,9 @@ const sanitizeWebSettings = (payload: unknown): DesktopSettings | null => {
   }
   if (typeof candidate.draftStartersCraftGoalAdded === 'boolean') {
     result.draftStartersCraftGoalAdded = candidate.draftStartersCraftGoalAdded;
+  }
+  if (typeof candidate.draftStartersScheduleTaskAdded === 'boolean') {
+    result.draftStartersScheduleTaskAdded = candidate.draftStartersScheduleTaskAdded;
   }
   if (typeof candidate.showReasoningTraces === 'boolean') {
     result.showReasoningTraces = candidate.showReasoningTraces;
@@ -1301,6 +1327,9 @@ const sanitizeWebSettings = (payload: unknown): DesktopSettings | null => {
   }
   if (typeof candidate.showOpenCodeUpdateNotifications === 'boolean') {
     result.showOpenCodeUpdateNotifications = candidate.showOpenCodeUpdateNotifications;
+  }
+  if (typeof candidate.agentControlToolEnabled === 'boolean') {
+    result.agentControlToolEnabled = candidate.agentControlToolEnabled;
   }
   if (typeof candidate.openCodeUpdateToastDismissedVersion === 'string') {
     result.openCodeUpdateToastDismissedVersion = candidate.openCodeUpdateToastDismissedVersion.trim().slice(0, 128);
@@ -1672,7 +1701,8 @@ export const syncDesktopSettings = async (): Promise<void> => {
   // prevent server settings from reaching the Zustand store.
   const applySettings = async (settings: DesktopSettings) => {
     if (!isSettingsRuntimeContextCurrent(context)) return;
-    const shouldPersistCraftGoalMigration = settings.draftStartersCraftGoalAdded !== true;
+    const shouldPersistCraftGoalMigration = settings.draftStartersCraftGoalAdded !== true
+      || settings.draftStartersScheduleTaskAdded !== true;
     const authoritativeSettings = materializeAuthoritativeUiSettings(settings);
     try {
       persistToLocalStorage(settings);
@@ -1693,6 +1723,7 @@ export const syncDesktopSettings = async (): Promise<void> => {
       await updateDesktopSettings({
         ...(authoritativeSettings.draftStarters ? { draftStarters: authoritativeSettings.draftStarters } : {}),
         draftStartersCraftGoalAdded: true,
+        draftStartersScheduleTaskAdded: true,
       });
       if (!isSettingsRuntimeContextCurrent(context)) return;
     }

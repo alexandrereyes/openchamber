@@ -143,6 +143,7 @@ export type DesktopSettings = {
   desktopWindowControlsPosition?: DesktopWindowControlsPosition;
   inputSpellcheckEnabled?: boolean;
   showOpenCodeUpdateNotifications?: boolean;
+  agentControlToolEnabled?: boolean;
   openCodeUpdateToastDismissedVersion?: string;
   showToolFileIcons?: boolean;
   codeBlockLineWrap?: boolean;
@@ -208,6 +209,7 @@ export type DesktopSettings = {
   draftStarters?: DraftStarterRef[];
   // One-time migration marker: Craft a Goal was offered in the starter row.
   draftStartersCraftGoalAdded?: boolean;
+  draftStartersScheduleTaskAdded?: boolean;
 };
 
 type DesktopBridgeGlobal = {
