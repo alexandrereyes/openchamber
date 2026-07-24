@@ -57,11 +57,13 @@ import {
   useSessionOrderingStore,
 } from '@/sync/session-ordering';
 import { useSessionUIStore } from '@/sync/session-ui-store';
+import { getAllSyncSessions } from '@/sync/sync-refs';
 import { useAllLiveSessions } from '@/sync/sync-context';
 import type { WorktreeMetadata } from '@/types/worktree';
 
 import { MobileProjectEditSurface } from './MobileProjectEditSurface';
 import { MobileSurfaceShell } from './MobileSurfaceShell';
+import { collectActiveSessionSubtreeIds } from './mobileSessionArchive';
 
 type MobileSessionsSheetProps = {
   open: boolean;
@@ -540,7 +542,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const currentDirectory = useDirectoryStore((state) => state.currentDirectory);
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
-  const archiveSession = useSessionUIStore((state) => state.archiveSession);
+  const archiveSessions = useSessionUIStore((state) => state.archiveSessions);
   const openNewSessionDraft = useSessionUIStore((state) => state.openNewSessionDraft);
   const setActiveProject = useProjectsStore((state) => state.setActiveProject);
   const setActiveProjectIdOnly = useProjectsStore((state) => state.setActiveProjectIdOnly);
@@ -863,9 +865,25 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
 
   const handleConfirmArchive = async (session: Session) => {
     setConfirmingArchiveSessionId(null);
-    const ok = await archiveSession(session.id);
-    if (ok) toast.success(t('sessions.sidebar.session.archive.success'));
-    else toast.error(t('sessions.sidebar.session.archive.error'));
+    const globalSessions = useGlobalSessionsStore.getState();
+    const ids = collectActiveSessionSubtreeIds([
+      ...getAllSyncSessions(),
+      ...globalSessions.activeSessions,
+      ...globalSessions.archivedSessions,
+    ], session.id);
+    if (ids.length === 0) return;
+
+    const { archivedIds, failedIds } = await archiveSessions(ids);
+    if (archivedIds.length > 0) {
+      toast.success(archivedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.archivedSingle', { count: archivedIds.length })
+        : t('sessions.sidebar.bulkActions.archivedPlural', { count: archivedIds.length }));
+    }
+    if (failedIds.length > 0) {
+      toast.error(failedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.failedArchiveSingle', { count: failedIds.length })
+        : t('sessions.sidebar.bulkActions.failedArchivePlural', { count: failedIds.length }));
+    }
   };
 
   const handleStartNewChat = () => {
