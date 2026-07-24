@@ -567,7 +567,6 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const [gitProjectPaths, setGitProjectPaths] = React.useState<Set<string>>(new Set());
   const [editingOrder, setEditingOrder] = React.useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = React.useState<string | null>(null);
-  const globalRefreshPromise = React.useRef<ReturnType<typeof refreshGlobalSessions> | null>(null);
   // Per-bucket count of sessions revealed past the default page. Ephemeral —
   // resets when the sheet closes or when a group/project is toggled. Expand
   // state itself lives in useMobileSessionTreeStore (persisted).
@@ -584,12 +583,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
       setConfirmingArchiveSessionId(null);
       return;
     }
-    const refreshPromise = refreshGlobalSessions(liveSessions);
-    globalRefreshPromise.current = refreshPromise;
-    const clearRefreshPromise = () => {
-      if (globalRefreshPromise.current === refreshPromise) globalRefreshPromise.current = null;
-    };
-    void refreshPromise.then(clearRefreshPromise, clearRefreshPromise);
+    void refreshGlobalSessions(liveSessions);
     // intentionally only on open transition — live overlay handles updates after that
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -871,8 +865,6 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
 
   const handleConfirmArchive = async (session: Session) => {
     setConfirmingArchiveSessionId(null);
-    await globalRefreshPromise.current?.catch(() => undefined);
-
     const globalSessions = useGlobalSessionsStore.getState();
     const ids = collectActiveSessionSubtreeIds([
       ...getAllSyncSessions(),
