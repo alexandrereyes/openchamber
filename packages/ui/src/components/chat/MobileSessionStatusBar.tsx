@@ -1,7 +1,7 @@
 import React from 'react';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useAllSessionStatuses, useAllLiveSessions } from '@/sync/sync-context';
-import { mergeLiveSessionWithGlobalSession, useGlobalSessionsStore, ensureGlobalSessionsLoaded, refreshGlobalSessions } from '@/stores/useGlobalSessionsStore';
+import { combineActiveSessionsWithLive, useGlobalSessionsStore, ensureGlobalSessionsLoaded, refreshGlobalSessions } from '@/stores/useGlobalSessionsStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import type { Session } from '@opencode-ai/sdk/v2';
@@ -29,22 +29,17 @@ interface SessionWithStatus extends Session {
 // Cross-project session source. Mirrors the dedicated MobileSessionsSheet:
 // global sessions cover all directories (even unbootstrapped ones), while the
 // live aggregate (`useAllLiveSessions`) surfaces fresher data and every
-// bootstrapped directory. Merging both makes other projects' sessions appear.
+// bootstrapped directory. Merging both makes other projects' sessions appear,
+// and the global archived list stays the negative authority so a live copy that
+// has not caught up cannot resurrect an archived session.
 function useAllProjectSessions(): Session[] {
   const liveSessions = useAllLiveSessions();
   const globalActiveSessions = useGlobalSessionsStore((state) => state.activeSessions);
-  return React.useMemo(() => {
-    const liveById = new Map(liveSessions.map((session) => [session.id, session]));
-    const merged = globalActiveSessions.map((session) => {
-      const liveSession = liveById.get(session.id);
-      return liveSession ? mergeLiveSessionWithGlobalSession(liveSession, session) : session;
-    });
-    const seen = new Set(merged.map((session) => session.id));
-    for (const session of liveSessions) {
-      if (!seen.has(session.id)) merged.push(session);
-    }
-    return merged;
-  }, [globalActiveSessions, liveSessions]);
+  const globalArchivedSessions = useGlobalSessionsStore((state) => state.archivedSessions);
+  return React.useMemo(
+    () => combineActiveSessionsWithLive({ globalActiveSessions, globalArchivedSessions, liveSessions }),
+    [globalActiveSessions, globalArchivedSessions, liveSessions],
+  );
 }
 
 // Max sessions shown per (filtered) project list - a "recent" cap applied

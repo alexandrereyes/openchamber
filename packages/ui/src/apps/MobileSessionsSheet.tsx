@@ -45,7 +45,7 @@ import { PROJECT_COLOR_MAP, PROJECT_ICON_MAP, ProjectIconImage } from '@/lib/pro
 import { cn } from '@/lib/utils';
 import { listProjectWorktrees } from '@/lib/worktrees/worktreeManager';
 import { useDirectoryStore } from '@/stores/useDirectoryStore';
-import { mergeLiveSessionWithGlobalSession, refreshGlobalSessions, useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
+import { combineActiveSessionsWithLive, refreshGlobalSessions, useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useMobileSessionExpansionStore } from '@/stores/useMobileSessionExpansionStore';
 import { useMobileSessionTreeStore } from '@/stores/useMobileSessionTreeStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
@@ -529,6 +529,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const { git } = useRuntimeAPIs();
   const liveSessions = useAllLiveSessions();
   const globalActiveSessions = useGlobalSessionsStore((state) => state.activeSessions);
+  const globalArchivedSessions = useGlobalSessionsStore((state) => state.archivedSessions);
   const pinnedSessionIds = useSessionPinnedStore(React.useCallback(
     (state) => open || variant === 'sidebar' ? state.ids : EMPTY_PINNED_SESSION_IDS,
     [open, variant],
@@ -647,20 +648,14 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   /**
    * Global sessions cover all directories — even unbootstrapped ones — so the tree shows
    * accurate counts even when a worktree's live store hasn't been hydrated yet. Live
-   * sessions overlay for fresher data on the active directory.
+   * sessions overlay for fresher data on the active directory, while the global archived
+   * list stays the negative authority so a live copy that has not caught up cannot
+   * resurrect an archived session.
    */
-  const sessions = React.useMemo(() => {
-    const liveById = new Map(liveSessions.map((session) => [session.id, session]));
-    const merged = globalActiveSessions.map((session) => {
-      const liveSession = liveById.get(session.id);
-      return liveSession ? mergeLiveSessionWithGlobalSession(liveSession, session) : session;
-    });
-    const seenIds = new Set(merged.map((session) => session.id));
-    for (const session of liveSessions) {
-      if (!seenIds.has(session.id)) merged.push(session);
-    }
-    return merged;
-  }, [globalActiveSessions, liveSessions]);
+  const sessions = React.useMemo(
+    () => combineActiveSessionsWithLive({ globalActiveSessions, globalArchivedSessions, liveSessions }),
+    [globalActiveSessions, globalArchivedSessions, liveSessions],
+  );
 
   const normalizedQuery = query.trim().toLowerCase();
 

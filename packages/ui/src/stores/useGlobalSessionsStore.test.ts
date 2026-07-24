@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Session } from '@opencode-ai/sdk/v2';
 
 import {
+  combineActiveSessionsWithLive,
   isGlobalSessionRecencyOnlyUpdate,
   resolveGlobalSessionDirectory,
   mergeLiveSessionWithGlobalSession,
@@ -147,6 +148,87 @@ describe('mergeLiveSessionWithGlobalSession', () => {
 
     const merged = mergeLiveSessionWithGlobalSession(live, global);
     expect(resolveGlobalSessionDirectory(merged)).toBe('/repo/worktree');
+  });
+});
+
+describe('combineActiveSessionsWithLive', () => {
+  const listSession = (id: string, extra: SessionExtra = {}): Session => ({
+    id,
+    title: id,
+    time: { created: 1, updated: 2 },
+    ...extra,
+  } as Session);
+
+  test('merges a live update into its global active session exactly once', () => {
+    const global = listSession('ses_1', { directory: '/repo/app', share: { url: 'https://global.example/s' } });
+    const live = listSession('ses_1', { title: 'Live title', time: { created: 1, updated: 9 } });
+
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [global],
+      globalArchivedSessions: [],
+      liveSessions: [live],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_1']);
+    expect(combined[0].title).toBe('Live title');
+    expect(combined[0].time?.updated).toBe(9);
+    // Live payloads omit share/directory metadata the global cache owns.
+    expect(combined[0].share?.url).toBe('https://global.example/s');
+    expect(resolveGlobalSessionDirectory(combined[0])).toBe('/repo/app');
+  });
+
+  test('keeps a live-only session that is not known to be archived', () => {
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [],
+      globalArchivedSessions: [],
+      liveSessions: [listSession('ses_live_only')],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_live_only']);
+  });
+
+  test('drops a globally archived session even when a stale live copy still has it', () => {
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [listSession('ses_other')],
+      globalArchivedSessions: [listSession('ses_archived', { time: { created: 1, updated: 2, archived: 3 } })],
+      liveSessions: [listSession('ses_archived'), listSession('ses_other')],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_other']);
+  });
+
+  test('archived membership wins when the same id is in both global lists and live', () => {
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [listSession('ses_raced'), listSession('ses_kept')],
+      globalArchivedSessions: [listSession('ses_raced', { time: { created: 1, updated: 2, archived: 3 } })],
+      liveSessions: [listSession('ses_raced', { title: 'Live raced' })],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_kept']);
+  });
+
+  test('does not repeat a live-only session that appears twice in the live list', () => {
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [listSession('ses_global')],
+      globalArchivedSessions: [],
+      liveSessions: [
+        listSession('ses_global'),
+        listSession('ses_live_only'),
+        listSession('ses_live_only'),
+      ],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_global', 'ses_live_only']);
+  });
+
+  test('preserves global active order and appends live-only sessions after it', () => {
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [listSession('ses_c'), listSession('ses_a'), listSession('ses_b')],
+      globalArchivedSessions: [listSession('ses_a', { time: { created: 1, updated: 2, archived: 3 } })],
+      liveSessions: [listSession('ses_z'), listSession('ses_b'), listSession('ses_y')],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_c', 'ses_b', 'ses_z', 'ses_y']);
   });
 });
 
