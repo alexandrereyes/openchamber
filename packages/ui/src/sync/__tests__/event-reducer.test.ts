@@ -239,6 +239,16 @@ describe("applyDirectoryEvent", () => {
     } as Event)).toBe(false)
   })
 
+  test("ignores malformed branch updates", () => {
+    const draft = state({ vcs: { branch: "feature/current", default_branch: "trunk" } })
+
+    expect(applyDirectoryEvent(draft, {
+      type: "vcs.branch.updated",
+      properties: {},
+    } as Event)).toBe(false)
+    expect(draft.vcs).toEqual({ branch: "feature/current", default_branch: "trunk" })
+  })
+
   test("updates permission request arrays immutably", () => {
     const initialPermissions = [
       { id: "perm_1", sessionID: "ses_1" } as PermissionRequest,
