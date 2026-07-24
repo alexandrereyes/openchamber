@@ -248,6 +248,9 @@ export const createSettingsHelpers = (dependencies) => {
       }
       result.draftStarters = starters;
     }
+    if (typeof candidate.draftStartersVisible === 'boolean') {
+      result.draftStartersVisible = candidate.draftStartersVisible;
+    }
     if (typeof candidate.draftStartersCraftGoalAdded === 'boolean') {
       result.draftStartersCraftGoalAdded = candidate.draftStartersCraftGoalAdded;
     }

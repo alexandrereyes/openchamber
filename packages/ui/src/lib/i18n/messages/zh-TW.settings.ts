@@ -1755,6 +1755,8 @@
   'settings.openchamber.visual.field.showSplitAssistantMessageActionsTooltip': '在同一則回覆中，如果助理文字區塊後方還有工具呼叫，則顯示「複製回答」「儲存為圖片」和「朗讀」操作。',
   'settings.openchamber.visual.field.allowPromptingSubagentSessionsAria': '允許向子 Agent 工作階段傳送提示',
   'settings.openchamber.visual.field.allowPromptingSubagentSessions': '允許向子 Agent 工作階段傳送提示',
+  'settings.openchamber.visual.field.draftStartersVisible': '在新工作階段畫面顯示快速啟動項目',
+  'settings.openchamber.visual.field.draftStartersVisibleAria': '在新工作階段畫面顯示快速啟動項目',
   'settings.openchamber.visual.field.showToolFileIconsAria': '顯示工具檔案圖示',
   'settings.openchamber.visual.field.codeBlockLineWrapAria': '程式碼區塊自動換行',
   'settings.openchamber.visual.field.codeBlockLineWrap': '程式碼區塊自動換行',

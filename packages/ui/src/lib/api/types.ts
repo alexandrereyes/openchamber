@@ -676,6 +676,7 @@ export interface SettingsPayload {
   pwaAppName?: string;
   mobileKeyboardMode?: 'native' | 'resize-content';
   draftStarters?: DraftStarterRef[];
+  draftStartersVisible?: boolean;
   draftStartersCraftGoalAdded?: boolean;
 
   [key: string]: unknown;

@@ -591,6 +591,7 @@ interface UIStore {
   fontSize: number;
   // Global draft welcome starters; null = unset (use the default built-in set).
   globalDraftStarters: DraftStarterRef[] | null;
+  draftStartersVisible: boolean;
   terminalFontSize: number;
   terminalShell: TerminalShell;
   terminalLoginShells: TerminalShell[];
@@ -751,6 +752,7 @@ interface UIStore {
   setMessageLimit: (value: number) => void;
   setFontSize: (size: number) => void;
   setGlobalDraftStarters: (refs: DraftStarterRef[]) => void;
+  setDraftStartersVisible: (value: boolean) => void;
   setTerminalFontSize: (size: number) => void;
   setTerminalShell: (shell: TerminalShell) => void;
   setTerminalLoginShells: (shells: TerminalShell[]) => void;
@@ -978,6 +980,7 @@ export const useUIStore = create<UIStore>()(
         expandedEditorToolbar: false,
         showSplitAssistantMessageActions: false,
         allowPromptingSubagentSessions: false,
+        draftStartersVisible: true,
         isMobileSessionStatusBarCollapsed: false,
         mobileSessionPanelOpen: false,
         mobileSessionFilterProjectId: null,
@@ -1673,6 +1676,10 @@ export const useUIStore = create<UIStore>()(
 
         setGlobalDraftStarters: (refs) => {
           set({ globalDraftStarters: refs });
+        },
+
+        setDraftStartersVisible: (value) => {
+          set({ draftStartersVisible: value });
         },
 
         setTerminalFontSize: (size) => {
@@ -2420,6 +2427,7 @@ export const useUIStore = create<UIStore>()(
           expandedEditorToolbar: state.expandedEditorToolbar,
           showSplitAssistantMessageActions: state.showSplitAssistantMessageActions,
           allowPromptingSubagentSessions: state.allowPromptingSubagentSessions,
+          draftStartersVisible: state.draftStartersVisible,
           isMobileSessionStatusBarCollapsed: state.isMobileSessionStatusBarCollapsed,
           mobileSessionFilterProjectId: state.mobileSessionFilterProjectId,
           shortcutOverrides: state.shortcutOverrides,

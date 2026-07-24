@@ -381,6 +381,8 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
     const setShowSplitAssistantMessageActions = useUIStore(state => state.setShowSplitAssistantMessageActions);
     const allowPromptingSubagentSessions = useUIStore(state => state.allowPromptingSubagentSessions);
     const setAllowPromptingSubagentSessions = useUIStore(state => state.setAllowPromptingSubagentSessions);
+    const draftStartersVisible = useUIStore(state => state.draftStartersVisible);
+    const setDraftStartersVisible = useUIStore(state => state.setDraftStartersVisible);
     const messageStreamTransport = useConfigStore((state) => state.settingsMessageStreamTransport);
     const setMessageStreamTransport = useConfigStore((state) => state.setSettingsMessageStreamTransport);
     const effectiveMessageStreamTransport = messageStreamTransport;
@@ -499,6 +501,11 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
         setPromptNavigatorEnabled(enabled);
         void updateDesktopSettings({ promptNavigatorEnabled: enabled });
     }, [setPromptNavigatorEnabled]);
+
+    const handleDraftStartersVisibleChange = React.useCallback((enabled: boolean) => {
+        setDraftStartersVisible(enabled);
+        void updateDesktopSettings({ draftStartersVisible: enabled });
+    }, [setDraftStartersVisible]);
 
     const handleExpandedEditorToolbarChange = React.useCallback((enabled: boolean) => {
         setExpandedEditorToolbar(enabled);
@@ -1766,12 +1773,18 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         />
                                     </SettingsSection>
                                 )}
-                                {(shouldShow('sessionAssist') || shouldShow('subagentReadOnlyBanner')) && (
-                                    <SettingsSection
-                                        title={t('settings.openchamber.visual.section.sessionAssistance')}
-                                        settingsItem="chat.session-assistance"
-                                        contentClassName={SETTINGS_OPTION_STACK_CLASS}
-                                    >
+                                <SettingsSection
+                                    title={t('settings.openchamber.visual.section.sessionAssistance')}
+                                    settingsItem="chat.session-assistance"
+                                    contentClassName={SETTINGS_OPTION_STACK_CLASS}
+                                >
+                                    <SettingsCheckboxRow
+                                        checked={draftStartersVisible}
+                                        onChange={handleDraftStartersVisibleChange}
+                                        label={t('settings.openchamber.visual.field.draftStartersVisible')}
+                                        ariaLabel={t('settings.openchamber.visual.field.draftStartersVisibleAria')}
+                                        settingsItem="chat.draft-starters-visible"
+                                    />
                                         {shouldShow('sessionAssist') && (
                                             <>
                                                 <SettingsCheckboxRow
@@ -1799,8 +1812,7 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                                 settingsItem="chat.subagent-read-only-banner"
                                             />
                                         )}
-                                    </SettingsSection>
-                                )}
+                                </SettingsSection>
                                 {/* The goal loop runs in the web server — VS Code only renders
                                     goal state, so the settings section is hidden there too. */}
                                 {shouldShow('sessionGoal') && !isVSCode && (

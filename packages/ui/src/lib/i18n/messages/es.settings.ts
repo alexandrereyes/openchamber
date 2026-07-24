@@ -1849,6 +1849,8 @@ export const settingsDict = {
   "settings.openchamber.visual.field.showSplitAssistantMessageActionsTooltip": "Muestra Copiar respuesta, Guardar como imagen y Leer en voz alta en bloques de texto del asistente que aparecen antes de llamadas a herramientas posteriores dentro de la misma respuesta.",
   "settings.openchamber.visual.field.allowPromptingSubagentSessionsAria": "Permitir enviar solicitudes a sesiones de subagentes",
   "settings.openchamber.visual.field.allowPromptingSubagentSessions": "Permitir solicitudes en sesiones de subagentes",
+  "settings.openchamber.visual.field.draftStartersVisible": "Mostrar iniciadores en la pantalla de nueva sesión",
+  "settings.openchamber.visual.field.draftStartersVisibleAria": "Mostrar iniciadores en la pantalla de nueva sesión",
   "settings.openchamber.visual.field.showToolFileIconsAria": "Mostrar iconos de archivos de herramientas",
   "settings.openchamber.visual.field.codeBlockLineWrapAria": "Ajustar líneas de bloques de código",
   "settings.openchamber.visual.field.codeBlockLineWrap": "Ajustar líneas de bloques de código",

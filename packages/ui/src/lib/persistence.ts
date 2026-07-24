@@ -568,6 +568,7 @@ const materializeAuthoritativeUiSettings = (settings: DesktopSettings): DesktopS
     expandedEditorToolbar: defaults.expandedEditorToolbar,
     wideChatLayoutEnabled: defaults.wideChatLayoutEnabled,
     showSplitAssistantMessageActions: defaults.showSplitAssistantMessageActions,
+    draftStartersVisible: defaults.draftStartersVisible,
     reportUsage: defaults.reportUsage,
     fontSize: defaults.fontSize,
     terminalFontSize: defaults.terminalFontSize,
@@ -839,6 +840,9 @@ const applyDesktopUiPreferences = (settings: DesktopSettings) => {
       settings.draftStartersScheduleTaskAdded = true;
     }
   }
+  if (typeof settings.draftStartersVisible === 'boolean' && settings.draftStartersVisible !== store.draftStartersVisible) {
+    store.setDraftStartersVisible(settings.draftStartersVisible);
+  }
   if (typeof settings.terminalFontSize === 'number' && Number.isFinite(settings.terminalFontSize) && settings.terminalFontSize !== store.terminalFontSize) {
     store.setTerminalFontSize(settings.terminalFontSize);
   }
@@ -1042,6 +1046,9 @@ const sanitizeWebSettings = (payload: unknown): DesktopSettings | null => {
   }
   if (Array.isArray(candidate.draftStarters)) {
     result.draftStarters = sanitizeStarterRefs(candidate.draftStarters);
+  }
+  if (typeof candidate.draftStartersVisible === 'boolean') {
+    result.draftStartersVisible = candidate.draftStartersVisible;
   }
   if (typeof candidate.draftStartersCraftGoalAdded === 'boolean') {
     result.draftStartersCraftGoalAdded = candidate.draftStartersCraftGoalAdded;

@@ -360,6 +360,7 @@ describe('updateDesktopSettings', () => {
         favoriteModels: [{ providerID: 'anthropic', modelID: 'claude-sonnet-4' }],
         followUpBehavior: 'steer',
         draftStarters: [{ type: 'command', name: 'runtime-a' }],
+        draftStartersVisible: false,
         draftStartersCraftGoalAdded: true, draftStartersScheduleTaskAdded: true,
       },
       source: 'web',
@@ -370,6 +371,7 @@ describe('updateDesktopSettings', () => {
     expect(useUIStore.getState().terminalShell).toBe('fish');
     expect(useUIStore.getState().favoriteModels).toHaveLength(1);
     expect(useUIStore.getState().globalDraftStarters).toEqual([{ type: 'command', name: 'runtime-a' }]);
+    expect(useUIStore.getState().draftStartersVisible).toBe(false);
     expect(useMessageQueueStore.getState().followUpBehavior).toBe('steer');
 
     switchRuntimeEndpoint({ apiBaseUrl: 'https://preferences-b.example', runtimeKey: 'preferences-b' });
@@ -383,6 +385,7 @@ describe('updateDesktopSettings', () => {
     expect(useUIStore.getState().terminalShell).toBe('auto');
     expect(useUIStore.getState().favoriteModels).toEqual([]);
     expect(useUIStore.getState().globalDraftStarters).toBeNull();
+    expect(useUIStore.getState().draftStartersVisible).toBe(true);
     expect(useMessageQueueStore.getState().followUpBehavior).toBe('queue');
   });
 
