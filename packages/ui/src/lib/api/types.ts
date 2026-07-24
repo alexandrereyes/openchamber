@@ -778,6 +778,11 @@ export interface ApnsTokenPayload {
   token: string;
   /** 'ios' (APNs) or 'android' (FCM) — lets the relay route the token to the right service. */
   platform?: string;
+  /**
+   * APNs environment the token belongs to: 'sandbox' for Xcode/dev-signed installs,
+   * 'production' for TestFlight/App Store. Omitted when unknown (server defaults to production).
+   */
+  environment?: 'sandbox' | 'production';
 }
 
 export interface PushAPI {
