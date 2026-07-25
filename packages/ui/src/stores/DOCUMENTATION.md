@@ -56,6 +56,7 @@ User-visible session ordering is also not owned by the global cache array order.
 
 Global refresh rules:
 
+- The OpenCode `archived` list flag means "also include archived sessions", so `listGlobalSessionPages` narrows archived requests to records carrying `time.archived`. The archived cache must never contain active sessions, because it is negative authority for every active list.
 - Per-directory refresh is bounded to two requests across callers and prioritizes the current directory.
 - Each directory is an independent completeness scope. A failed directory preserves its previous sessions while successful directories reconcile normally.
 - Fetch failure must remain distinguishable from a successful empty list; failed scopes cannot destructively clear cached sessions.
@@ -229,6 +230,7 @@ Expected model:
 - `GitView` / `DiffView` ensure current-directory Git state when visible
 - explicit Git actions refresh status/branches/log as needed
 - successful file-mutating tools can issue a one-shot Git refresh hint
+- non-`.git` file-watcher events issue a coalesced VCS diff refresh hint for visible diff consumers
 - no root-level background Git polling
 
 ### PR
