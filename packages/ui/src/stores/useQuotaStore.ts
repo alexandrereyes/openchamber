@@ -8,9 +8,10 @@ import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { getDefaultModels } from '@/lib/quota/model-families';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 
 const DEFAULT_REFRESH_INTERVAL_MS = 60000;
-let fetchAllQuotasInFlight: Promise<void> | null = null;
+const fetchAllQuotasInFlight = new Map<string, { request: Promise<void>; token: symbol }>();
 
 interface QuotaSettingsState {
   autoRefresh: boolean;
@@ -163,9 +164,12 @@ export const useQuotaStore = create<QuotaStore>()(
       },
 
       fetchAllQuotas: () => {
-        if (fetchAllQuotasInFlight) return fetchAllQuotasInFlight;
+        const runtimeKey = getRuntimeKey();
+        const inFlight = fetchAllQuotasInFlight.get(runtimeKey);
+        if (inFlight) return inFlight.request;
 
-        const request = Promise.resolve().then(async () => {
+        const token = Symbol();
+        const request = (async () => {
           set({ isLoading: true, error: null });
           const providerIds = QUOTA_PROVIDERS.map((provider) => provider.id);
           try {
@@ -177,11 +181,13 @@ export const useQuotaStore = create<QuotaStore>()(
             const message = error instanceof Error ? error.message : 'Failed to fetch quotas';
             set({ error: message });
           } finally {
-            set({ isLoading: false });
-            fetchAllQuotasInFlight = null;
+            if (fetchAllQuotasInFlight.get(runtimeKey)?.token === token) {
+              fetchAllQuotasInFlight.delete(runtimeKey);
+            }
+            if (getRuntimeKey() === runtimeKey) set({ isLoading: false });
           }
-        });
-        fetchAllQuotasInFlight = request;
+        })();
+        fetchAllQuotasInFlight.set(runtimeKey, { request, token });
         return request;
       },
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
 import { QUOTA_PROVIDERS } from '@/lib/quota';
+import { getRuntimeApiBaseUrl, getRuntimeKey, switchRuntimeEndpoint } from '@/lib/runtime-switch';
 import type { ProviderResult, QuotaProviderId } from '@/types';
 import { useQuotaStore } from './useQuotaStore';
 
@@ -69,5 +70,53 @@ describe('quota refresh', () => {
 
     expect(useQuotaStore.getState().isLoading).toBe(false);
     expect(useQuotaStore.getState().error).toBe('unexpected failure');
+  });
+
+  test('deduplicates per runtime without joining another runtime request', async () => {
+    const originalApiBaseUrl = getRuntimeApiBaseUrl();
+    const originalRuntimeKey = getRuntimeKey();
+    let finishRuntimeA!: () => void;
+    let finishRuntimeB!: () => void;
+    const runtimeAProviderFetch = new Promise<void>((resolve) => {
+      finishRuntimeA = resolve;
+    });
+    const runtimeBProviderFetch = new Promise<void>((resolve) => {
+      finishRuntimeB = resolve;
+    });
+    const callsByRuntime = new Map<string, number>();
+    useQuotaStore.setState({
+      fetchProviderQuota: async () => {
+        const runtimeKey = getRuntimeKey();
+        callsByRuntime.set(runtimeKey, (callsByRuntime.get(runtimeKey) ?? 0) + 1);
+        await (runtimeKey === 'runtime-a' ? runtimeAProviderFetch : runtimeBProviderFetch);
+      },
+    });
+
+    let runtimeARequest: Promise<void> | null = null;
+    let runtimeBRequest: Promise<void> | null = null;
+    try {
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://runtime-a.test', runtimeKey: 'runtime-a' });
+      runtimeARequest = useQuotaStore.getState().fetchAllQuotas();
+      expect(useQuotaStore.getState().fetchAllQuotas()).toBe(runtimeARequest);
+
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://runtime-b.test', runtimeKey: 'runtime-b' });
+      runtimeBRequest = useQuotaStore.getState().fetchAllQuotas();
+      expect(runtimeBRequest).not.toBe(runtimeARequest);
+      expect(useQuotaStore.getState().fetchAllQuotas()).toBe(runtimeBRequest);
+      expect(callsByRuntime.get('runtime-a')).toBe(QUOTA_PROVIDERS.length);
+      expect(callsByRuntime.get('runtime-b')).toBe(QUOTA_PROVIDERS.length);
+
+      finishRuntimeA();
+      await runtimeARequest;
+      expect(useQuotaStore.getState().fetchAllQuotas()).toBe(runtimeBRequest);
+
+      finishRuntimeB();
+      await runtimeBRequest;
+    } finally {
+      finishRuntimeA();
+      finishRuntimeB();
+      await Promise.allSettled([runtimeARequest, runtimeBRequest].filter((request): request is Promise<void> => request !== null));
+      switchRuntimeEndpoint({ apiBaseUrl: originalApiBaseUrl, runtimeKey: originalRuntimeKey });
+    }
   });
 });
