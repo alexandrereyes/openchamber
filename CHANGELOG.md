@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Mobile/Android: terminal taps now open the keyboard, text and backspace input work with Android keyboards, and closing a focused terminal no longer leaves the app unresponsive.
 - Shortcuts: fixed a regression where double-Escape could be primed when the current session was not active.
 - Mobile/iOS: push notifications now use Apple’s production service by default (thanks to @natheihei).
+- Mobile/iOS: notifications now work for development builds installed from Xcode — the app detects its Apple push environment and the server delivers each device to the matching endpoint, so dev (sandbox) and TestFlight/App Store (production) installs both receive pushes.
 - Desktop: the window-controls position setting now lives under Appearance (thanks to @makeittech).
 
 ## [1.16.3] - 2026-07-22

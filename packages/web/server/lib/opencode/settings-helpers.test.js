@@ -66,6 +66,14 @@ describe('settings helpers', () => {
     expect(helpers.sanitizeSettingsUpdate({ draftStartersVisible: 'false' })).toEqual({});
   });
 
+  it('accepts only booleans for wide chat layout', () => {
+    const helpers = createTestHelpers();
+
+    expect(helpers.sanitizeSettingsUpdate({ wideChatLayoutEnabled: true })).toEqual({ wideChatLayoutEnabled: true });
+    expect(helpers.sanitizeSettingsUpdate({ wideChatLayoutEnabled: false })).toEqual({ wideChatLayoutEnabled: false });
+    expect(helpers.sanitizeSettingsUpdate({ wideChatLayoutEnabled: 'true' })).toEqual({});
+  });
+
   it('accepts messageStreamTransport as a persisted shared setting', () => {
     const helpers = createTestHelpers();
 

@@ -558,6 +558,9 @@ export const createSettingsHelpers = (dependencies) => {
     if (typeof candidate.expandedEditorToolbar === 'boolean') {
       result.expandedEditorToolbar = candidate.expandedEditorToolbar;
     }
+    if (typeof candidate.wideChatLayoutEnabled === 'boolean') {
+      result.wideChatLayoutEnabled = candidate.wideChatLayoutEnabled;
+    }
     if (typeof candidate.showSplitAssistantMessageActions === 'boolean') {
       result.showSplitAssistantMessageActions = candidate.showSplitAssistantMessageActions;
     }
