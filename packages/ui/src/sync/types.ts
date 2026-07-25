@@ -63,7 +63,6 @@ export type State = {
   mcp: Record<string, McpStatus>
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
-  vcs_status: "loading" | "complete" | "error"
   limit: number
   message: Record<string, Message[]>
   part: Record<string, Part[]>
@@ -138,7 +137,6 @@ export const INITIAL_STATE: State = {
   mcp: {},
   lsp: [],
   vcs: undefined,
-  vcs_status: "loading",
   limit: 5,
   message: {},
   part: {},
