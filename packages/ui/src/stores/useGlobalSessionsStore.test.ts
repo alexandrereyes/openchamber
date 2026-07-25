@@ -197,6 +197,28 @@ describe('combineActiveSessionsWithLive', () => {
     expect(combined.map((session) => session.id)).toEqual(['ses_other']);
   });
 
+  test('keeps a session listed as archived without an archived timestamp', () => {
+    // The OpenCode archived query returns active sessions too; a record with no
+    // `time.archived` is not evidence of archival and must not hide a session.
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [listSession('ses_active')],
+      globalArchivedSessions: [listSession('ses_active')],
+      liveSessions: [],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_active']);
+  });
+
+  test('keeps a live-only session that is listed as archived without an archived timestamp', () => {
+    const combined = combineActiveSessionsWithLive({
+      globalActiveSessions: [],
+      globalArchivedSessions: [listSession('ses_live_only')],
+      liveSessions: [listSession('ses_live_only')],
+    });
+
+    expect(combined.map((session) => session.id)).toEqual(['ses_live_only']);
+  });
+
   test('archived membership wins when the same id is in both global lists and live', () => {
     const combined = combineActiveSessionsWithLive({
       globalActiveSessions: [listSession('ses_raced'), listSession('ses_kept')],

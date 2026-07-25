@@ -134,6 +134,10 @@ export const mergeLiveSessionWithGlobalSession = (
  * when a race leaves the same ID in both global lists. Live records still
  * enrich a global active session through `mergeLiveSessionWithGlobalSession`,
  * and live-only sessions that are not known to be archived stay visible.
+ *
+ * That authority only applies to records that are actually archived. Every
+ * store path that fills `archivedSessions` stamps `time.archived`, so a record
+ * without it is not evidence of archival and must not remove a session.
  */
 export const combineActiveSessionsWithLive = ({
   globalActiveSessions,
@@ -144,7 +148,11 @@ export const combineActiveSessionsWithLive = ({
   globalArchivedSessions: Session[];
   liveSessions: Session[];
 }): Session[] => {
-  const archivedIds = new Set(globalArchivedSessions.map((session) => session.id));
+  const archivedIds = new Set(
+    globalArchivedSessions
+      .filter((session) => Boolean(session.time?.archived))
+      .map((session) => session.id),
+  );
   const liveById = new Map(liveSessions.map((session) => [session.id, session]));
 
   const merged: Session[] = [];
