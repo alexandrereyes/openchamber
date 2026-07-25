@@ -63,6 +63,7 @@ import { MobileSessionsSheet } from './MobileSessionsSheet';
 import { MobileSurfaceShell } from './MobileSurfaceShell';
 import { DedicatedMobileAppProvider, type MobileAppActions } from './mobileAppContext';
 import { autoConnectLastInstance, connectionDisplayUrl, getAutoConnectTargetLabel, isActiveRuntimeConnection, reprobeActiveConnection, useMobileConnection } from './mobileConnections';
+import { shouldRefreshQuotaOnMetadataOpen } from './mobileSessionMetadata';
 import { isRelayModeActive } from '@/lib/relay/runtime-tunnel';
 import { isQrScanSupported, parseConnectionPayload, scanConnectionQr } from './mobileQrScan';
 import { reconnectAppForTransportSwitch, resetAppForRuntimeEndpointChange } from './runtimeEndpointReset';
@@ -1725,10 +1726,13 @@ const MobileSessionMetadataButton = React.memo(function MobileSessionMetadataBut
   const loadQuotaSettings = useQuotaStore((state) => state.loadSettings);
   const fetchAllQuotas = useQuotaStore((state) => state.fetchAllQuotas);
   const isQuotaLoading = useQuotaStore((state) => state.isLoading);
+  const quotaLastUpdated = useQuotaStore((state) => state.lastUpdated);
+  const quotaRefreshIntervalMs = useQuotaStore((state) => state.refreshIntervalMs);
   const quotaDisplayMode = useQuotaStore((state) => state.displayMode);
   const dropdownProviderIds = useQuotaStore((state) => state.dropdownProviderIds);
   const selectedQuotaModels = useQuotaStore((state) => state.selectedModels);
   const timeFormatPreference = useUIStore((state) => state.timeFormatPreference);
+  const wasMetadataOpenRef = React.useRef(false);
 
   useQuotaAutoRefresh();
 
@@ -1754,13 +1758,19 @@ const MobileSessionMetadataButton = React.memo(function MobileSessionMetadataBut
   }, [dropdownProviderIds]);
 
   React.useEffect(() => {
-    if (!open || isQuotaLoading) return;
-    const missingEnabledProvider = dropdownProviderIds.some((providerId) => (
-      !quotaResults.some((result) => result.providerId === providerId)
-    ));
-    if (!missingEnabledProvider) return;
-    void fetchAllQuotas();
-  }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaResults]);
+    const shouldRefresh = shouldRefreshQuotaOnMetadataOpen({
+      open,
+      wasOpen: wasMetadataOpenRef.current,
+      isLoading: isQuotaLoading,
+      dropdownProviderIds,
+      results: quotaResults,
+      lastUpdated: quotaLastUpdated,
+      refreshIntervalMs: quotaRefreshIntervalMs,
+      now: Date.now(),
+    });
+    wasMetadataOpenRef.current = open;
+    if (shouldRefresh) void fetchAllQuotas();
+  }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaLastUpdated, quotaRefreshIntervalMs, quotaResults]);
 
   const latestMessageModel = React.useMemo(() => {
     for (let i = activeSessionMessages.length - 1; i >= 0; i -= 1) {

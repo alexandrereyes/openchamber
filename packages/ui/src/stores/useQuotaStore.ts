@@ -10,6 +10,7 @@ import { updateDesktopSettings } from '@/lib/persistence';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 
 const DEFAULT_REFRESH_INTERVAL_MS = 60000;
+let fetchAllQuotasInFlight: Promise<void> | null = null;
 
 interface QuotaSettingsState {
   autoRefresh: boolean;
@@ -161,21 +162,27 @@ export const useQuotaStore = create<QuotaStore>()(
         }
       },
 
-      fetchAllQuotas: async () => {
-        set({ isLoading: true, error: null });
-        const providerIds = QUOTA_PROVIDERS.map((provider) => provider.id);
-        try {
-          await Promise.all(
-            providerIds.map((providerId) => get().fetchProviderQuota(providerId))
-          );
-          set({
-            isLoading: false,
-            lastUpdated: Date.now()
-          });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Failed to fetch quotas';
-          set({ isLoading: false, error: message });
-        }
+      fetchAllQuotas: () => {
+        if (fetchAllQuotasInFlight) return fetchAllQuotasInFlight;
+
+        const request = Promise.resolve().then(async () => {
+          set({ isLoading: true, error: null });
+          const providerIds = QUOTA_PROVIDERS.map((provider) => provider.id);
+          try {
+            await Promise.all(
+              providerIds.map((providerId) => get().fetchProviderQuota(providerId))
+            );
+            set({ lastUpdated: Date.now() });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to fetch quotas';
+            set({ error: message });
+          } finally {
+            set({ isLoading: false });
+            fetchAllQuotasInFlight = null;
+          }
+        });
+        fetchAllQuotasInFlight = request;
+        return request;
       },
 
       fetchProviderQuota: async (providerId) => {
