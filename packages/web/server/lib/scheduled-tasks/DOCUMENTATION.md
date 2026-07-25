@@ -13,6 +13,7 @@ Server-owned scheduled task runtime and routes for OpenChamber-only automation.
 - `packages/web/server/lib/scheduled-tasks/runtime.js`
   - Next-run computation (daily/weekly/cron compatibility)
   - Timer scheduling and queueing
+  - Best-effort archival of the previous idle task session before the next run
   - Concurrency controls
   - Session create + prompt_async execution
   - Emits OpenChamber task-run events
@@ -42,3 +43,11 @@ Server-owned scheduled task runtime and routes for OpenChamber-only automation.
   - `POST /api/projects/:projectId/scheduled-tasks/:taskId/run`
   - `GET /api/openchamber/scheduled-tasks/status`
   - `GET /api/openchamber/events`
+
+## Session cleanup invariants
+
+- Cleanup is always enabled for the session referenced by a task's persisted `lastSessionId`.
+- A previously archived session keeps its existing archive timestamp.
+- Only authoritative `idle` status permits archival; `busy` and `retry` sessions remain active.
+- Session/status lookup, archive failure, invalid responses, and cleanup timeout are logged but never block the new run.
+- Failed or timed-out cleanup is never recorded as successful archival.

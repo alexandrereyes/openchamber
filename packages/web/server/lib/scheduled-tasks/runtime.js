@@ -7,6 +7,7 @@ import { buildGoalIntroText, createSessionGoal } from '../session-goal/create.js
 const DEFAULT_GLOBAL_CONCURRENCY = 4;
 const DEFAULT_PROJECT_CONCURRENCY = 2;
 const DEFAULT_MAX_RUN_MS = 30 * 60 * 1000;
+const DEFAULT_PREVIOUS_SESSION_CLEANUP_TIMEOUT_MS = 10_000;
 const JITTER_MAX_MS = 2_000;
 const TASK_TITLE_MAX_LENGTH = 120;
 const TASK_DUE_SLACK_MS = 5_000;
@@ -231,6 +232,8 @@ export const createScheduledTasksRuntime = (deps) => {
     maxGlobalConcurrency = DEFAULT_GLOBAL_CONCURRENCY,
     maxProjectConcurrency = DEFAULT_PROJECT_CONCURRENCY,
     maxRunDurationMs = DEFAULT_MAX_RUN_MS,
+    previousSessionCleanupTimeoutMs = DEFAULT_PREVIOUS_SESSION_CLEANUP_TIMEOUT_MS,
+    createOpenCodeClient = createOpencodeClient,
   } = deps;
 
   let started = false;
@@ -477,6 +480,79 @@ export const createScheduledTasksRuntime = (deps) => {
     return true;
   };
 
+  const cleanupPreviousSession = async ({ client, projectID, projectPath, task }) => {
+    const previousSessionID = task?.state?.lastSessionId;
+    if (!previousSessionID) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    let timeoutID;
+    const cleanupPromise = (async () => {
+      const sessionResponse = await client.session.get({
+        sessionID: previousSessionID,
+        directory: projectPath,
+      }, { signal: abortController.signal });
+      const previousSession = sessionResponse?.data;
+      if (!previousSession || typeof previousSession !== 'object') {
+        throw new Error('invalid previous session response');
+      }
+      if (typeof previousSession.time?.archived === 'number') {
+        return;
+      }
+
+      const statusResponse = await client.session.status(
+        { directory: projectPath },
+        { signal: abortController.signal },
+      );
+      const statuses = statusResponse?.data;
+      if (!statuses || typeof statuses !== 'object' || Array.isArray(statuses)) {
+        throw new Error('invalid previous session status response');
+      }
+      const status = statuses[previousSessionID] || { type: 'idle' };
+      if (status.type === 'busy' || status.type === 'retry') {
+        return;
+      }
+      if (status.type !== 'idle') {
+        throw new Error(`invalid previous session status: ${String(status.type)}`);
+      }
+
+      const archivedAt = Date.now();
+      const archiveResponse = await client.session.update({
+        sessionID: previousSessionID,
+        directory: projectPath,
+        time: { archived: archivedAt },
+      }, { signal: abortController.signal });
+      if (archiveResponse?.data?.time?.archived !== archivedAt) {
+        throw new Error('previous session archive was not confirmed');
+      }
+    })();
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutID = setTimeout(() => {
+        reject(new Error('previous session cleanup timed out'));
+        abortController.abort();
+      }, previousSessionCleanupTimeoutMs);
+    });
+
+    try {
+      await Promise.race([cleanupPromise, timeoutPromise]);
+    } catch (error) {
+      try {
+        logger.warn?.('[ScheduledTasks] failed to clean up previous session', {
+          projectID,
+          taskID: task.id,
+          sessionID: previousSessionID,
+          error: safeErrorMessage(error),
+        });
+      } catch {
+      }
+    } finally {
+      if (timeoutID) {
+        clearTimeout(timeoutID);
+      }
+    }
+  };
+
   const runTaskWithWatchdog = async (projectID, task, reason) => {
     const startedAt = Date.now();
     const title = formatScheduledSessionTitle(task, startedAt);
@@ -491,10 +567,12 @@ export const createScheduledTasksRuntime = (deps) => {
 
     const baseUrl = buildOpenCodeUrl('/', '').replace(/\/$/, '');
     const authHeaders = getOpenCodeAuthHeaders();
-    const client = createOpencodeClient({
+    const client = createOpenCodeClient({
       baseUrl,
       headers: authHeaders,
     });
+
+    await cleanupPreviousSession({ client, projectID, projectPath, task });
 
     const sessionResponse = await client.session.create({
       directory: projectPath,
