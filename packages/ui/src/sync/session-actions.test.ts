@@ -14,6 +14,7 @@ let sessionShareResult: { data?: unknown; error?: unknown; response?: { status?:
 let sessionUpdateResult: { data?: unknown; error?: unknown; response?: { status?: number } } = {}
 let sessionMessagesResult: { data?: unknown; error?: unknown; response?: { status?: number } } = { data: [] }
 let sessionDeleteError: unknown | null = null
+let beforeSessionUpdateResolve: (() => void) | null = null
 const globalUpsertedSessions: unknown[] = []
 const globalRemovedSessionIds: string[] = []
 const deletedCleanupIdentities: Array<{ runtimeKey: string; directory: string; sessionId: string }> = []
@@ -145,6 +146,9 @@ mock.module("@/lib/opencode/client", () => ({
     }),
     updateSession: mock((sessionId: string, changes: Record<string, unknown>, directory?: string | null) => {
       replyCalls.push({ method: "session.update", params: { sessionID: sessionId, ...changes, directory } })
+      const beforeResolve = beforeSessionUpdateResolve
+      beforeSessionUpdateResolve = null
+      beforeResolve?.()
       return Promise.resolve(sessionUpdateResult.data)
     }),
     deleteSession: mock((sessionId: string, directory?: string | null) => {
@@ -368,6 +372,7 @@ describe("confirmed session removal", () => {
     deletedCleanupIdentities.length = 0
     sessionDeleteError = null
     sessionUpdateResult = {}
+    beforeSessionUpdateResolve = null
   })
 
   test("does not remove live or persisted state when delete fails", async () => {
@@ -426,6 +431,27 @@ describe("confirmed session removal", () => {
     expect(await archiveSession("session-a")).toBe(true)
     expect(source.getState().session).toEqual([])
     expect((globalUpsertedSessions[0] as Session)?.time?.archived).toBe(2)
+  })
+
+  test("rejects an archive response that arrives after a runtime switch", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 2 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+    })
+    const { getRuntimeKey, switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://archive-runtime-a.test", runtimeKey: "archive-runtime-a" })
+    beforeSessionUpdateResolve = () => {
+      switchRuntimeEndpoint({ apiBaseUrl: "http://archive-runtime-b.test", runtimeKey: "archive-runtime-b" })
+    }
+    const { archiveSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(getRuntimeKey()).toBe("archive-runtime-a")
+    expect(await archiveSession("session-a", "archive-runtime-a")).toBe(false)
+    expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
+    expect(globalUpsertedSessions).toEqual([])
   })
 })
 

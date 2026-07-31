@@ -658,11 +658,21 @@ export async function patchSessionMetadata(
   sessionId: string,
   directory: string | null | undefined,
   updater: (metadata: SessionMetadataRecord) => SessionMetadataRecord,
+  expectedRuntimeKey?: string,
 ): Promise<Session> {
+  if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
+    throw new Error("runtime changed")
+  }
   const targetDirectory = directory ?? getSessionDirectory(sessionId)
   const current = await opencodeClient.getSession(sessionId, targetDirectory)
+  if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
+    throw new Error("runtime changed")
+  }
   const nextMetadata = updater(getSessionMetadata(current))
   const updated = await opencodeClient.updateSession(sessionId, { metadata: nextMetadata }, targetDirectory)
+  if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
+    throw new Error("runtime changed")
+  }
   useGlobalSessionsStore.getState().upsertSession(updated)
   const sessionDirectory = (updated as { directory?: string | null }).directory ?? targetDirectory
   if (sessionDirectory) registerSessionDirectory(updated.id, sessionDirectory)
@@ -682,19 +692,26 @@ export async function setContextObligatoryMessage(
   return updated
 }
 
-async function cleanupReviewMetadataBeforeDelete(sessionId: string, directory?: string | null): Promise<void> {
+async function cleanupReviewMetadataBeforeDelete(
+  sessionId: string,
+  directory?: string | null,
+  expectedRuntimeKey?: string,
+): Promise<void> {
+  if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) return
   let session: Session
   try {
     session = await opencodeClient.getSession(sessionId, directory ?? getSessionDirectory(sessionId))
   } catch {
     return
   }
+  if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) return
   if (!isReviewSession(session)) return
   const originalSessionID = getOriginalSessionID(session)
   if (!originalSessionID) return
   try {
     await patchSessionMetadata(originalSessionID, directory ?? getSessionDirectory(originalSessionID), (metadata) =>
       withoutReviewSessionLink(metadata, sessionId),
+      expectedRuntimeKey,
     )
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -803,12 +820,15 @@ export async function deleteSessionInDirectory(sessionId: string, directory: str
   }
 }
 
-export async function archiveSession(sessionId: string): Promise<boolean> {
+export async function archiveSession(sessionId: string, expectedRuntimeKey?: string): Promise<boolean> {
+  if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) return false
   const sessionDirectory = getSessionDirectory(sessionId)
   const archivedAt = Date.now()
   try {
-    await cleanupReviewMetadataBeforeDelete(sessionId, sessionDirectory)
+    await cleanupReviewMetadataBeforeDelete(sessionId, sessionDirectory, expectedRuntimeKey)
+    if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) return false
     const archived = await opencodeClient.updateSession(sessionId, { time: { archived: archivedAt } }, sessionDirectory)
+    if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) return false
     if (!archived) {
       throw new Error("session.update failed: server did not return the archived session")
     }

@@ -1,4 +1,6 @@
 import React from 'react';
+import { toast } from '@/components/ui';
+import { Button } from '@/components/ui/button';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useAllSessionStatuses, useAllLiveSessions } from '@/sync/sync-context';
 import { mergeLiveSessionWithGlobalSession, useGlobalSessionsStore, ensureGlobalSessionsLoaded, refreshGlobalSessions } from '@/stores/useGlobalSessionsStore';
@@ -15,7 +17,16 @@ import { useNotificationStore } from '@/sync/notification-store';
 import { useSessionPinnedStore } from '@/stores/useSessionPinnedStore';
 import { compareSessionsByLifecycleOrder, useSessionOrderingStore } from '@/sync/session-ordering';
 import { useI18n } from '@/lib/i18n';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
+import {
+  beginMobileSessionArchive,
+  collectActiveSessionSubtreeIds,
+  endMobileSessionArchive,
+  getMobileSessionArchiveInFlight,
+  subscribeMobileSessionArchive,
+} from '@/apps/mobileSessionArchive';
+import { getAllSyncSessions } from '@/sync/sync-refs';
 
 interface MobileSessionStatusBarProps {
   onSessionSwitch?: (sessionId: string) => void;
@@ -139,11 +150,13 @@ function useSessionGrouping(
 }
 
 function useSessionHelpers() {
+  const { t } = useI18n();
+
   const getSessionTitle = React.useCallback((session: Session): string => {
     const title = session.title;
     if (title && title.trim()) return title;
-    return 'New session';
-  }, []);
+    return t('mobile.sessions.untitled');
+  }, [t]);
 
   const unseenCounts = useNotificationStore((s) => s.index.session.unseenCount);
   const needsAttention = React.useCallback((sessionId: string): boolean => {
@@ -259,47 +272,102 @@ function SessionItem({
   getSessionTitle,
   onClick,
   needsAttention,
+  confirmingArchive,
+  archivePending,
+  onRequestArchive,
+  onConfirmArchive,
 }: {
   session: SessionWithStatus;
   isCurrent: boolean;
   getSessionTitle: (s: Session) => string;
   onClick: () => void;
   needsAttention: (sessionId: string) => boolean;
+  confirmingArchive: boolean;
+  archivePending: boolean;
+  onRequestArchive: () => void;
+  onConfirmArchive: () => void;
 }) {
+  const { t } = useI18n();
   const attention = needsAttention(session.id);
+  const title = getSessionTitle(session);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors min-h-[56px]",
-        "active:bg-[var(--interactive-selection)]",
-        isCurrent ? "bg-[color-mix(in_srgb,var(--interactive-selection)_40%,transparent)]" : "hover:bg-[var(--interactive-hover)]"
+        "flex w-full items-center gap-1 rounded-xl transition-colors",
+        isCurrent && !confirmingArchive && "bg-[color-mix(in_srgb,var(--interactive-selection)_40%,transparent)]",
+        confirmingArchive && "bg-[color-mix(in_srgb,var(--status-error)_8%,transparent)]",
       )}
     >
-      <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
-        <StatusIndicator isRunning={session._statusType !== 'idle'} needsAttention={attention} />
-      </span>
-
-      <span className={cn(
-        "flex-1 truncate text-[15px] leading-tight",
-        isCurrent ? "font-semibold text-[var(--surface-foreground)]" : "text-[var(--surface-foreground)]"
-      )}>
-        {getSessionTitle(session)}
-      </span>
-
-      {(session._runningChildrenCount ?? 0) > 0 && (
-        <span className="flex flex-shrink-0 items-center gap-1 text-[12px] text-[var(--status-info)]">
-          <Icon name="loader-4" className="h-3 w-3 animate-spin" />
-          {session._runningChildrenCount}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={confirmingArchive}
+        className={cn(
+          "flex min-h-[56px] min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors",
+          "active:bg-[var(--interactive-selection)]",
+          !isCurrent && !confirmingArchive && "hover:bg-[var(--interactive-hover)]",
+          confirmingArchive && "opacity-50",
+        )}
+      >
+        <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+          <StatusIndicator isRunning={session._statusType !== 'idle'} needsAttention={attention} />
         </span>
-      )}
 
-      {isCurrent && (
-        <Icon name="check" className="h-4 w-4 flex-shrink-0 text-[var(--primary-base)]" />
-      )}
-    </button>
+        <span className={cn(
+          "flex-1 truncate text-[15px] leading-tight",
+          isCurrent ? "font-semibold text-[var(--surface-foreground)]" : "text-[var(--surface-foreground)]",
+        )}>
+          {title}
+        </span>
+
+        {(session._runningChildrenCount ?? 0) > 0 && (
+          <span className="flex flex-shrink-0 items-center gap-1 text-[12px] text-[var(--status-info)]">
+            <Icon name="loader-4" className="h-3 w-3 animate-spin" />
+            {session._runningChildrenCount}
+          </span>
+        )}
+
+        {isCurrent && (
+          <Icon name="check" className="h-4 w-4 flex-shrink-0 text-[var(--primary-base)]" />
+        )}
+      </button>
+
+      {confirmingArchive ? (
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          className="shrink-0 rounded-xl"
+          aria-label={t('mobile.sessions.archiveSessionAria', { title })}
+          title={t('mobile.sessions.archiveSessionAria', { title })}
+          onClick={onConfirmArchive}
+          disabled={archivePending}
+          style={{ touchAction: 'manipulation' }}
+        >
+          <Icon name="archive" className="h-4 w-4" />
+          {t('sessions.sidebar.bulkActions.archive')}
+        </Button>
+      ) : null}
+
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="mr-1.5 rounded-xl text-[var(--surface-mutedForeground)] hover:text-[var(--surface-foreground)]"
+        aria-label={confirmingArchive
+          ? t('mobile.sessions.cancelArchiveAria', { title })
+          : t('mobile.sessions.archiveSessionAria', { title })}
+        title={confirmingArchive
+          ? t('mobile.sessions.cancelArchiveAria', { title })
+          : t('mobile.sessions.archiveSessionAria', { title })}
+        onClick={onRequestArchive}
+        disabled={archivePending}
+        style={{ touchAction: 'manipulation' }}
+      >
+        <Icon name={confirmingArchive ? 'close' : 'archive'} className="h-4 w-4" />
+      </Button>
+    </div>
   );
 }
 
@@ -426,6 +494,7 @@ const MobileSessionStatusOpenPanel: React.FC<MobileSessionStatusBarProps> = ({
   const sessionStatus = useAllSessionStatuses();
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
   const openNewSessionDraft = useSessionUIStore((state) => state.openNewSessionDraft);
+  const archiveSessions = useSessionUIStore((state) => state.archiveSessions);
   const open = useUIStore((state) => state.mobileSessionPanelOpen);
   const setOpen = useUIStore((state) => state.setMobileSessionPanelOpen);
 
@@ -442,13 +511,31 @@ const MobileSessionStatusOpenPanel: React.FC<MobileSessionStatusBarProps> = ({
   // visible regardless of which session is currently selected.
   const filterProjectId = useUIStore((state) => state.mobileSessionFilterProjectId);
   const setFilterProjectId = useUIStore((state) => state.setMobileSessionFilterProjectId);
+  const [confirmingArchiveSessionId, setConfirmingArchiveSessionId] = React.useState<string | null>(null);
+  const globalRefreshPromiseRef = React.useRef<Promise<unknown> | null>(null);
+  const archivePending = React.useSyncExternalStore(
+    subscribeMobileSessionArchive,
+    getMobileSessionArchiveInFlight,
+    () => false,
+  );
 
   // Refresh the cross-project session list when the panel opens (mirrors the
   // dedicated MobileSessionsSheet). The active-directory sync only upserts the
   // current project's sessions, so other projects need this global load.
   React.useEffect(() => {
     if (open) {
-      void refreshGlobalSessions(sessions);
+      const refreshPromise = refreshGlobalSessions(sessions);
+      globalRefreshPromiseRef.current = refreshPromise;
+      void refreshPromise.then(
+        () => {
+          if (globalRefreshPromiseRef.current === refreshPromise) globalRefreshPromiseRef.current = null;
+        },
+        () => {
+          if (globalRefreshPromiseRef.current === refreshPromise) globalRefreshPromiseRef.current = null;
+        },
+      );
+    } else {
+      globalRefreshPromiseRef.current = null;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -482,6 +569,42 @@ const MobileSessionStatusOpenPanel: React.FC<MobileSessionStatusBarProps> = ({
     setCurrentSession(session.id, sessionDirectory(session) || null);
     onSessionSwitch?.(session.id);
     setOpen(false);
+  };
+
+  const handleRequestArchive = (sessionId: string) => {
+    setConfirmingArchiveSessionId((current) => (current === sessionId ? null : sessionId));
+  };
+
+  const handleConfirmArchive = async (session: Session) => {
+    if (!beginMobileSessionArchive()) return;
+    const expectedRuntimeKey = getRuntimeKey();
+    setConfirmingArchiveSessionId(null);
+    try {
+      await globalRefreshPromiseRef.current?.catch(() => undefined);
+      if (getRuntimeKey() !== expectedRuntimeKey) return;
+      const globalSessions = useGlobalSessionsStore.getState();
+      const ids = collectActiveSessionSubtreeIds([
+        ...getAllSyncSessions(),
+        ...globalSessions.activeSessions,
+        ...globalSessions.archivedSessions,
+      ], session.id);
+      if (ids.length === 0) return;
+
+      const { archivedIds, failedIds } = await archiveSessions(ids, { expectedRuntimeKey });
+      if (getRuntimeKey() !== expectedRuntimeKey) return;
+      if (archivedIds.length > 0) {
+        toast.success(archivedIds.length === 1
+          ? t('sessions.sidebar.bulkActions.archivedSingle', { count: archivedIds.length })
+          : t('sessions.sidebar.bulkActions.archivedPlural', { count: archivedIds.length }));
+      }
+      if (failedIds.length > 0) {
+        toast.error(failedIds.length === 1
+          ? t('sessions.sidebar.bulkActions.failedArchiveSingle', { count: failedIds.length })
+          : t('sessions.sidebar.bulkActions.failedArchivePlural', { count: failedIds.length }));
+      }
+    } finally {
+      endMobileSessionArchive();
+    }
   };
 
   // "+" — start a new session draft. Target the project selected in the filter;
@@ -594,6 +717,10 @@ const MobileSessionStatusOpenPanel: React.FC<MobileSessionStatusBarProps> = ({
               getSessionTitle={getSessionTitle}
               onClick={() => handleSessionClick(session)}
               needsAttention={needsAttention}
+              confirmingArchive={confirmingArchiveSessionId === session.id}
+              archivePending={archivePending}
+              onRequestArchive={() => handleRequestArchive(session.id)}
+              onConfirmArchive={() => void handleConfirmArchive(session)}
             />
           ))
         )}
