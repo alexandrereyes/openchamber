@@ -844,6 +844,38 @@ export async function archiveSession(sessionId: string, expectedRuntimeKey?: str
   }
 }
 
+export async function archiveSessions(
+  ids: string[],
+  options?: Record<string, unknown>,
+): Promise<{ archivedIds: string[]; failedIds: string[] }> {
+  const archivedIds: string[] = []
+  const failedIds: string[] = []
+  const expectedRuntimeKey = typeof options?.expectedRuntimeKey === "string"
+    ? options.expectedRuntimeKey
+    : undefined
+
+  for (const [index, id] of ids.entries()) {
+    if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
+      failedIds.push(...ids.slice(index))
+      break
+    }
+
+    const archived = await archiveSession(id, expectedRuntimeKey)
+    if (archived) {
+      archivedIds.push(id)
+      continue
+    }
+
+    failedIds.push(id)
+    if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
+      failedIds.push(...ids.slice(index + 1))
+      break
+    }
+  }
+
+  return { archivedIds, failedIds }
+}
+
 export async function updateSessionTitle(sessionId: string, title: string): Promise<void> {
   const sessionDirectory = getSessionDirectory(sessionId)
   const session = await opencodeClient.updateSession(sessionId, { title }, sessionDirectory)

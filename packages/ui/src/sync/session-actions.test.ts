@@ -453,6 +453,33 @@ describe("confirmed session removal", () => {
     expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
     expect(globalUpsertedSessions).toEqual([])
   })
+
+  test("stops an archive batch after a runtime switch and fails the remaining sessions", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 2 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+    })
+    const { switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://archive-batch-runtime-a.test", runtimeKey: "archive-batch-runtime-a" })
+    beforeSessionUpdateResolve = () => {
+      switchRuntimeEndpoint({ apiBaseUrl: "http://archive-batch-runtime-b.test", runtimeKey: "archive-batch-runtime-b" })
+    }
+    const { archiveSessions, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await archiveSessions(
+      ["session-a", "session-b", "session-c"],
+      { expectedRuntimeKey: "archive-batch-runtime-a" },
+    )).toEqual({
+      archivedIds: [],
+      failedIds: ["session-a", "session-b", "session-c"],
+    })
+    expect(replyCalls.filter((call) => call.method === "session.update")).toHaveLength(1)
+    expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
+    expect(globalUpsertedSessions).toEqual([])
+  })
 })
 
 describe("fetchMessagesForSession startup race", () => {
