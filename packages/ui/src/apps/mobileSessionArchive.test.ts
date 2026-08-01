@@ -53,6 +53,10 @@ describe('mobile session archive subtree', () => {
     ], 'root')).toEqual(['root']);
   });
 
+  test('returns no ids when the root disappears before confirmation', () => {
+    expect(collectActiveSessionSubtreeIds([session('other-root')], 'root')).toEqual([]);
+  });
+
   test('collects known descendants outside the root directory and visual bucket', () => {
     expect(collectActiveSessionSubtreeIds([
       session('root', undefined, { directory: '/project' }),
