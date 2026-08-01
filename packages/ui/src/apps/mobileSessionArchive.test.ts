@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import type { Session } from '@opencode-ai/sdk/v2/client';
 
 import { collectActiveSessionSubtreeIds } from '@/apps/mobileSessionArchive';
+
+const sheetSource = readFileSync(new URL('./MobileSessionsSheet.tsx', import.meta.url), 'utf8');
 
 const session = (
   id: string,
@@ -35,6 +38,17 @@ describe('mobile session archive subtree', () => {
       session('root'),
       session('other-root'),
     ], 'root')).toEqual(['root']);
+  });
+
+  test('reports the existing archive error when the root disappears before confirmation', () => {
+    expect(collectActiveSessionSubtreeIds([session('other-root')], 'root')).toEqual([]);
+
+    const emptySelectionGuard = sheetSource.indexOf('if (ids.length === 0)');
+    const archiveCall = sheetSource.indexOf('await archiveSessions(ids)', emptySelectionGuard);
+    expect(emptySelectionGuard).toBeGreaterThan(-1);
+    expect(sheetSource.slice(emptySelectionGuard, archiveCall)).toContain(
+      "toast.error(t('sessions.sidebar.session.archive.error'))",
+    );
   });
 
   test('collects known descendants outside the root directory and visual bucket', () => {
