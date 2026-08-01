@@ -41,6 +41,7 @@ import { toast } from '@/components/ui';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { useI18n } from '@/lib/i18n';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import { PROJECT_COLOR_MAP, PROJECT_ICON_MAP, ProjectIconImage } from '@/lib/projectMeta';
 import { cn } from '@/lib/utils';
 import { listProjectWorktrees } from '@/lib/worktrees/worktreeManager';
@@ -63,7 +64,13 @@ import type { WorktreeMetadata } from '@/types/worktree';
 
 import { MobileProjectEditSurface } from './MobileProjectEditSurface';
 import { MobileSurfaceShell } from './MobileSurfaceShell';
-import { collectActiveSessionSubtreeIds } from './mobileSessionArchive';
+import {
+  beginMobileSessionArchive,
+  collectActiveSessionSubtreeIds,
+  endMobileSessionArchive,
+  getMobileSessionArchiveInFlight,
+  subscribeMobileSessionArchive,
+} from './mobileSessionArchive';
 
 type MobileSessionsSheetProps = {
   open: boolean;
@@ -281,6 +288,8 @@ const SessionRow: React.FC<{
   contextLabel?: string;
   /** When true, the row shows the two-step archive confirmation. */
   confirmingArchive?: boolean;
+  /** When true, an archive batch is already running on a mobile surface. */
+  archivePending?: boolean;
   /** When true, a chevron is shown in the left gutter to toggle nested subsessions. */
   hasChildren?: boolean;
   expanded?: boolean;
@@ -295,6 +304,7 @@ const SessionRow: React.FC<{
   indent,
   contextLabel,
   confirmingArchive = false,
+  archivePending = false,
   hasChildren = false,
   expanded = false,
   onToggleChildren,
@@ -370,9 +380,10 @@ const SessionRow: React.FC<{
           {confirmingArchive ? (
             <button
               type="button"
-              className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-destructive px-3 text-destructive-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
               aria-label={t('mobile.sessions.archiveSessionAria', { title })}
               onClick={onConfirmArchive}
+              disabled={archivePending}
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-destructive px-3 text-destructive-foreground transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive disabled:opacity-50"
               style={{ touchAction: 'manipulation' }}
             >
               <RiArchiveLine className="size-4" />
@@ -381,13 +392,14 @@ const SessionRow: React.FC<{
           ) : null}
           <button
             type="button"
-            className="mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground/70 transition-colors hover:bg-interactive-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={
               confirmingArchive
                 ? t('mobile.sessions.cancelArchiveAria', { title })
                 : t('mobile.sessions.archiveSessionAria', { title })
             }
             onClick={onRequestArchive}
+            disabled={archivePending}
+            className="mr-1.5 flex size-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground/70 transition-colors hover:bg-interactive-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
             style={{ touchAction: 'manipulation' }}
           >
             {confirmingArchive ? <RiCloseLine className="size-4" /> : <RiArchiveLine className="size-4" />}
@@ -544,6 +556,11 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
   const archiveSessions = useSessionUIStore((state) => state.archiveSessions);
+  const archivePending = React.useSyncExternalStore(
+    subscribeMobileSessionArchive,
+    getMobileSessionArchiveInFlight,
+    () => false,
+  );
   const openNewSessionDraft = useSessionUIStore((state) => state.openNewSessionDraft);
   const setActiveProject = useProjectsStore((state) => state.setActiveProject);
   const setActiveProjectIdOnly = useProjectsStore((state) => state.setActiveProjectIdOnly);
@@ -573,9 +590,11 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   // state itself lives in useMobileSessionTreeStore (persisted).
   // Key: `${projectId}::${bucketKey}`.
   const [visibleCountByBucket, setVisibleCountByBucket] = React.useState<Map<string, number>>(new Map());
+  const globalRefreshPromiseRef = React.useRef<Promise<unknown> | null>(null);
 
   React.useEffect(() => {
     if (!open) {
+      globalRefreshPromiseRef.current = null;
       setQuery('');
       setEditingOrder(false);
       setConfirmingDeleteId(null);
@@ -584,7 +603,16 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
       setConfirmingArchiveSessionId(null);
       return;
     }
-    void refreshGlobalSessions(liveSessions);
+    const refreshPromise = refreshGlobalSessions(liveSessions);
+    globalRefreshPromiseRef.current = refreshPromise;
+    void refreshPromise.then(
+      () => {
+        if (globalRefreshPromiseRef.current === refreshPromise) globalRefreshPromiseRef.current = null;
+      },
+      () => {
+        if (globalRefreshPromiseRef.current === refreshPromise) globalRefreshPromiseRef.current = null;
+      },
+    );
     // intentionally only on open transition — live overlay handles updates after that
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -805,6 +833,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
             expanded={expanded}
             onToggleChildren={hasChildren ? () => toggleParent(session.id) : undefined}
             confirmingArchive={confirmingArchiveSessionId === session.id}
+            archivePending={archivePending}
             onSelect={() => handleSelectSession(session)}
             onRequestArchive={() => handleRequestArchive(session.id)}
             onConfirmArchive={() => void handleConfirmArchive(session)}
@@ -859,25 +888,34 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   };
 
   const handleConfirmArchive = async (session: Session) => {
+    if (!beginMobileSessionArchive()) return;
+    const expectedRuntimeKey = getRuntimeKey();
     setConfirmingArchiveSessionId(null);
-    const globalSessions = useGlobalSessionsStore.getState();
-    const ids = collectActiveSessionSubtreeIds([
-      ...getAllSyncSessions(),
-      ...globalSessions.activeSessions,
-      ...globalSessions.archivedSessions,
-    ], session.id);
-    if (ids.length === 0) return;
+    try {
+      await globalRefreshPromiseRef.current?.catch(() => undefined);
+      if (getRuntimeKey() !== expectedRuntimeKey) return;
+      const globalSessions = useGlobalSessionsStore.getState();
+      const ids = collectActiveSessionSubtreeIds([
+        ...getAllSyncSessions(),
+        ...globalSessions.activeSessions,
+        ...globalSessions.archivedSessions,
+      ], session.id);
+      if (ids.length === 0) return;
 
-    const { archivedIds, failedIds } = await archiveSessions(ids);
-    if (archivedIds.length > 0) {
-      toast.success(archivedIds.length === 1
-        ? t('sessions.sidebar.bulkActions.archivedSingle', { count: archivedIds.length })
-        : t('sessions.sidebar.bulkActions.archivedPlural', { count: archivedIds.length }));
-    }
-    if (failedIds.length > 0) {
-      toast.error(failedIds.length === 1
-        ? t('sessions.sidebar.bulkActions.failedArchiveSingle', { count: failedIds.length })
-        : t('sessions.sidebar.bulkActions.failedArchivePlural', { count: failedIds.length }));
+      const { archivedIds, failedIds } = await archiveSessions(ids, { expectedRuntimeKey });
+      if (getRuntimeKey() !== expectedRuntimeKey) return;
+      if (archivedIds.length > 0) {
+        toast.success(archivedIds.length === 1
+          ? t('sessions.sidebar.bulkActions.archivedSingle', { count: archivedIds.length })
+          : t('sessions.sidebar.bulkActions.archivedPlural', { count: archivedIds.length }));
+      }
+      if (failedIds.length > 0) {
+        toast.error(failedIds.length === 1
+          ? t('sessions.sidebar.bulkActions.failedArchiveSingle', { count: failedIds.length })
+          : t('sessions.sidebar.bulkActions.failedArchivePlural', { count: failedIds.length }));
+      }
+    } finally {
+      endMobileSessionArchive();
     }
   };
 

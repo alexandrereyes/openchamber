@@ -219,6 +219,11 @@ Examples of global-store updates performed in `session-actions.ts`:
 - `deleteSession()` -> waits for server confirmation or `404`, then removes the session and its persisted state
 - `moveSessionToDirectory()` -> move the session between directory stores and update the global directory index
 
+The mobile multi-session archive callers that span asynchronous SDK calls capture
+the runtime key at operation start. Their guarded batch stops when the runtime
+changes, and a stale archive response is rejected before it can reconcile the
+current runtime's live or global stores.
+
 ## The golden rule
 
 When creating a draft in `handleDirectoryEvent`, **only clone the state fields the event will mutate**. Never spread all fields eagerly.

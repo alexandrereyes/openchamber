@@ -15,4 +15,17 @@ describe('MobileSessionStatusBar hidden work', () => {
     expect(openPanelMount).toBeGreaterThan(closedGuard);
     expect(source.indexOf('useSessionGrouping(', openPanelStart)).toBeLessThan(wrapperStart);
   });
+
+  test('keeps archive actions separate from session selection and archives the known subtree', () => {
+    expect(source).toContain('confirmingArchiveSessionId');
+    expect(source).toContain('disabled={confirmingArchive}');
+    expect(source).toContain('disabled={archivePending}');
+    expect(source).toContain('onRequestArchive={() => handleRequestArchive(session.id)}');
+    expect(source).toContain('collectActiveSessionSubtreeIds');
+    expect(source).toContain('beginMobileSessionArchive()');
+    expect(source).toContain('endMobileSessionArchive()');
+    expect(source).toContain('await globalRefreshPromiseRef.current?.catch(() => undefined)');
+    expect(source).toContain('archiveSessions(ids, { expectedRuntimeKey })');
+    expect(source).toContain("return t('mobile.sessions.untitled');");
+  });
 });

@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { Session } from '@opencode-ai/sdk/v2/client';
 
-import { collectActiveSessionSubtreeIds } from '@/apps/mobileSessionArchive';
+import {
+  beginMobileSessionArchive,
+  collectActiveSessionSubtreeIds,
+  endMobileSessionArchive,
+  getMobileSessionArchiveInFlight,
+} from '@/apps/mobileSessionArchive';
 
 const session = (
   id: string,
@@ -18,6 +23,17 @@ const session = (
 }) as Session;
 
 describe('mobile session archive subtree', () => {
+  test('allows only one archive operation across panel remounts', () => {
+    expect(beginMobileSessionArchive()).toBe(true);
+    try {
+      expect(getMobileSessionArchiveInFlight()).toBe(true);
+      expect(beginMobileSessionArchive()).toBe(false);
+    } finally {
+      endMobileSessionArchive();
+    }
+    expect(getMobileSessionArchiveInFlight()).toBe(false);
+  });
+
   test('collects descendants across sibling branches at every depth', () => {
     expect(collectActiveSessionSubtreeIds([
       session('root'),
