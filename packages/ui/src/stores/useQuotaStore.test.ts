@@ -109,6 +109,7 @@ describe('quota refresh', () => {
       finishRuntimeA();
       await runtimeARequest;
       expect(useQuotaStore.getState().fetchAllQuotas()).toBe(runtimeBRequest);
+      expect(useQuotaStore.getState().isLoading).toBe(true);
 
       finishRuntimeB();
       await runtimeBRequest;
@@ -116,6 +117,37 @@ describe('quota refresh', () => {
       finishRuntimeA();
       finishRuntimeB();
       await Promise.allSettled([runtimeARequest, runtimeBRequest].filter((request): request is Promise<void> => request !== null));
+      switchRuntimeEndpoint({ apiBaseUrl: originalApiBaseUrl, runtimeKey: originalRuntimeKey });
+    }
+  });
+
+  test('clears loading when an old runtime finishes and the current runtime is idle', async () => {
+    const originalApiBaseUrl = getRuntimeApiBaseUrl();
+    const originalRuntimeKey = getRuntimeKey();
+    let finishRuntimeA!: () => void;
+    const runtimeAProviderFetch = new Promise<void>((resolve) => {
+      finishRuntimeA = resolve;
+    });
+    useQuotaStore.setState({
+      fetchProviderQuota: async () => {
+        await runtimeAProviderFetch;
+      },
+    });
+
+    let runtimeARequest: Promise<void> | null = null;
+    try {
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://runtime-a.test', runtimeKey: 'runtime-a' });
+      runtimeARequest = useQuotaStore.getState().fetchAllQuotas();
+      expect(useQuotaStore.getState().isLoading).toBe(true);
+
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://runtime-b.test', runtimeKey: 'runtime-b' });
+      finishRuntimeA();
+      await runtimeARequest;
+
+      expect(useQuotaStore.getState().isLoading).toBe(false);
+    } finally {
+      finishRuntimeA();
+      if (runtimeARequest) await runtimeARequest;
       switchRuntimeEndpoint({ apiBaseUrl: originalApiBaseUrl, runtimeKey: originalRuntimeKey });
     }
   });

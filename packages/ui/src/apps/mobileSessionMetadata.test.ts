@@ -49,6 +49,33 @@ describe('mobile session metadata quota refresh', () => {
     })).toBe(false);
   });
 
+  test('re-evaluates once when loading clears while the panel remains open', () => {
+    let wasOpen = false;
+    let refreshes = 0;
+    const runEffect = (isLoading: boolean) => {
+      const shouldRefresh = shouldRefreshQuotaOnMetadataOpen({
+        ...baseInput,
+        wasOpen,
+        isLoading,
+        lastUpdated: null,
+      });
+      if (!isLoading) wasOpen = true;
+      if (shouldRefresh) refreshes += 1;
+    };
+
+    runEffect(true);
+    expect(wasOpen).toBe(false);
+    expect(refreshes).toBe(0);
+
+    runEffect(false);
+    expect(wasOpen).toBe(true);
+    expect(refreshes).toBe(1);
+
+    runEffect(true);
+    runEffect(false);
+    expect(refreshes).toBe(1);
+  });
+
   test('refreshes at most once while open and checks again after closing', () => {
     let wasOpen = false;
     let refreshes = 0;

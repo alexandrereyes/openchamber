@@ -1768,7 +1768,11 @@ const MobileSessionMetadataButton = React.memo(function MobileSessionMetadataBut
       refreshIntervalMs: quotaRefreshIntervalMs,
       now: Date.now(),
     });
-    wasMetadataOpenRef.current = open;
+    if (!open) {
+      wasMetadataOpenRef.current = false;
+    } else if (!isQuotaLoading) {
+      wasMetadataOpenRef.current = true;
+    }
     if (shouldRefresh) void fetchAllQuotas();
   }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaLastUpdated, quotaRefreshIntervalMs, quotaResults]);
 
