@@ -126,53 +126,6 @@ export const mergeLiveSessionWithGlobalSession = (
   return merged;
 };
 
-/**
- * Active session list for surfaces that overlay the live directory stores on
- * the global active cache.
- *
- * Global archived membership is negative authority: an archived ID is never
- * reintroduced by a live copy that has not caught up yet, and archived wins
- * when a race leaves the same ID in both global lists. Live records still
- * enrich a global active session through `mergeLiveSessionWithGlobalSession`,
- * and live-only sessions that are not known to be archived stay visible.
- *
- * That authority only applies to records that are actually archived. Every
- * store path that fills `archivedSessions` stamps `time.archived`, so a record
- * without it is not evidence of archival and must not remove a session.
- */
-export const combineActiveSessionsWithLive = ({
-  globalActiveSessions,
-  globalArchivedSessions,
-  liveSessions,
-}: {
-  globalActiveSessions: Session[];
-  globalArchivedSessions: Session[];
-  liveSessions: Session[];
-}): Session[] => {
-  const archivedIds = new Set(
-    globalArchivedSessions
-      .filter((session) => Boolean(session.time?.archived))
-      .map((session) => session.id),
-  );
-  const liveById = new Map(liveSessions.map((session) => [session.id, session]));
-
-  const merged: Session[] = [];
-  for (const session of globalActiveSessions) {
-    if (archivedIds.has(session.id)) continue;
-    const liveSession = liveById.get(session.id);
-    merged.push(liveSession ? mergeLiveSessionWithGlobalSession(liveSession, session) : session);
-  }
-
-  const seenIds = new Set(merged.map((session) => session.id));
-  for (const session of liveSessions) {
-    if (archivedIds.has(session.id) || seenIds.has(session.id)) continue;
-    seenIds.add(session.id);
-    merged.push(session);
-  }
-
-  return merged;
-};
-
 const buildSessionsByDirectory = (sessions: Session[]): Map<string, Session[]> => {
   const next = new Map<string, Session[]>();
   for (const session of sessions) {

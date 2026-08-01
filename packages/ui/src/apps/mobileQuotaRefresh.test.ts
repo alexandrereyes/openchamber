@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { shouldRefreshQuotaOnMetadataOpen } from './mobileSessionMetadata';
+import { shouldRefreshQuotaOnMetadataOpen } from './mobileQuotaRefresh';
 
 const NOW = 100_000;
 const REFRESH_INTERVAL_MS = 60_000;
