@@ -905,7 +905,10 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
         ...globalSessions.activeSessions,
         ...globalSessions.archivedSessions,
       ], session.id);
-      if (ids.length === 0) return;
+      if (ids.length === 0) {
+        toast.error(t('sessions.sidebar.session.archive.error'));
+        return;
+      }
 
       const { archivedIds, failedIds } = await archiveSessions(ids, { expectedRuntimeKey });
       if (getRuntimeKey() !== expectedRuntimeKey) return;
