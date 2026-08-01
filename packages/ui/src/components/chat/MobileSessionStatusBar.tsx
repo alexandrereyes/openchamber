@@ -291,7 +291,7 @@ function SessionItem({
       className={cn(
         "flex w-full items-center gap-1 rounded-xl transition-colors",
         isCurrent && !confirmingArchive && "bg-[color-mix(in_srgb,var(--interactive-selection)_40%,transparent)]",
-        confirmingArchive && "bg-[color-mix(in_srgb,var(--status-error)_8%,transparent)]",
+        confirmingArchive && "bg-[color-mix(in_srgb,var(--destructive)_8%,transparent)]",
       )}
     >
       <button
@@ -583,7 +583,10 @@ const MobileSessionStatusOpenPanel: React.FC<MobileSessionStatusBarProps> = ({
         ...globalSessions.activeSessions,
         ...globalSessions.archivedSessions,
       ], session.id);
-      if (ids.length === 0) return;
+      if (ids.length === 0) {
+        toast.error(t('sessions.sidebar.session.archive.error'));
+        return;
+      }
 
       const { archivedIds, failedIds } = await archiveSessions(ids, { expectedRuntimeKey });
       if (getRuntimeKey() !== expectedRuntimeKey) return;

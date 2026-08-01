@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('./MobileSessionStatusBar.tsx', import.meta.url), 'utf8');
+const sheetSource = readFileSync(new URL('../../apps/MobileSessionsSheet.tsx', import.meta.url), 'utf8');
 
 describe('MobileSessionStatusBar hidden work', () => {
   test('does not mount session grouping and project derivation while the panel is closed', () => {
@@ -27,5 +28,27 @@ describe('MobileSessionStatusBar hidden work', () => {
     expect(source).toContain('await globalRefreshPromiseRef.current?.catch(() => undefined)');
     expect(source).toContain('archiveSessions(ids, { expectedRuntimeKey })');
     expect(source).toContain("return t('mobile.sessions.untitled');");
+  });
+
+  test('reports an archive error when either mobile surface finds no active subtree', () => {
+    const emptySubtreeFeedback = [
+      'if (ids.length === 0) {',
+      "toast.error(t('sessions.sidebar.session.archive.error'));",
+      'return;',
+    ];
+
+    for (const expected of emptySubtreeFeedback) {
+      expect(source).toContain(expected);
+      expect(sheetSource).toContain(expected);
+    }
+  });
+
+  test('uses the destructive tint for the armed archive confirmation', () => {
+    expect(source).toContain(
+      'confirmingArchive && "bg-[color-mix(in_srgb,var(--destructive)_8%,transparent)]"',
+    );
+    expect(source).not.toContain(
+      'confirmingArchive && "bg-[color-mix(in_srgb,var(--status-error)_8%,transparent)]"',
+    );
   });
 });
