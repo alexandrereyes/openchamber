@@ -47,6 +47,7 @@ import {
   createSession as createSessionAction,
   deleteSession as deleteSessionAction,
   archiveSession as archiveSessionAction,
+  archiveSessions as archiveSessionsAction,
   updateSessionTitle as updateSessionTitleAction,
   shareSession as shareSessionAction,
   unshareSession as unshareSessionAction,
@@ -1288,30 +1289,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
 
   archiveSession: (id) => archiveSessionAction(id),
 
-  archiveSessions: async (ids, options) => {
-    const archivedIds: string[] = []
-    const failedIds: string[] = []
-    const expectedRuntimeKey = typeof options?.expectedRuntimeKey === "string"
-      ? options.expectedRuntimeKey
-      : undefined
-    for (const [index, id] of ids.entries()) {
-      if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
-        failedIds.push(...ids.slice(index))
-        break
-      }
-      const ok = await archiveSessionAction(id, expectedRuntimeKey)
-      if (ok) {
-        archivedIds.push(id)
-      } else {
-        failedIds.push(id)
-        if (expectedRuntimeKey && getRuntimeKey() !== expectedRuntimeKey) {
-          failedIds.push(...ids.slice(index + 1))
-          break
-        }
-      }
-    }
-    return { archivedIds, failedIds }
-  },
+  archiveSessions: (ids, options) => archiveSessionsAction(ids, options),
 
   // ---------------------------------------------------------------------------
   // updateSessionTitle — calls SDK, SSE event updates child store

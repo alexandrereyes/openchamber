@@ -213,7 +213,7 @@ Examples of global-store updates performed in `session-actions.ts`:
 - `createSession()` -> `upsertSession(session)`
 - `updateSessionTitle()` -> `upsertSession(result.data)`
 - `shareSession()` / `unshareSession()` -> `upsertSession(result.data)`
-- `archiveSession()` -> waits for server confirmation, then upserts the archived session
+- `archiveSession()` / `archiveSessions()` -> wait for server confirmation, then upsert each archived session
 - `deleteSession()` -> waits for server confirmation or `404`, then removes the session and its persisted state
 - `moveSessionToDirectory()` -> move the session between directory stores and update the global directory index
 
