@@ -44,6 +44,7 @@ import { getProjectLabel, normalizePath } from './mobilePaths';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { useI18n } from '@/lib/i18n';
 import { PROJECT_COLOR_MAP, PROJECT_ICON_MAP, ProjectIconImage } from '@/lib/projectMeta';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import { cn } from '@/lib/utils';
 import {
   listProjectWorktrees,
@@ -68,6 +69,7 @@ import type { WorktreeMetadata } from '@/types/worktree';
 
 import { MobileDeleteWorktreeDialog } from './MobileDeleteWorktreeDialog';
 import { MobileProjectEditSurface } from './MobileProjectEditSurface';
+import { archiveMobileSessionSubtree } from './mobileSessionArchive';
 
 type MobileSessionsSheetProps = {
   open: boolean;
@@ -839,6 +841,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const { git } = useRuntimeAPIs();
   const liveSessions = useAllLiveSessions();
   const globalActiveSessions = useGlobalSessionsStore((state) => state.activeSessions);
+  const globalArchivedSessions = useGlobalSessionsStore((state) => state.archivedSessions);
   const pinnedSessionIds = useSessionPinnedStore(React.useCallback(
     (state) => open || variant === 'sidebar' ? state.ids : EMPTY_PINNED_SESSION_IDS,
     [open, variant],
@@ -852,7 +855,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const currentDirectory = useDirectoryStore((state) => state.currentDirectory);
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
-  const archiveSession = useSessionUIStore((state) => state.archiveSession);
+  const archiveSessions = useSessionUIStore((state) => state.archiveSessions);
   const deleteSession = useSessionUIStore((state) => state.deleteSession);
   const updateSessionTitle = useSessionUIStore((state) => state.updateSessionTitle);
   const openNewSessionDraft = useSessionUIStore((state) => state.openNewSessionDraft);
@@ -1005,8 +1008,16 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
     // Archived sessions never show on mobile (no archived view here): the live
     // overlay can carry them for the active directory, and they'd otherwise
     // surface in search and then "disappear" once the overlay refreshes.
-    return merged.filter((session) => !session.time?.archived);
-  }, [globalActiveSessions, liveSessions]);
+    //
+    // The global archived cache is negative authority on top of that check: a
+    // live copy that has not caught up yet — an in-flight child discovery, a
+    // late SSE echo — still carries no `time.archived` and would otherwise
+    // resurrect a row that was just archived, until a full reload.
+    const archivedIds = new Set(
+      globalArchivedSessions.filter((session) => session.time?.archived).map((session) => session.id),
+    );
+    return merged.filter((session) => !session.time?.archived && !archivedIds.has(session.id));
+  }, [globalActiveSessions, globalArchivedSessions, liveSessions]);
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -1253,12 +1264,38 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
     setConfirmingDeleteSessionId(null);
   };
 
+  // Archiving a parent must take its subagents with it: the server does not
+  // cascade `time.archived`, so archiving the row alone would leave orphaned
+  // children in the list. Lineage spans the surface's whole merged list plus the
+  // archived cache, not the rendered bucket, so a descendant in another
+  // directory/worktree — or below an already-archived intermediate — is still
+  // reached. Copy stays singular for a childless row (desktop parity).
   const handleArchive = async (session: Session) => {
     setRevealedSessionId(null);
     setConfirmingDeleteSessionId(null);
-    const ok = await archiveSession(session.id);
-    if (ok) toast.success(t('sessions.sidebar.session.archive.success'));
-    else toast.error(t('sessions.sidebar.session.archive.error'));
+    const { archivedIds, failedIds, targetCount } = await archiveMobileSessionSubtree({
+      sessions: [...sessions, ...globalArchivedSessions],
+      rootId: session.id,
+      expectedRuntimeKey: getRuntimeKey(),
+      archiveSessions,
+    });
+
+    if (targetCount === 1) {
+      if (failedIds.length === 0) toast.success(t('sessions.sidebar.session.archive.success'));
+      else toast.error(t('sessions.sidebar.session.archive.error'));
+      return;
+    }
+
+    if (archivedIds.length > 0) {
+      toast.success(archivedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.archivedSingle', { count: archivedIds.length })
+        : t('sessions.sidebar.bulkActions.archivedPlural', { count: archivedIds.length }));
+    }
+    if (failedIds.length > 0) {
+      toast.error(failedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.failedArchiveSingle', { count: failedIds.length })
+        : t('sessions.sidebar.bulkActions.failedArchivePlural', { count: failedIds.length }));
+    }
   };
 
   const handleConfirmDelete = async (session: Session) => {
