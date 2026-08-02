@@ -37,7 +37,7 @@ So:
 - Use the **global sessions store** for cold/global session coverage (especially archived pages and unopened directories)
 - Use **aggregated child-store sessions and the global live status index** for live truth across initialized directories
 
-Global archived membership is negative authority for every active session list built from both scopes. A session in the global archived list must not be reintroduced by a live copy that has not caught up yet, and archived wins if a race leaves the same ID in both global lists. Live records may still enrich a global active session's metadata through `mergeLiveSessionWithGlobalSession`; they may not restore archived-away membership. `combineActiveSessionsWithLive()` in `useGlobalSessionsStore.ts` implements that precedence for the mobile session surfaces.
+Global archived membership is negative authority for every active session list built from both scopes. A session in the global archived list must not be reintroduced by a live copy that has not caught up yet, and archived wins if a race leaves the same ID in both global lists. Live records may still enrich a global active session's metadata through `mergeLiveSessionWithGlobalSession`; they may not restore archived-away membership. The `sessions` memo in `MobileSessionsSheet.tsx` implements that precedence for the mobile session surfaces.
 
 ## Ownership map
 
