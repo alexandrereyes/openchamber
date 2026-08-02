@@ -40,6 +40,8 @@ import { fileDiffFromPatch } from '@/lib/diff/patchFileDiff';
 import { isVSCodeRuntime } from '@/lib/desktop';
 import { startReviewFlow } from '@/lib/reviewFlow';
 import { opencodeClient } from '@/lib/opencode/client';
+import { WALKTHROUGH_ACTION_CLASS } from '@/components/views/walkthrough/walkthroughAction';
+import { useWalkthroughStore } from '@/stores/useWalkthroughStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useDirectorySync, useSessionMessages, useSessionStatus } from '@/sync/sync-context';
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
@@ -1001,6 +1003,8 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const { t } = useI18n();
     const { git, files } = useRuntimeAPIs();
     const effectiveDirectory = useEffectiveDirectory();
+    const openContextSurface = useUIStore((state) => state.openContextSurface);
+    const requestWalkthroughSource = useWalkthroughStore((state) => state.requestSource);
     const { screenWidth, isMobile } = useDeviceInfo();
 
     const isGitRepo = useIsGitRepo(effectiveDirectory ?? null);
@@ -1054,6 +1058,20 @@ export const DiffView: React.FC<DiffViewProps> = ({
 
     const isMobileLayout = isMobile || screenWidth <= 768;
     const showReviewAction = Boolean(currentSessionId) && activeDiffScope !== 'turn' && activeDiffScope !== 'branch' && !isMobileLayout && !isVSCodeRuntime();
+    // Same runtime and width rules as the rail surface: no point offering an
+    // entry point to a surface that cannot open here.
+    //
+    // Branch scope is excluded as well. The walkthrough hand-off below can only
+    // describe a working-tree source, and this scope is not one: forwarding it
+    // would silently generate a walkthrough of the working tree while the user
+    // is looking at the branch. The walkthrough does have a native branch
+    // source, but it resolves its base with `deriveBaseBranch`, whereas this
+    // scope uses the base OpenCode reports as `vcs.default_branch`. Those two
+    // can disagree, so handing off would risk showing a diff against a
+    // different base than the one on screen. Wiring that up means reconciling
+    // both base-derivation strategies, which belongs with the walkthrough, not
+    // here.
+    const showWalkthroughAction = activeDiffScope !== 'turn' && activeDiffScope !== 'branch' && !isMobileLayout && !isVSCodeRuntime();
     const showFileSidebar = !hideStackedFileSidebar && !isMobileLayout && screenWidth >= 1024;
     const diffScrollRef = React.useRef<HTMLElement | null>(null);
     const fileSectionRefs = React.useRef(new Map<string, HTMLDivElement | null>());
@@ -1945,6 +1963,32 @@ export const DiffView: React.FC<DiffViewProps> = ({
                         )}
                         <span className="diff-toolbar__review-label typography-ui-label">
                             {t('diffView.actions.review')}
+                        </span>
+                    </Button>
+                )}
+                {changedFiles.length > 0 && showWalkthroughAction && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            // Carry the scope across: opening the walkthrough
+                            // while looking at staged changes should review
+                            // staged changes, not whatever the panel showed last.
+                            const directory = effectiveDirectory ?? '';
+                            requestWalkthroughSource(directory, {
+                                kind: 'working-tree',
+                                scope: activeDiffScope === 'staged' || activeDiffScope === 'working'
+                                    ? activeDiffScope
+                                    : 'all',
+                            });
+                            openContextSurface(directory, 'walkthrough');
+                        }}
+                        className={cn('diff-toolbar__walkthrough-button h-7 flex-shrink-0 gap-1.5 px-2', WALKTHROUGH_ACTION_CLASS)}
+                        aria-label={t('walkthrough.action.open')}
+                    >
+                        <Icon name="route" className="size-4" />
+                        <span className="diff-toolbar__walkthrough-label typography-ui-label">
+                            {t('walkthrough.action.open')}
                         </span>
                     </Button>
                 )}
