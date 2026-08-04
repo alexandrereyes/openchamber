@@ -1,21 +1,34 @@
 import type { Session } from '@opencode-ai/sdk/v2/client';
 
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import { computeSubtreeIds } from '@/sync/scoped-blocking-requests';
 
 const isArchived = (session: Session): boolean => Boolean(session.time?.archived);
 
 export type ArchiveSessionsResult = { archivedIds: string[]; failedIds: string[] };
+type DeleteSessionsResult = { deletedIds: string[]; failedIds: string[] };
+
+type MobileSessionMutationOptions = {
+  expectedRuntimeKey: string;
+  directory: string | null;
+};
+
+type MobileSessionTarget = {
+  id: string;
+  directory: string | null;
+};
 
 type ArchiveSessionsFn = (
   ids: string[],
-  options?: { expectedRuntimeKey?: string },
+  options?: MobileSessionMutationOptions,
 ) => Promise<ArchiveSessionsResult>;
 
-type MobileArchiveTopology = {
-  targetIds: string[];
-  depthById: Map<string, number>;
-  parentsByChild: Map<string, Set<string>>;
-};
+type DeleteSessionsFn = (
+  ids: string[],
+  options?: MobileSessionMutationOptions,
+) => Promise<DeleteSessionsResult>;
+
+type CaptureDirectory = (sessionId: string, session?: Session) => string | null | undefined;
 
 export const excludeArchivedMobileSessions = (
   sessions: Session[],
@@ -25,122 +38,166 @@ export const excludeArchivedMobileSessions = (
   return sessions.filter((session) => !isArchived(session) && !archivedIds.has(session.id));
 };
 
-const buildMobileArchiveTopology = (sessions: Session[], rootId: string): MobileArchiveTopology => {
-  const subtreeIds = computeSubtreeIds(sessions, rootId);
-  const archivedIds = new Set(sessions.filter(isArchived).map((session) => session.id));
-  const childrenByParent = new Map<string, Set<string>>();
-  const parentsByChild = new Map<string, Set<string>>();
-
-  for (const session of sessions) {
-    if (!session.parentID || !subtreeIds.has(session.id)) continue;
-    const children = childrenByParent.get(session.parentID) ?? new Set<string>();
-    children.add(session.id);
-    childrenByParent.set(session.parentID, children);
-    const parents = parentsByChild.get(session.id) ?? new Set<string>();
-    parents.add(session.parentID);
-    parentsByChild.set(session.id, parents);
-  }
-
-  const depthById = new Map<string, number>([[rootId, 0]]);
-  const queue = [rootId];
-  for (const id of queue) {
-    const depth = depthById.get(id) ?? 0;
-    for (const childId of childrenByParent.get(id) ?? []) {
-      if (depthById.has(childId)) continue;
-      depthById.set(childId, depth + 1);
-      queue.push(childId);
-    }
-  }
-
-  return {
-    targetIds: [...subtreeIds].filter((id) => id === rootId || !archivedIds.has(id)),
-    depthById,
-    parentsByChild,
+const getSessionDirectory = (session?: Session): string | null => {
+  if (!session) return null;
+  const record = session as Session & {
+    directory?: string | null;
+    project?: { worktree?: string | null } | null;
   };
+  const directory = record.directory ?? record.project?.worktree ?? null;
+  return typeof directory === 'string' && directory.trim().length > 0 ? directory : null;
+};
+
+const collectMobileSessionTargets = (args: {
+  sessions: Session[];
+  rootId: string;
+  includeArchived: boolean;
+  captureDirectory?: CaptureDirectory;
+}): MobileSessionTarget[] => {
+  const subtreeIds = computeSubtreeIds(args.sessions, args.rootId);
+  const archivedIds = new Set(args.sessions.filter(isArchived).map((session) => session.id));
+  const sessionById = new Map<string, Session>();
+  for (const session of args.sessions) {
+    if (!sessionById.has(session.id)) sessionById.set(session.id, session);
+  }
+
+  const targetIds = [...subtreeIds].filter((id) => (
+    args.includeArchived || id === args.rootId || !archivedIds.has(id)
+  ));
+
+  // Resolve every target while the full snapshot and its stores still exist.
+  // The executor must never rediscover a directory after an earlier delete.
+  return targetIds.map((id) => {
+    const session = sessionById.get(id);
+    const capturedDirectory = args.captureDirectory?.(id, session);
+    return {
+      id,
+      directory: getSessionDirectory(session) ?? capturedDirectory ?? null,
+    };
+  });
+};
+
+/** IDs to archive: the root plus known active descendants, root first. */
+export const collectMobileArchiveTargetIds = (sessions: Session[], rootId: string): string[] => (
+  collectMobileSessionTargets({ sessions, rootId, includeArchived: false }).map((target) => target.id)
+);
+
+/** IDs to delete: the root plus every known descendant, including archived ones. */
+export const collectMobileDeleteTargetIds = (sessions: Session[], rootId: string): string[] => (
+  collectMobileSessionTargets({ sessions, rootId, includeArchived: true }).map((target) => target.id)
+);
+
+type ExecuteMobileSessionSubtreeArgs = {
+  targets: MobileSessionTarget[];
+  expectedRuntimeKey: string;
+  mutate: (target: MobileSessionTarget, options: MobileSessionMutationOptions) => Promise<boolean>;
+};
+
+type ExecuteMobileSessionSubtreeResult = {
+  completedIds: string[];
+  failedIds: string[];
+  targetCount: number;
 };
 
 /**
- * IDs to archive when a mobile session row is swiped: the row itself plus every
- * known active descendant, root first.
- *
- * OpenCode does not cascade `time.archived` to subagents, so archiving only the
- * swiped row leaves its children listed under a parent that is gone.
- *
- * `sessions` is a lineage snapshot, so it may include archived records:
- * traversal passes *through* an archived intermediate to reach active sessions
- * below it, while archived sessions themselves are dropped from the targets so
- * they are not re-timestamped. That mirrors the desktop sidebar cascade. The
- * root is always kept — including when it is absent from `sessions` — so the
- * swipe archives the row the user acted on.
+ * Runs one captured target at a time in post-order. A failed target blocks all
+ * remaining targets, including siblings and ancestors, so a partial operation
+ * never removes an ancestor whose known subtree was not handled.
  */
-export const collectMobileArchiveTargetIds = (sessions: Session[], rootId: string): string[] => {
-  return buildMobileArchiveTopology(sessions, rootId).targetIds;
+const executeMobileSessionSubtree = async (
+  args: ExecuteMobileSessionSubtreeArgs,
+): Promise<ExecuteMobileSessionSubtreeResult> => {
+  const completedIds: string[] = [];
+  const failedIds: string[] = [];
+  const targetCount = args.targets.length;
+  const orderedTargets = [...args.targets].reverse();
+
+  for (let index = 0; index < orderedTargets.length; index += 1) {
+    const target = orderedTargets[index];
+    if (getRuntimeKey() !== args.expectedRuntimeKey) {
+      failedIds.push(...orderedTargets.slice(index).map((entry) => entry.id));
+      break;
+    }
+
+    let completed = false;
+    try {
+      completed = await args.mutate(target, {
+        expectedRuntimeKey: args.expectedRuntimeKey,
+        directory: target.directory,
+      });
+    } catch {
+      completed = false;
+    }
+
+    if (!completed || getRuntimeKey() !== args.expectedRuntimeKey) {
+      failedIds.push(...orderedTargets.slice(index).map((entry) => entry.id));
+      break;
+    }
+    completedIds.push(target.id);
+  }
+
+  return { completedIds, failedIds, targetCount };
 };
 
 /**
- * Archives a swiped mobile row and its known active subtree.
- *
- * Deepest first, root last: a session is never archived while one of its own
- * descendants is still active. So when a descendant fails, the batch stops
- * before the ancestors and the tree stays coherent and retryable instead of
- * leaving the orphaned children this cascade exists to prevent.
- *
- * Every call is pinned to `expectedRuntimeKey`, captured by the caller when the
- * swipe was handled, so a runtime switch mid-batch stops the work instead of
- * archiving these IDs against a different runtime.
- *
- * `failedIds` reports what is still active, including ancestors that were
- * deliberately not attempted.
+ * Archives a swiped mobile row and its known active subtree. Already archived
+ * descendants are traversed through but are not sent to the server, so they are
+ * not retimestamped. Children missing from the snapshot cannot be targeted by
+ * the client; their archive behavior remains defined by the backend.
  */
 export const archiveMobileSessionSubtree = async (args: {
   sessions: Session[];
   rootId: string;
   expectedRuntimeKey: string;
   archiveSessions: ArchiveSessionsFn;
+  captureDirectory?: CaptureDirectory;
 }): Promise<ArchiveSessionsResult & { targetCount: number }> => {
-  const topology = buildMobileArchiveTopology(args.sessions, args.rootId);
-  const targetIds = topology.targetIds;
-  const targetCount = targetIds.length;
-  const options = { expectedRuntimeKey: args.expectedRuntimeKey };
-  const idsByDepth = new Map<number, string[]>();
-  for (const id of targetIds) {
-    const depth = topology.depthById.get(id) ?? 0;
-    const ids = idsByDepth.get(depth) ?? [];
-    ids.push(id);
-    idsByDepth.set(depth, ids);
-  }
+  const result = await executeMobileSessionSubtree({
+    targets: collectMobileSessionTargets({
+      sessions: args.sessions,
+      rootId: args.rootId,
+      includeArchived: false,
+      captureDirectory: args.captureDirectory,
+    }),
+    expectedRuntimeKey: args.expectedRuntimeKey,
+    mutate: async (target, options) => {
+      const response = await args.archiveSessions([target.id], options);
+      return response.archivedIds.includes(target.id) && response.failedIds.length === 0;
+    },
+  });
 
-  const archivedIds: string[] = [];
-  const failedIds: string[] = [];
-  const blockedAncestorIds = new Set<string>();
-
-  const blockAncestors = (failedId: string) => {
-    const visited = new Set([failedId]);
-    const queue = [failedId];
-    for (const id of queue) {
-      for (const parentId of topology.parentsByChild.get(id) ?? []) {
-        if (visited.has(parentId)) continue;
-        visited.add(parentId);
-        blockedAncestorIds.add(parentId);
-        queue.push(parentId);
-      }
-    }
+  return {
+    archivedIds: result.completedIds,
+    failedIds: result.failedIds,
+    targetCount: result.targetCount,
   };
+};
 
-  const depths = [...idsByDepth.keys()].sort((left, right) => right - left);
-  for (const depth of depths) {
-    const ids = idsByDepth.get(depth) ?? [];
-    const blockedIds = ids.filter((id) => blockedAncestorIds.has(id));
-    failedIds.push(...blockedIds);
+/** Hard-deletes a row and every known descendant, including archived ones; unknown children rely on the backend cascade. */
+export const deleteMobileSessionSubtree = async (args: {
+  sessions: Session[];
+  rootId: string;
+  expectedRuntimeKey: string;
+  deleteSessions: DeleteSessionsFn;
+  captureDirectory?: CaptureDirectory;
+}): Promise<DeleteSessionsResult & { targetCount: number }> => {
+  const result = await executeMobileSessionSubtree({
+    targets: collectMobileSessionTargets({
+      sessions: args.sessions,
+      rootId: args.rootId,
+      includeArchived: true,
+      captureDirectory: args.captureDirectory,
+    }),
+    expectedRuntimeKey: args.expectedRuntimeKey,
+    mutate: async (target, options) => {
+      const response = await args.deleteSessions([target.id], options);
+      return response.deletedIds.includes(target.id) && response.failedIds.length === 0;
+    },
+  });
 
-    const eligibleIds = ids.filter((id) => !blockedAncestorIds.has(id));
-    if (eligibleIds.length === 0) continue;
-
-    const result = await args.archiveSessions(eligibleIds, options);
-    archivedIds.push(...result.archivedIds);
-    failedIds.push(...result.failedIds);
-    for (const failedId of result.failedIds) blockAncestors(failedId);
-  }
-
-  return { archivedIds, failedIds, targetCount };
+  return {
+    deletedIds: result.completedIds,
+    failedIds: result.failedIds,
+    targetCount: result.targetCount,
+  };
 };
