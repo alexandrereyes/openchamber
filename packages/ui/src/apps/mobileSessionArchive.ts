@@ -11,6 +11,54 @@ type ArchiveSessionsFn = (
   options?: { expectedRuntimeKey?: string },
 ) => Promise<ArchiveSessionsResult>;
 
+type MobileArchiveTopology = {
+  targetIds: string[];
+  depthById: Map<string, number>;
+  parentsByChild: Map<string, Set<string>>;
+};
+
+export const excludeArchivedMobileSessions = (
+  sessions: Session[],
+  archivedSessions: Session[],
+): Session[] => {
+  const archivedIds = new Set(archivedSessions.map((session) => session.id));
+  return sessions.filter((session) => !isArchived(session) && !archivedIds.has(session.id));
+};
+
+const buildMobileArchiveTopology = (sessions: Session[], rootId: string): MobileArchiveTopology => {
+  const subtreeIds = computeSubtreeIds(sessions, rootId);
+  const archivedIds = new Set(sessions.filter(isArchived).map((session) => session.id));
+  const childrenByParent = new Map<string, Set<string>>();
+  const parentsByChild = new Map<string, Set<string>>();
+
+  for (const session of sessions) {
+    if (!session.parentID || !subtreeIds.has(session.id)) continue;
+    const children = childrenByParent.get(session.parentID) ?? new Set<string>();
+    children.add(session.id);
+    childrenByParent.set(session.parentID, children);
+    const parents = parentsByChild.get(session.id) ?? new Set<string>();
+    parents.add(session.parentID);
+    parentsByChild.set(session.id, parents);
+  }
+
+  const depthById = new Map<string, number>([[rootId, 0]]);
+  const queue = [rootId];
+  for (const id of queue) {
+    const depth = depthById.get(id) ?? 0;
+    for (const childId of childrenByParent.get(id) ?? []) {
+      if (depthById.has(childId)) continue;
+      depthById.set(childId, depth + 1);
+      queue.push(childId);
+    }
+  }
+
+  return {
+    targetIds: [...subtreeIds].filter((id) => id === rootId || !archivedIds.has(id)),
+    depthById,
+    parentsByChild,
+  };
+};
+
 /**
  * IDs to archive when a mobile session row is swiped: the row itself plus every
  * known active descendant, root first.
@@ -26,9 +74,7 @@ type ArchiveSessionsFn = (
  * swipe archives the row the user acted on.
  */
 export const collectMobileArchiveTargetIds = (sessions: Session[], rootId: string): string[] => {
-  const subtreeIds = computeSubtreeIds(sessions, rootId);
-  const archivedIds = new Set(sessions.filter(isArchived).map((session) => session.id));
-  return [...subtreeIds].filter((id) => id === rootId || !archivedIds.has(id));
+  return buildMobileArchiveTopology(sessions, rootId).targetIds;
 };
 
 /**
@@ -52,30 +98,49 @@ export const archiveMobileSessionSubtree = async (args: {
   expectedRuntimeKey: string;
   archiveSessions: ArchiveSessionsFn;
 }): Promise<ArchiveSessionsResult & { targetCount: number }> => {
-  const targetIds = collectMobileArchiveTargetIds(args.sessions, args.rootId);
-  const [rootId, ...descendantIds] = targetIds;
+  const topology = buildMobileArchiveTopology(args.sessions, args.rootId);
+  const targetIds = topology.targetIds;
   const targetCount = targetIds.length;
   const options = { expectedRuntimeKey: args.expectedRuntimeKey };
-
-  // `computeSubtreeIds` walks breadth-first, so every parent precedes its own
-  // children; reversing that order archives each session only after the subtree
-  // beneath it.
-  const descendants = descendantIds.length > 0
-    ? await args.archiveSessions([...descendantIds].reverse(), options)
-    : { archivedIds: [], failedIds: [] };
-
-  if (descendants.failedIds.length > 0) {
-    return {
-      archivedIds: descendants.archivedIds,
-      failedIds: [...descendants.failedIds, rootId],
-      targetCount,
-    };
+  const idsByDepth = new Map<number, string[]>();
+  for (const id of targetIds) {
+    const depth = topology.depthById.get(id) ?? 0;
+    const ids = idsByDepth.get(depth) ?? [];
+    ids.push(id);
+    idsByDepth.set(depth, ids);
   }
 
-  const root = await args.archiveSessions([rootId], options);
-  return {
-    archivedIds: [...descendants.archivedIds, ...root.archivedIds],
-    failedIds: root.failedIds,
-    targetCount,
+  const archivedIds: string[] = [];
+  const failedIds: string[] = [];
+  const blockedAncestorIds = new Set<string>();
+
+  const blockAncestors = (failedId: string) => {
+    const visited = new Set([failedId]);
+    const queue = [failedId];
+    for (const id of queue) {
+      for (const parentId of topology.parentsByChild.get(id) ?? []) {
+        if (visited.has(parentId)) continue;
+        visited.add(parentId);
+        blockedAncestorIds.add(parentId);
+        queue.push(parentId);
+      }
+    }
   };
+
+  const depths = [...idsByDepth.keys()].sort((left, right) => right - left);
+  for (const depth of depths) {
+    const ids = idsByDepth.get(depth) ?? [];
+    const blockedIds = ids.filter((id) => blockedAncestorIds.has(id));
+    failedIds.push(...blockedIds);
+
+    const eligibleIds = ids.filter((id) => !blockedAncestorIds.has(id));
+    if (eligibleIds.length === 0) continue;
+
+    const result = await args.archiveSessions(eligibleIds, options);
+    archivedIds.push(...result.archivedIds);
+    failedIds.push(...result.failedIds);
+    for (const failedId of result.failedIds) blockAncestors(failedId);
+  }
+
+  return { archivedIds, failedIds, targetCount };
 };
