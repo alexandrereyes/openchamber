@@ -6,8 +6,10 @@ import type { ProviderResult, QuotaProviderId } from '@/types';
 import { useQuotaStore } from './useQuotaStore';
 
 const originalFetchProviderQuota = useQuotaStore.getState().fetchProviderQuota;
+const originalFetch = globalThis.fetch;
 
 afterEach(() => {
+  globalThis.fetch = originalFetch;
   useQuotaStore.setState({
     results: [],
     isLoading: false,
@@ -150,5 +152,85 @@ describe('quota refresh', () => {
       if (runtimeARequest) await runtimeARequest;
       switchRuntimeEndpoint({ apiBaseUrl: originalApiBaseUrl, runtimeKey: originalRuntimeKey });
     }
+  });
+
+  test('does not commit a provider response after the runtime changes', async () => {
+    const originalApiBaseUrl = getRuntimeApiBaseUrl();
+    const originalRuntimeKey = getRuntimeKey();
+    let finishRuntimeA!: (response: Response) => void;
+    const runtimeAResponse = new Promise<Response>((resolve) => {
+      finishRuntimeA = resolve;
+    });
+    const runtimeBResult: ProviderResult = {
+      providerId: 'claude',
+      providerName: 'Runtime B Claude',
+      ok: true,
+      configured: true,
+      usage: null,
+      fetchedAt: 2,
+    };
+    globalThis.fetch = (async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/quota/claude')) return runtimeAResponse;
+      return new Response(null, { status: 404 });
+    }) as typeof fetch;
+
+    let runtimeARequest: Promise<void> | null = null;
+    try {
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://runtime-a.test', runtimeKey: 'runtime-a' });
+      runtimeARequest = useQuotaStore.getState().fetchProviderQuota('claude');
+      await Promise.resolve();
+
+      switchRuntimeEndpoint({ apiBaseUrl: 'https://runtime-b.test', runtimeKey: 'runtime-b' });
+      useQuotaStore.getState().resetForRuntimeSwitch();
+      useQuotaStore.setState({ results: [runtimeBResult] });
+
+      finishRuntimeA(new Response(JSON.stringify({
+        providerId: 'claude',
+        providerName: 'Runtime A Claude',
+        ok: true,
+        configured: true,
+        usage: null,
+        fetchedAt: 1,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+      await runtimeARequest;
+
+      expect(useQuotaStore.getState().results).toEqual([runtimeBResult]);
+      expect(useQuotaStore.getState().isFetchingProvider).toEqual({});
+    } finally {
+      finishRuntimeA(new Response(null, { status: 500 }));
+      if (runtimeARequest) await runtimeARequest;
+      switchRuntimeEndpoint({ apiBaseUrl: originalApiBaseUrl, runtimeKey: originalRuntimeKey });
+      useQuotaStore.getState().resetForRuntimeSwitch();
+    }
+  });
+
+  test('invalidates a pending full refresh when the runtime resets', async () => {
+    let finishProviderFetch!: () => void;
+    const providerFetch = new Promise<void>((resolve) => {
+      finishProviderFetch = resolve;
+    });
+    useQuotaStore.setState({
+      fetchProviderQuota: async () => providerFetch,
+    });
+
+    const pendingRefresh = useQuotaStore.getState().fetchAllQuotas();
+    useQuotaStore.getState().resetForRuntimeSwitch();
+    const currentResults: ProviderResult[] = [{
+      providerId: 'codex',
+      providerName: 'Current runtime Codex',
+      ok: true,
+      configured: true,
+      usage: null,
+      fetchedAt: 2,
+    }];
+    useQuotaStore.setState({ results: currentResults });
+
+    finishProviderFetch();
+    await pendingRefresh;
+
+    expect(useQuotaStore.getState().results).toBe(currentResults);
+    expect(useQuotaStore.getState().lastUpdated).toBeNull();
+    expect(useQuotaStore.getState().isLoading).toBe(false);
   });
 });
