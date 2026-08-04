@@ -277,6 +277,16 @@ the previous runtime or one this session never belonged to, so the action
 reports failure instead of committing. The deletion already accepted by the
 server stays deleted there; its persisted state is left as harmless stale
 metadata and the next authoritative load reconciles it.
+The mobile multi-session archive/delete callers that span asynchronous SDK calls
+capture the runtime key and each target's directory before the first SDK call.
+Their shared post-order executor stops on the first failure or runtime switch, so
+an ancestor is never mutated after a known descendant failed. Archive skips
+already archived descendants without retimestamping them; hard delete includes
+known archived descendants. The snapshot only covers known descendants: children
+missing from the client snapshot cannot be archived by the client, while unknown
+children deleted by the user remain covered only by the upstream backend delete
+cascade. Stale responses are rejected before they can reconcile the current
+runtime's live or global stores.
 
 ## The golden rule
 
