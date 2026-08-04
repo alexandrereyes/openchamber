@@ -1437,8 +1437,11 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
       </>
     ) : null;
 
+  // flex-1 + min-h-0 rather than h-full: both hosts put a fixed-height header
+  // above this, so a 100% height overflows by exactly that header — and the
+  // clipped overflow swallowed the footer.
   const surfaceContent = (
-      <div ref={contentRootRef} className="flex h-full flex-col">
+      <div ref={contentRootRef} className="flex min-h-0 flex-1 flex-col">
         <ScrollShadow className="min-h-0 flex-1 overflow-y-auto pb-4">
           {/* The search bar scrolls WITH the list (iOS-style): the open-time
               auto-scroll to the current session naturally tucks it away, and
@@ -1797,26 +1800,28 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
             style={{ paddingBottom: 'calc(0.375rem + var(--oc-safe-area-bottom, 0px))' }}
           >
             {footer.instanceLabel && footer.onOpenInstances ? (
-              <button
+              <Button
                 type="button"
-                className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-2 text-left transition-colors hover:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                variant="info"
+                size="lg"
+                className="min-w-0 shrink justify-start"
                 onClick={footer.onOpenInstances}
                 aria-label={t('mobile.menu.instances')}
                 style={{ touchAction: 'manipulation' }}
               >
-                <Icon name="server" className="size-[18px] shrink-0 text-muted-foreground" />
-                <span className="block min-w-0 truncate typography-ui-label text-foreground">
-                  {footer.instanceLabel}
-                </span>
-              </button>
+                <Icon name="server" className="size-[18px]" />
+                <span className="block min-w-0 truncate">{footer.instanceLabel}</span>
+              </Button>
             ) : (
               <div className="min-w-0 flex-1" />
             )}
             <div className="flex shrink-0 items-center gap-1">
               {footer.onOpenUpdate ? (
-                <button
+                <Button
                   type="button"
-                  className="relative flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-interactive-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  variant="default"
+                  size="lg"
+                  className="w-10 px-0"
                   onClick={footer.onOpenUpdate}
                   aria-label={t('mobile.menu.update')}
                   title={t('mobile.menu.update')}
@@ -1824,18 +1829,20 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
                 >
                   <Icon name="download" className="size-5" />
                   <span className="absolute right-2 top-2 inline-flex size-2 rounded-full bg-primary" aria-hidden />
-                </button>
+                </Button>
               ) : null}
-              <button
+              <Button
                 type="button"
-                className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-interactive-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                variant="default"
+                size="lg"
+                className="w-10 px-0"
                 onClick={footer.onOpenSettings}
                 aria-label={t('mobile.menu.settings')}
                 title={t('mobile.menu.settings')}
                 style={{ touchAction: 'manipulation' }}
               >
                 <Icon name="settings-3" className="size-5" />
-              </button>
+              </Button>
             </div>
           </div>
         ) : null}
