@@ -5,11 +5,13 @@ import {
   type ArchiveSessionsResult,
   archiveMobileSessionSubtree,
   collectMobileArchiveTargetIds,
+  excludeArchivedMobileSessions,
 } from './mobileSessionArchive';
 
-const session = (id: string, parentID?: string, archivedAt?: number): Session => ({
+const session = (id: string, parentID?: string, archivedAt?: number, directory?: string): Session => ({
   id,
   parentID,
+  directory,
   time: archivedAt ? { archived: archivedAt } : {},
 }) as Session;
 
@@ -85,6 +87,15 @@ describe('mobile session archive targets', () => {
     ]);
   });
 
+  test('includes a descendant from another directory', () => {
+    const sessions = [
+      session('ses_root', undefined, undefined, '/project'),
+      session('ses_child', 'ses_root', undefined, '/project/.worktrees/feature'),
+    ];
+
+    expect(collectMobileArchiveTargetIds(sessions, 'ses_root')).toEqual(['ses_root', 'ses_child']);
+  });
+
   test('keeps the swiped row even when it is not in the list', () => {
     expect(collectMobileArchiveTargetIds([session('ses_other')], 'ses_root')).toEqual(['ses_root']);
   });
@@ -101,6 +112,17 @@ describe('mobile session archive targets', () => {
 
     expect(targets).toEqual(['ses_root', 'ses_a', 'ses_b']);
     expect(new Set(targets).size).toBe(targets.length);
+  });
+});
+
+describe('mobile active session authority', () => {
+  test('does not resurrect an archived session from a stale live copy', () => {
+    const staleLive = session('ses_archived');
+
+    expect(excludeArchivedMobileSessions(
+      [session('ses_active'), staleLive],
+      [session('ses_archived')],
+    ).map((candidate) => candidate.id)).toEqual(['ses_active']);
   });
 });
 
@@ -134,7 +156,8 @@ describe('mobile session archive subtree', () => {
     });
 
     expect(spy.calls.map((call) => call.ids)).toEqual([
-      ['ses_grandchild', 'ses_child'],
+      ['ses_grandchild'],
+      ['ses_child'],
       ['ses_root'],
     ]);
     expect(spy.calls.every((call) => call.options?.expectedRuntimeKey === RUNTIME_KEY)).toBe(true);
@@ -156,6 +179,56 @@ describe('mobile session archive subtree', () => {
     expect(spy.calls.map((call) => call.ids)).toEqual([['ses_child']]);
     expect(result.archivedIds).toEqual([]);
     expect(result.failedIds).toEqual(['ses_child', 'ses_root']);
+  });
+
+  test('skips only failed descendants ancestors and completes an independent branch', async () => {
+    const spy = createArchiveSpy(['ses_grandchild_a']);
+
+    const result = await archiveMobileSessionSubtree({
+      sessions: [
+        session('ses_root'),
+        session('ses_child_a', 'ses_root'),
+        session('ses_grandchild_a', 'ses_child_a'),
+        session('ses_child_b', 'ses_root'),
+        session('ses_grandchild_b', 'ses_child_b'),
+      ],
+      rootId: 'ses_root',
+      expectedRuntimeKey: RUNTIME_KEY,
+      archiveSessions: spy.archiveSessions,
+    });
+
+    expect(spy.calls.map((call) => call.ids)).toEqual([
+      ['ses_grandchild_a', 'ses_grandchild_b'],
+      ['ses_child_b'],
+    ]);
+    expect(result.archivedIds).toEqual(['ses_grandchild_b', 'ses_child_b']);
+    expect(result.failedIds).toEqual(['ses_grandchild_a', 'ses_child_a', 'ses_root']);
+  });
+
+  test('preserves true partial results when the guarded batch stops', async () => {
+    const calls: string[][] = [];
+    const archiveSessions = async (ids: string[]): Promise<ArchiveSessionsResult> => {
+      calls.push(ids);
+      return { archivedIds: [ids[0]], failedIds: ids.slice(1) };
+    };
+
+    const result = await archiveMobileSessionSubtree({
+      sessions: [
+        session('ses_root'),
+        session('ses_child_a', 'ses_root'),
+        session('ses_child_b', 'ses_root'),
+      ],
+      rootId: 'ses_root',
+      expectedRuntimeKey: RUNTIME_KEY,
+      archiveSessions,
+    });
+
+    expect(calls).toEqual([['ses_child_a', 'ses_child_b']]);
+    expect(result).toEqual({
+      archivedIds: ['ses_child_a'],
+      failedIds: ['ses_child_b', 'ses_root'],
+      targetCount: 3,
+    });
   });
 
   test('collects a descendant through an archived intermediate before the root', async () => {

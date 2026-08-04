@@ -69,7 +69,7 @@ import type { WorktreeMetadata } from '@/types/worktree';
 
 import { MobileDeleteWorktreeDialog } from './MobileDeleteWorktreeDialog';
 import { MobileProjectEditSurface } from './MobileProjectEditSurface';
-import { archiveMobileSessionSubtree } from './mobileSessionArchive';
+import { archiveMobileSessionSubtree, excludeArchivedMobileSessions } from './mobileSessionArchive';
 
 type MobileSessionsSheetProps = {
   open: boolean;
@@ -1013,10 +1013,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
     // live copy that has not caught up yet — an in-flight child discovery, a
     // late SSE echo — still carries no `time.archived` and would otherwise
     // resurrect a row that was just archived, until a full reload.
-    const archivedIds = new Set(
-      globalArchivedSessions.filter((session) => session.time?.archived).map((session) => session.id),
-    );
-    return merged.filter((session) => !session.time?.archived && !archivedIds.has(session.id));
+    return excludeArchivedMobileSessions(merged, globalArchivedSessions);
   }, [globalActiveSessions, globalArchivedSessions, liveSessions]);
 
   const normalizedQuery = query.trim().toLowerCase();
