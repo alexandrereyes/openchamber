@@ -80,7 +80,7 @@ export const sessionEvents = {
   },
   requestVcsDiffRefresh(hint: { directory: string }) {
     const directory = hint.directory.trim();
-    if (!directory) return;
+    if (!directory || vcsDiffRefreshListeners.size === 0) return;
 
     const existing = vcsDiffRefreshTimers.get(directory);
     if (existing) clearTimeout(existing);

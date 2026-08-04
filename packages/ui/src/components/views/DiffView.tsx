@@ -1063,18 +1063,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const showReviewAction = Boolean(currentSessionId) && activeDiffScope !== 'turn' && activeDiffScope !== 'branch' && !isMobileLayout && !isVSCodeRuntime();
     // Same runtime and width rules as the rail surface: no point offering an
     // entry point to a surface that cannot open here.
-    //
-    // Branch scope is excluded as well. The walkthrough hand-off below can only
-    // describe a working-tree source, and this scope is not one: forwarding it
-    // would silently generate a walkthrough of the working tree while the user
-    // is looking at the branch. The walkthrough does have a native branch
-    // source, but it resolves its base with `deriveBaseBranch`, whereas this
-    // scope uses the base OpenCode reports as `vcs.default_branch`. Those two
-    // can disagree, so handing off would risk showing a diff against a
-    // different base than the one on screen. Wiring that up means reconciling
-    // both base-derivation strategies, which belongs with the walkthrough, not
-    // here.
-    const showWalkthroughAction = activeDiffScope !== 'turn' && activeDiffScope !== 'branch' && !isMobileLayout && !isVSCodeRuntime();
+    const showWalkthroughAction = activeDiffScope !== 'turn' && !isMobileLayout && !isVSCodeRuntime();
     const showFileSidebar = !hideStackedFileSidebar && !isMobileLayout && screenWidth >= 1024;
     const diffScrollRef = React.useRef<HTMLElement | null>(null);
     const fileSectionRefs = React.useRef(new Map<string, HTMLDivElement | null>());
@@ -1128,9 +1117,10 @@ export const DiffView: React.FC<DiffViewProps> = ({
         previousSessionStatusRef.current = { sessionID: currentSessionId, type: nextType };
         if (!isActive || activeDiffScope !== 'branch') return;
         if (nextType === 'idle' && previous.type && previous.type !== 'idle') {
+            pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
             setBranchRefreshNonce((value) => value + 1);
         }
-    }, [activeDiffScope, currentSessionId, isActive, sessionStatus?.type]);
+    }, [activeDiffScope, captureScrollAnchor, currentSessionId, isActive, sessionStatus?.type]);
 
     React.useEffect(() => {
         if (!isActive || !shouldLoadBranchDiff || !branchAvailable || !effectiveDirectory) return;
@@ -1453,6 +1443,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
                 return;
             }
             if (activeDiffScope === 'branch') {
+                pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
                 setBranchRefreshNonce((value) => value + 1);
             } else if (hint.paths?.length) {
                 pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
@@ -1473,11 +1464,12 @@ export const DiffView: React.FC<DiffViewProps> = ({
         if (!isActive || activeDiffScope !== 'branch' || !effectiveDirectory) return;
         return sessionEvents.onVcsDiffRefreshHint((hint) => {
             if (normalizePath(hint.directory) !== normalizePath(effectiveDirectory)) return;
+            pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
             setBranchRefreshNonce((value) => value + 1);
         });
-    }, [activeDiffScope, effectiveDirectory, isActive]);
+    }, [activeDiffScope, captureScrollAnchor, effectiveDirectory, isActive]);
 
-    React.useLayoutEffect(() => {
+    const restorePendingScrollAnchor = React.useCallback(() => {
         const anchor = pendingScrollAnchorRestoreRef.current;
         if (!anchor) return;
         pendingScrollAnchorRestoreRef.current = null;
@@ -1495,7 +1487,16 @@ export const DiffView: React.FC<DiffViewProps> = ({
             scrollRoot.scrollHeight - scrollRoot.clientHeight,
         );
         lastScrollAnchorRef.current = anchor;
-    }, [fileDiffRefreshNonce]);
+    }, []);
+
+    React.useLayoutEffect(() => {
+        restorePendingScrollAnchor();
+    }, [fileDiffRefreshNonce, restorePendingScrollAnchor]);
+
+    React.useLayoutEffect(() => {
+        if (activeDiffScope !== 'branch') return;
+        restorePendingScrollAnchor();
+    }, [activeDiffScope, branchDiffs, restorePendingScrollAnchor]);
 
     // Handle pending diff file from external navigation
     React.useEffect(() => {
@@ -1892,7 +1893,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             );
         }
 
-        if (activeDiffScope === 'branch' && branchDiffError) {
+        if (activeDiffScope === 'branch' && branchDiffError && branchDiffs === null) {
             return (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-sm text-muted-foreground">
                     <div className="typography-ui-label font-semibold text-foreground">
@@ -1938,8 +1939,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             );
         }
 
-        if (changedFiles.length === 0) {
-            return (
+        const content = changedFiles.length === 0 ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                     {activeDiffScope === 'branch'
                         ? t('diffView.state.noBranchChanges')
@@ -1947,10 +1947,33 @@ export const DiffView: React.FC<DiffViewProps> = ({
                             ? t('diffView.state.noLastTurnChanges')
                             : t('diffView.state.cleanWorkingTree')}
                 </div>
-            );
+            ) : renderStackedDiffView();
+
+        if (activeDiffScope !== 'branch' || !branchDiffError) {
+            return content;
         }
 
-        return renderStackedDiffView();
+        return (
+            <div className="flex min-h-0 flex-1 flex-col">
+                <div role="alert" className="flex shrink-0 items-center gap-2 border-y border-[var(--status-error-border)] bg-[var(--status-error-background)] px-3 py-2 text-[var(--status-error-foreground)]">
+                    <span className="typography-meta min-w-0 flex-1 truncate" title={branchDiffError}>
+                        {t('diffView.state.failedToLoadBranchChanges')}: {branchDiffError}
+                    </span>
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        className="shrink-0"
+                        onClick={() => {
+                            pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
+                            setBranchRefreshNonce((value) => value + 1);
+                        }}
+                    >
+                        {t('diffView.actions.retry')}
+                    </Button>
+                </div>
+                <div className="flex min-h-0 flex-1">{content}</div>
+            </div>
+        );
     };
 
     return (
@@ -2026,16 +2049,23 @@ export const DiffView: React.FC<DiffViewProps> = ({
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                            // Carry the scope across: opening the walkthrough
-                            // while looking at staged changes should review
-                            // staged changes, not whatever the panel showed last.
                             const directory = effectiveDirectory ?? '';
-                            requestWalkthroughSource(directory, {
-                                kind: 'working-tree',
-                                scope: activeDiffScope === 'staged' || activeDiffScope === 'working'
-                                    ? activeDiffScope
-                                    : 'all',
-                            });
+                            if (activeDiffScope === 'branch' && vcsBranch && vcsDefaultBranch) {
+                                requestWalkthroughSource(directory, {
+                                    kind: 'branch',
+                                    baseRef: vcsDefaultBranch.trim(),
+                                    headRef: vcsBranch.trim(),
+                                });
+                            } else {
+                                // Carry the working-tree scope across instead of
+                                // reopening whichever source the panel used last.
+                                requestWalkthroughSource(directory, {
+                                    kind: 'working-tree',
+                                    scope: activeDiffScope === 'staged' || activeDiffScope === 'working'
+                                        ? activeDiffScope
+                                        : 'all',
+                                });
+                            }
                             openContextSurface(directory, 'walkthrough');
                         }}
                         className={cn('diff-toolbar__walkthrough-button h-7 flex-shrink-0 gap-1.5 px-2', WALKTHROUGH_ACTION_CLASS)}
