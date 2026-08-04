@@ -212,10 +212,35 @@ describe('quota refresh', () => {
     });
     useQuotaStore.setState({
       fetchProviderQuota: async () => providerFetch,
+      autoRefresh: true,
+      refreshIntervalMs: 30000,
+      displayMode: 'remaining',
+      showPredValues: true,
+      dropdownProviderIds: ['claude'],
+      selectedModels: { claude: ['opus'] },
+      expandedFamilies: { claude: ['opus'] },
     });
 
     const pendingRefresh = useQuotaStore.getState().fetchAllQuotas();
     useQuotaStore.getState().resetForRuntimeSwitch();
+    const resetState = useQuotaStore.getState();
+    expect({
+      autoRefresh: resetState.autoRefresh,
+      refreshIntervalMs: resetState.refreshIntervalMs,
+      displayMode: resetState.displayMode,
+      showPredValues: resetState.showPredValues,
+      dropdownProviderIds: resetState.dropdownProviderIds,
+      selectedModels: resetState.selectedModels,
+      expandedFamilies: resetState.expandedFamilies,
+    }).toEqual({
+      autoRefresh: false,
+      refreshIntervalMs: 60000,
+      displayMode: 'usage',
+      showPredValues: false,
+      dropdownProviderIds: QUOTA_PROVIDERS.map((provider) => provider.id),
+      selectedModels: {},
+      expandedFamilies: {},
+    });
     const currentResults: ProviderResult[] = [{
       providerId: 'codex',
       providerName: 'Current runtime Codex',

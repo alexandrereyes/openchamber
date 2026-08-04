@@ -166,7 +166,7 @@ Important properties:
 
 ### `useQuotaStore.ts`
 
-Quota results are an active-runtime stale-while-revalidate cache. Full refreshes share one request per runtime generation, retain existing results while loading, and reject provider, settings, error, and freshness commits from an older runtime. A runtime switch clears transient quota data and reloads that runtime's settings before visible consumers request fresh results.
+Quota results are an active-runtime stale-while-revalidate cache. Full refreshes share one request per runtime generation, retain existing results while loading, and reject provider, settings, error, and freshness commits from an older runtime. A runtime switch clears quota data and runtime-scoped settings to neutral defaults before asynchronously loading the new runtime's settings.
 
 ## Ownership Rules
 

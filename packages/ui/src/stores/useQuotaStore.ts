@@ -260,6 +260,13 @@ export const useQuotaStore = create<QuotaStore>()(
           isFetchingProvider: {},
           lastUpdated: null,
           error: null,
+          autoRefresh: false,
+          refreshIntervalMs: DEFAULT_REFRESH_INTERVAL_MS,
+          displayMode: 'usage',
+          showPredValues: false,
+          dropdownProviderIds: QUOTA_PROVIDERS.map((provider) => provider.id),
+          selectedModels: {},
+          expandedFamilies: {},
         });
       },
 
