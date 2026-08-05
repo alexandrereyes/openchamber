@@ -1072,6 +1072,8 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const shouldPinAfterAlignRef = React.useRef(false);
     const visibleSyncFrameRef = React.useRef<number | null>(null);
     const stackedStateScopeRef = React.useRef<string | null>(null);
+    const previousSessionStatusRef = React.useRef<{ sessionID: string | null; type?: string }>({ sessionID: null });
+    const branchRequestQueueRef = React.useRef<Promise<void>>(Promise.resolve());
     const lastScrollAnchorRef = React.useRef<DiffScrollAnchor | null>(null);
     const pendingScrollAnchorRestoreRef = React.useRef<DiffScrollAnchor | null>(null);
 
@@ -1086,9 +1088,6 @@ export const DiffView: React.FC<DiffViewProps> = ({
         }
         return findDiffScrollAnchor(rootTop, sections);
     }, []);
-
-    const previousSessionStatusRef = React.useRef<{ sessionID: string | null; type?: string }>({ sessionID: null });
-    const branchRequestQueueRef = React.useRef<Promise<void>>(Promise.resolve());
 
     const branchAvailable = isBranchDiffAvailable({
         branch: vcsBranch,
@@ -1118,9 +1117,10 @@ export const DiffView: React.FC<DiffViewProps> = ({
         previousSessionStatusRef.current = { sessionID: currentSessionId, type: nextType };
         if (!isActive || activeDiffScope !== 'branch') return;
         if (nextType === 'idle' && previous.type && previous.type !== 'idle') {
+            pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
             setBranchRefreshNonce((value) => value + 1);
         }
-    }, [activeDiffScope, currentSessionId, isActive, sessionStatus?.type]);
+    }, [activeDiffScope, captureScrollAnchor, currentSessionId, isActive, sessionStatus?.type]);
 
     React.useEffect(() => {
         if (!isActive || !shouldLoadBranchDiff || !branchAvailable || !effectiveDirectory) return;
@@ -1442,7 +1442,10 @@ export const DiffView: React.FC<DiffViewProps> = ({
             if (normalizePath(hint.directory) !== normalizePath(effectiveDirectory)) {
                 return;
             }
-            if (hint.paths?.length) {
+            if (activeDiffScope === 'branch') {
+                pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
+                setBranchRefreshNonce((value) => value + 1);
+            } else if (hint.paths?.length) {
                 pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
                 clearDiffCache(effectiveDirectory, hint.paths);
                 setFileDiffRefreshNonce((previous) => {
@@ -1455,7 +1458,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             }
             void fetchStatus(effectiveDirectory, git, { silent: true });
         });
-    }, [captureScrollAnchor, clearDiffCache, effectiveDirectory, fetchStatus, git, isActive]);
+    }, [activeDiffScope, captureScrollAnchor, clearDiffCache, effectiveDirectory, fetchStatus, git, isActive]);
 
     React.useEffect(() => {
         if (!isActive || activeDiffScope !== 'branch' || !effectiveDirectory) return;
@@ -1466,7 +1469,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
         });
     }, [activeDiffScope, captureScrollAnchor, effectiveDirectory, isActive]);
 
-    React.useLayoutEffect(() => {
+    const restorePendingScrollAnchor = React.useCallback(() => {
         const anchor = pendingScrollAnchorRestoreRef.current;
         if (!anchor) return;
         pendingScrollAnchorRestoreRef.current = null;
@@ -1484,28 +1487,16 @@ export const DiffView: React.FC<DiffViewProps> = ({
             scrollRoot.scrollHeight - scrollRoot.clientHeight,
         );
         lastScrollAnchorRef.current = anchor;
-    }, [fileDiffRefreshNonce]);
+    }, []);
+
+    React.useLayoutEffect(() => {
+        restorePendingScrollAnchor();
+    }, [fileDiffRefreshNonce, restorePendingScrollAnchor]);
 
     React.useLayoutEffect(() => {
         if (activeDiffScope !== 'branch') return;
-        const anchor = pendingScrollAnchorRestoreRef.current;
-        if (!anchor) return;
-        pendingScrollAnchorRestoreRef.current = null;
-
-        const scrollRoot = diffScrollRef.current;
-        const node = fileSectionRefs.current.get(anchor.path);
-        if (!scrollRoot || !node) return;
-
-        const rootTop = scrollRoot.getBoundingClientRect().top;
-        const currentTopOffset = node.getBoundingClientRect().top - rootTop;
-        scrollRoot.scrollTop = getRestoredDiffScrollTop(
-            scrollRoot.scrollTop,
-            anchor.topOffset,
-            currentTopOffset,
-            scrollRoot.scrollHeight - scrollRoot.clientHeight,
-        );
-        lastScrollAnchorRef.current = anchor;
-    }, [activeDiffScope, branchDiffs]);
+        restorePendingScrollAnchor();
+    }, [activeDiffScope, branchDiffs, restorePendingScrollAnchor]);
 
     // Handle pending diff file from external navigation
     React.useEffect(() => {
@@ -1902,7 +1893,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             );
         }
 
-        if (activeDiffScope === 'branch' && branchDiffError) {
+        if (activeDiffScope === 'branch' && branchDiffError && branchDiffs === null) {
             return (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-sm text-muted-foreground">
                     <div className="typography-ui-label font-semibold text-foreground">
@@ -1948,8 +1939,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
             );
         }
 
-        if (changedFiles.length === 0) {
-            return (
+        const content = changedFiles.length === 0 ? (
                 <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                     {activeDiffScope === 'branch'
                         ? t('diffView.state.noBranchChanges')
@@ -1957,10 +1947,33 @@ export const DiffView: React.FC<DiffViewProps> = ({
                             ? t('diffView.state.noLastTurnChanges')
                             : t('diffView.state.cleanWorkingTree')}
                 </div>
-            );
+            ) : renderStackedDiffView();
+
+        if (activeDiffScope !== 'branch' || !branchDiffError) {
+            return content;
         }
 
-        return renderStackedDiffView();
+        return (
+            <div className="flex min-h-0 flex-1 flex-col">
+                <div role="alert" className="flex shrink-0 items-center gap-2 border-y border-[var(--status-error-border)] bg-[var(--status-error-background)] px-3 py-2 text-[var(--status-error-foreground)]">
+                    <span className="typography-meta min-w-0 flex-1 truncate" title={branchDiffError}>
+                        {t('diffView.state.failedToLoadBranchChanges')}: {branchDiffError}
+                    </span>
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        className="shrink-0"
+                        onClick={() => {
+                            pendingScrollAnchorRestoreRef.current = captureScrollAnchor() ?? lastScrollAnchorRef.current;
+                            setBranchRefreshNonce((value) => value + 1);
+                        }}
+                    >
+                        {t('diffView.actions.retry')}
+                    </Button>
+                </div>
+                <div className="flex min-h-0 flex-1">{content}</div>
+            </div>
+        );
     };
 
     return (
@@ -2044,6 +2057,8 @@ export const DiffView: React.FC<DiffViewProps> = ({
                                     headRef: vcsBranch.trim(),
                                 });
                             } else {
+                                // Carry the working-tree scope across instead of
+                                // reopening whichever source the panel used last.
                                 requestWalkthroughSource(directory, {
                                     kind: 'working-tree',
                                     scope: activeDiffScope === 'staged' || activeDiffScope === 'working'

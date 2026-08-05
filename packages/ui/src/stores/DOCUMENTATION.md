@@ -259,6 +259,7 @@ Expected model:
 - a successful dirty save from the in-app file editor issues a path-scoped Git refresh hint; clean autosave checks remain no-ops
 - non-`.git` file-watcher events issue a coalesced VCS diff refresh hint for visible diff consumers
 - refresh hints with authoritative file paths invalidate only those cached and currently rendered diffs before status refresh; pathless tools request status reconciliation without broadly remounting DiffView
+- non-`.git` file-watcher events issue a coalesced VCS diff refresh hint for visible diff consumers
 - targeted diff remounts preserve the user's current file-section anchor and intra-file offset before paint instead of resetting the stacked view to the top
 - no root-level background Git polling
 

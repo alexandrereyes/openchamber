@@ -286,6 +286,31 @@ describe('ChildStoreManager directory bootstrap scheduler', () => {
     manager.disposeAll();
   });
 
+  test('continues after a synchronous bootstrap failure', async () => {
+    const manager = new ChildStoreManager();
+    const started: string[] = [];
+    manager.setBootstrapDemand('sidebar', [
+      { directory: '/failed', priority: 'expanded', reason: 'project-expanded' },
+      { directory: '/healthy', priority: 'expanded', reason: 'project-expanded' },
+    ]);
+    const cleanup = manager.configure({
+      bootstrapConcurrency: 1,
+      onBootstrap: ({ directory }) => {
+        started.push(directory);
+        if (directory === '/failed') throw new Error('failed');
+      },
+    });
+
+    await settle();
+    await settle();
+
+    expect(started).toEqual(['/failed', '/healthy']);
+    expect(manager.getBootstrapState('/failed')).toBe('failed');
+    expect(manager.getBootstrapState('/healthy')).toBe('complete');
+    cleanup();
+    manager.disposeAll();
+  });
+
   test('keeps deferred work authoritative until a newer bootstrap replaces it', async () => {
     const manager = new ChildStoreManager();
     const latestChecks: Array<() => boolean> = [];
@@ -315,31 +340,6 @@ describe('ChildStoreManager directory bootstrap scheduler', () => {
 
     cleanup();
     expect(latestChecks[1]?.()).toBe(false);
-    manager.disposeAll();
-  });
-
-  test('continues after a synchronous bootstrap failure', async () => {
-    const manager = new ChildStoreManager();
-    const started: string[] = [];
-    manager.setBootstrapDemand('sidebar', [
-      { directory: '/failed', priority: 'expanded', reason: 'project-expanded' },
-      { directory: '/healthy', priority: 'expanded', reason: 'project-expanded' },
-    ]);
-    const cleanup = manager.configure({
-      bootstrapConcurrency: 1,
-      onBootstrap: ({ directory }) => {
-        started.push(directory);
-        if (directory === '/failed') throw new Error('failed');
-      },
-    });
-
-    await settle();
-    await settle();
-
-    expect(started).toEqual(['/failed', '/healthy']);
-    expect(manager.getBootstrapState('/failed')).toBe('failed');
-    expect(manager.getBootstrapState('/healthy')).toBe('complete');
-    cleanup();
     manager.disposeAll();
   });
 
