@@ -14,7 +14,8 @@ let sessionShareResult: { data?: unknown; error?: unknown; response?: { status?:
 let sessionUpdateResult: { data?: unknown; error?: unknown; response?: { status?: number } } = {}
 let sessionMessagesResult: { data?: unknown; error?: unknown; response?: { status?: number } } = { data: [] }
 let sessionDeleteError: unknown | null = null
-let beforeSessionUpdateResolve: (() => void) | null = null
+let beforeSessionUpdateResolve: ((sessionId: string) => void) | null = null
+let beforeSessionDeleteResolve: ((sessionId: string) => void) | null = null
 const globalUpsertedSessions: unknown[] = []
 const globalRemovedSessionIds: string[] = []
 const deletedCleanupIdentities: Array<{ runtimeKey: string; directory: string; sessionId: string }> = []
@@ -146,13 +147,16 @@ mock.module("@/lib/opencode/client", () => ({
     }),
     updateSession: mock((sessionId: string, changes: Record<string, unknown>, directory?: string | null) => {
       replyCalls.push({ method: "session.update", params: { sessionID: sessionId, ...changes, directory } })
-      const beforeResolve = beforeSessionUpdateResolve
-      beforeSessionUpdateResolve = null
-      beforeResolve?.()
+      // Lets a test mutate global runtime state while the SDK call is in flight,
+      // so the action observes the switch only after awaiting the response.
+      beforeSessionUpdateResolve?.(sessionId)
       return Promise.resolve(sessionUpdateResult.data)
     }),
     deleteSession: mock((sessionId: string, directory?: string | null) => {
       replyCalls.push({ method: "session.delete", params: { sessionID: sessionId, directory } })
+      // Lets a test switch runtime while the delete is in flight, so the action
+      // observes the change only after awaiting (or catching) the response.
+      beforeSessionDeleteResolve?.(sessionId)
       if (sessionDeleteError) throw sessionDeleteError
       return Promise.resolve(true)
     }),
@@ -241,6 +245,7 @@ mock.module("./session-deletion-cleanup", () => ({
 }))
 
 mock.module("./sync-refs", () => ({
+  getSyncSessionDirectory: () => null,
   registerSessionDirectory: (sessionID: string, directory: string) => {
     registeredSessionDirectories.push({ sessionID, directory })
   },
@@ -373,6 +378,7 @@ describe("confirmed session removal", () => {
     sessionDeleteError = null
     sessionUpdateResult = {}
     beforeSessionUpdateResolve = null
+    beforeSessionDeleteResolve = null
   })
 
   test("does not remove live or persisted state when delete fails", async () => {
@@ -404,6 +410,107 @@ describe("confirmed session removal", () => {
       directory: deletedCleanupIdentities[0]?.directory,
       sessionId: deletedCleanupIdentities[0]?.sessionId,
     }).toEqual({ directory: "/test/project", sessionId: "session-a" })
+  })
+
+  test("scopes persisted cleanup to the runtime captured when the delete started", async () => {
+    const source = createStore({}, {
+      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+    })
+    const { getRuntimeKey, switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://delete-scope.test", runtimeKey: "delete-scope" })
+    const { deleteSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await deleteSession("session-a")).toBe(true)
+    // The cleanup identity must carry the captured runtime, which is what lets
+    // cleanupPersistedSessionState reject a stale identity instead of comparing
+    // the live runtime key with itself.
+    expect(deletedCleanupIdentities[0]?.runtimeKey).toBe("delete-scope")
+    expect(deletedCleanupIdentities[0]?.runtimeKey).toBe(getRuntimeKey())
+  })
+
+  test("rejects a delete response that arrives after a runtime switch", async () => {
+    const source = createStore({}, {
+      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+    })
+    const { switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://delete-runtime-a.test", runtimeKey: "delete-runtime-a" })
+    beforeSessionDeleteResolve = () => {
+      switchRuntimeEndpoint({ apiBaseUrl: "http://delete-runtime-b.test", runtimeKey: "delete-runtime-b" })
+    }
+    const { deleteSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await deleteSession("session-a")).toBe(false)
+    // Session IDs are not unique across runtimes: committing here could evict an
+    // unrelated session and erase its queue, todos, drafts, folders, and pins.
+    expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
+    expect(globalRemovedSessionIds).toEqual([])
+    expect(deletedCleanupIdentities).toEqual([])
+  })
+
+  test("does not treat a 404 as an already-completed deletion after a runtime switch", async () => {
+    sessionDeleteError = Object.assign(new Error("not found"), { status: 404 })
+    const source = createStore({}, {
+      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+    })
+    const { switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://delete-404-a.test", runtimeKey: "delete-404-a" })
+    beforeSessionDeleteResolve = () => {
+      switchRuntimeEndpoint({ apiBaseUrl: "http://delete-404-b.test", runtimeKey: "delete-404-b" })
+    }
+    const { deleteSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    // A 404 only proves "already deleted" for the captured runtime. After a
+    // switch it describes the wrong runtime, so it must not commit cleanup.
+    expect(await deleteSession("session-a")).toBe(false)
+    expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
+    expect(globalRemovedSessionIds).toEqual([])
+    expect(deletedCleanupIdentities).toEqual([])
+  })
+
+  test("still treats a 404 as an already-completed deletion while the runtime is stable", async () => {
+    sessionDeleteError = Object.assign(new Error("not found"), { status: 404 })
+    const source = createStore({}, {
+      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+    })
+    const { deleteSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await deleteSession("session-a")).toBe(true)
+    expect(source.getState().session).toEqual([])
+    expect(globalRemovedSessionIds).toEqual(["session-a"])
+    expect(deletedCleanupIdentities).toHaveLength(1)
+  })
+
+  test("keeps committed deletions and fails the rest when the runtime changes mid-batch", async () => {
+    const source = createStore({}, {
+      session: [
+        { id: "session-a", directory: "/test/project", time: { created: 1 } } as Session,
+        { id: "session-b", directory: "/test/project", time: { created: 1 } } as Session,
+        { id: "session-c", directory: "/test/project", time: { created: 1 } } as Session,
+      ],
+    })
+    const { switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://delete-batch-a.test", runtimeKey: "delete-batch-a" })
+    beforeSessionDeleteResolve = (sessionId) => {
+      if (sessionId === "session-b") {
+        switchRuntimeEndpoint({ apiBaseUrl: "http://delete-batch-b.test", runtimeKey: "delete-batch-b" })
+      }
+    }
+    const { deleteSessions, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    const result = await deleteSessions(["session-a", "session-b", "session-c"])
+
+    // session-a was committed before the switch; session-b's response is stale
+    // and session-c is never attempted, so both are reported as failures.
+    expect(result).toEqual({ deletedIds: ["session-a"], failedIds: ["session-b", "session-c"] })
+    expect(source.getState().session.map((item) => item.id)).toEqual(["session-b", "session-c"])
+    expect(globalRemovedSessionIds).toEqual(["session-a"])
+    expect(replyCalls.filter((call) => call.method === "session.delete").map((call) => call.params.sessionID))
+      .toEqual(["session-a", "session-b"])
   })
 
   test("does not archive locally until the server returns the archived session", async () => {
@@ -448,37 +555,177 @@ describe("confirmed session removal", () => {
     const { archiveSession, setActionRefs } = await import("./session-actions")
     setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
 
-    expect(getRuntimeKey()).toBe("archive-runtime-a")
-    expect(await archiveSession("session-a", "archive-runtime-a")).toBe(false)
+    expect(await archiveSession("session-a")).toBe(false)
+    expect(getRuntimeKey()).toBe("archive-runtime-b")
+    // The stale response must not reconcile the runtime the user switched to.
     expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
     expect(globalUpsertedSessions).toEqual([])
   })
 
-  test("stops an archive batch after a runtime switch and fails the remaining sessions", async () => {
+  test("keeps confirmed sessions and fails the rest when the runtime changes mid-batch", async () => {
     sessionUpdateResult = {
       data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 2 } } as Session,
     }
     const source = createStore({}, {
-      session: [{ id: "session-a", directory: "/test/project", time: { created: 1 } } as Session],
+      session: [
+        { id: "session-a", directory: "/test/project", time: { created: 1 } } as Session,
+        { id: "session-b", directory: "/test/project", time: { created: 1 } } as Session,
+        { id: "session-c", directory: "/test/project", time: { created: 1 } } as Session,
+      ],
     })
     const { switchRuntimeEndpoint } = await import("../lib/runtime-switch")
-    switchRuntimeEndpoint({ apiBaseUrl: "http://archive-batch-runtime-a.test", runtimeKey: "archive-batch-runtime-a" })
-    beforeSessionUpdateResolve = () => {
-      switchRuntimeEndpoint({ apiBaseUrl: "http://archive-batch-runtime-b.test", runtimeKey: "archive-batch-runtime-b" })
+    switchRuntimeEndpoint({ apiBaseUrl: "http://archive-batch-a.test", runtimeKey: "archive-batch-a" })
+    beforeSessionUpdateResolve = (sessionId) => {
+      if (sessionId === "session-b") {
+        switchRuntimeEndpoint({ apiBaseUrl: "http://archive-batch-b.test", runtimeKey: "archive-batch-b" })
+      }
     }
     const { archiveSessions, setActionRefs } = await import("./session-actions")
     setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
 
-    expect(await archiveSessions(
-      ["session-a", "session-b", "session-c"],
-      { expectedRuntimeKey: "archive-batch-runtime-a" },
-    )).toEqual({
-      archivedIds: [],
-      failedIds: ["session-a", "session-b", "session-c"],
+    const result = await archiveSessions(["session-a", "session-b", "session-c"])
+
+    // session-a was confirmed before the switch and stays archived; session-b's
+    // response is stale and session-c is never attempted, so both are reported
+    // as failures instead of being silently dropped.
+    expect(result).toEqual({ archivedIds: ["session-a"], failedIds: ["session-b", "session-c"] })
+    expect(source.getState().session.map((item) => item.id)).toEqual(["session-b", "session-c"])
+    expect(globalUpsertedSessions).toHaveLength(1)
+    // session-c must not reach the SDK after the runtime changed.
+    expect(replyCalls.filter((call) => call.method === "session.update").map((call) => call.params.sessionID))
+      .toEqual(["session-a", "session-b"])
+  })
+
+  test("archives every session when the runtime stays stable", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 2 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [
+        { id: "session-a", directory: "/test/project", time: { created: 1 } } as Session,
+        { id: "session-b", directory: "/test/project", time: { created: 1 } } as Session,
+      ],
     })
-    expect(replyCalls.filter((call) => call.method === "session.update")).toHaveLength(1)
-    expect(source.getState().session.map((item) => item.id)).toEqual(["session-a"])
+    const { getRuntimeKey } = await import("../lib/runtime-switch")
+    const { archiveSessions, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    const result = await archiveSessions(["session-a", "session-b"], {
+      expectedRuntimeKey: getRuntimeKey(),
+    })
+
+    expect(result).toEqual({ archivedIds: ["session-a", "session-b"], failedIds: [] })
+    expect(source.getState().session).toEqual([])
+  })
+})
+
+describe("session restore (unarchive)", () => {
+  beforeEach(() => {
+    replyCalls.length = 0
+    registeredSessionDirectories.length = 0
+    globalUpsertedSessions.length = 0
+    sessionUpdateResult = {}
+    beforeSessionUpdateResolve = null
+  })
+
+  test("does not restore locally until the server returns the restored session", async () => {
+    const source = createStore({}, {
+      session: [],
+    })
+    const { unarchiveSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await unarchiveSession("session-a")).toBe(false)
     expect(globalUpsertedSessions).toEqual([])
+    expect(registeredSessionDirectories).toEqual([])
+  })
+
+  test("sends the archive-clearing sentinel and upserts the restored session after confirmation", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 0 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [],
+    })
+    const { unarchiveSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await unarchiveSession("session-a")).toBe(true)
+    // The server cannot clear time.archived over HTTP, so the action must
+    // write the falsy sentinel rather than omitting the field.
+    expect(replyCalls.filter((call) => call.method === "session.update")).toEqual([{
+      method: "session.update",
+      params: { sessionID: "session-a", time: { archived: 0 }, directory: "/test/project" },
+    }])
+    expect((globalUpsertedSessions[0] as Session)?.time?.archived).toBe(0)
+    expect(registeredSessionDirectories).toEqual([{ sessionID: "session-a", directory: "/test/project" }])
+  })
+
+  test("fails when the server keeps the session archived", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 2 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [],
+    })
+    const { unarchiveSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    // A silent server-side no-op must surface as a failure, not a success toast.
+    expect(await unarchiveSession("session-a")).toBe(false)
+    expect(globalUpsertedSessions).toEqual([])
+    expect(registeredSessionDirectories).toEqual([])
+  })
+
+  test("rejects a restore response that arrives after a runtime switch", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 0 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [],
+    })
+    const { getRuntimeKey, switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://restore-runtime-a.test", runtimeKey: "restore-runtime-a" })
+    beforeSessionUpdateResolve = () => {
+      switchRuntimeEndpoint({ apiBaseUrl: "http://restore-runtime-b.test", runtimeKey: "restore-runtime-b" })
+    }
+    const { unarchiveSession, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    expect(await unarchiveSession("session-a")).toBe(false)
+    expect(getRuntimeKey()).toBe("restore-runtime-b")
+    // The stale response must not reconcile the runtime the user switched to.
+    expect(globalUpsertedSessions).toEqual([])
+    expect(registeredSessionDirectories).toEqual([])
+  })
+
+  test("keeps confirmed sessions and fails the rest when the runtime changes mid-batch", async () => {
+    sessionUpdateResult = {
+      data: { id: "session-a", directory: "/test/project", time: { created: 1, archived: 0 } } as Session,
+    }
+    const source = createStore({}, {
+      session: [],
+    })
+    const { switchRuntimeEndpoint } = await import("../lib/runtime-switch")
+    switchRuntimeEndpoint({ apiBaseUrl: "http://restore-batch-a.test", runtimeKey: "restore-batch-a" })
+    beforeSessionUpdateResolve = (sessionId) => {
+      if (sessionId === "session-b") {
+        switchRuntimeEndpoint({ apiBaseUrl: "http://restore-batch-b.test", runtimeKey: "restore-batch-b" })
+      }
+    }
+    const { unarchiveSessions, setActionRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, createChildStores([["/test/project", source]]), () => "/test/project")
+
+    const result = await unarchiveSessions(["session-a", "session-b", "session-c"])
+
+    // session-a was confirmed before the switch and stays restored; session-b's
+    // response is stale and session-c is never attempted, so both are reported
+    // as failures instead of being silently dropped.
+    expect(result).toEqual({ restoredIds: ["session-a"], failedIds: ["session-b", "session-c"] })
+    expect(globalUpsertedSessions).toHaveLength(1)
+    // session-c must not reach the SDK after the runtime changed.
+    expect(replyCalls.filter((call) => call.method === "session.update").map((call) => call.params.sessionID))
+      .toEqual(["session-a", "session-b"])
   })
 })
 
@@ -875,6 +1122,53 @@ describe("optimisticSend target directory", () => {
     expect(replyCalls.find((call) => call.method === "session.messages")?.params.limit).toBe(30)
     expect(targetStore.getState().message["session-confirmed"]?.[0]?.id).toBe(sentMessageID)
     expect(targetStore.getState().part[sentMessageID]?.[0]?.id).toBe("server-part")
+  })
+
+  // Relay tunnel aborts carry no HTTP status and no wording the text-matching
+  // heuristic recognizes. Without the transport tag they were classified as
+  // definite failures, the accepted prompt was rolled back, and the queue
+  // re-sent a message the engine was already answering (#2425).
+  test("confirms a tunnel-tagged transport failure that no text heuristic matches", async () => {
+    const targetStore = createStore({})
+    const childStores = createChildStores([["/target/project", targetStore]])
+    let optimisticRemove: OptimisticRemoveCall | null = null
+    let optimisticConfirm: OptimisticRemoveCall | null = null
+    let sentMessageID = ""
+
+    const { markAmbiguousTransportFailure } = await import("@/lib/relay/transport-error")
+    const { optimisticSend, setActionRefs, setOptimisticRefs } = await import("./session-actions")
+    setActionRefs(mockSdk as unknown as OpencodeClient, childStores, () => "/target/project")
+    setOptimisticRefs(
+      () => {},
+      (input) => {
+        optimisticRemove = input
+      },
+      (input) => {
+        optimisticConfirm = input
+      },
+    )
+
+    await optimisticSend({
+      sessionId: "session-tunnel",
+      directory: "/target/project",
+      content: "hello",
+      providerID: "provider",
+      modelID: "model",
+      send: async (messageID) => {
+        sentMessageID = messageID
+        sessionMessagesResult = {
+          data: [{
+            info: { id: messageID, role: "user", sessionID: "session-tunnel", time: { created: 1 } } as Message,
+            parts: [{ id: "server-part", type: "text", text: "hello" } as Part],
+          }],
+        }
+        throw markAmbiguousTransportFailure(new Error("stream aborted by host"))
+      },
+    })
+
+    expect(optimisticRemove).toBe(null)
+    expect((optimisticConfirm as OptimisticRemoveCall | null)?.messageID).toBe(sentMessageID)
+    expect(targetStore.getState().message["session-tunnel"]?.[0]?.id).toBe(sentMessageID)
   })
 
   test("rolls back an ambiguous send failure when recent messages do not contain the sent ID", async () => {

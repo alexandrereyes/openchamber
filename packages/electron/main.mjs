@@ -1374,11 +1374,16 @@ const loadShellEnv = () => {
 
 // Merge the user's login-shell env (PATH, etc.) into this process before we
 import { pathLooksUserConfigured, mergePathValues } from '@openchamber/web/server/lib/opencode/path-utils.js';
+import { clearAppImageArgv0FromProcessEnv } from '@openchamber/web/server/lib/inherited-env.js';
 
 // import/start the server in-process. The server and its children (opencode
 // CLI, git, etc.) inherit process.env directly now — there is no sidecar
 // subprocess to hand a custom env to.
 const inheritUserShellEnv = () => {
+  // Clear before probing/merging so login-shell snapshots and children never
+  // inherit the AppImage path as argv[0] via zsh's ARGV0 parameter (#2588).
+  clearAppImageArgv0FromProcessEnv();
+
   const shellEnv = loadShellEnv();
   if (!shellEnv) return;
 
@@ -1388,7 +1393,7 @@ const inheritUserShellEnv = () => {
   const currentPathLooksUserConfigured = pathLooksUserConfigured(currentPath, homeDir, delimiter);
 
   for (const [key, value] of Object.entries(shellEnv)) {
-    if (key === 'PATH') continue;
+    if (key === 'PATH' || key === 'ARGV0') continue;
     if (typeof process.env[key] === 'undefined') {
       process.env[key] = value;
     }
@@ -2248,6 +2253,13 @@ const dispatchMenuAction = (action) => {
   const target = getMenuTargetWindow();
   emitToWindow(target, 'openchamber:menu-action', action);
   dispatchDomEventToWindow(target, 'openchamber:menu-action', action);
+};
+
+// Append-style menu actions must reach the renderer exactly once. Dual IPC+DOM
+// delivery (dispatchMenuAction) would insert the selection twice.
+const dispatchAddSelectionToChat = () => {
+  const target = getMenuTargetWindow();
+  if (target) emitToWindow(target, 'openchamber:menu-action', 'add-selection-to-chat');
 };
 
 // Mini-chat draft windows are not deduplicated, so this must reach the renderer
@@ -4559,6 +4571,7 @@ const buildMacMenu = () => {
         { type: 'separator' },
         { role: 'cut' },
         { label: 'Copy', accelerator: 'Cmd+C', click: () => handleCopyAction() },
+        { label: 'Add Selection to Chat', accelerator: 'Cmd+L', registerAccelerator: false, click: () => dispatchAddSelectionToChat() },
         { role: 'paste' },
         { role: 'selectAll' },
       ],
@@ -4577,7 +4590,7 @@ const buildMacMenu = () => {
         { label: 'Dark Theme', click: () => dispatchAction('theme-dark') },
         { label: 'System Theme', click: () => dispatchAction('theme-system') },
         { type: 'separator' },
-        { label: 'Toggle Session Sidebar', accelerator: 'Cmd+L', click: () => dispatchAction('toggle-sidebar') },
+        { label: 'Toggle Session Sidebar', accelerator: 'Cmd+Alt+L', click: () => dispatchAction('toggle-sidebar') },
         { label: 'Toggle Memory Debug', accelerator: 'Cmd+Shift+D', click: () => dispatchAction('toggle-memory-debug') },
         { type: 'separator' },
         { role: 'togglefullscreen' },
@@ -4656,6 +4669,7 @@ const buildAutoHiddenMenu = () => {
         { type: 'separator' },
         { role: 'cut' },
         { label: 'Copy', accelerator: 'Ctrl+C', click: () => handleCopyAction() },
+        { label: 'Add Selection to Chat', accelerator: 'Ctrl+L', registerAccelerator: false, click: () => dispatchAddSelectionToChat() },
         { role: 'paste' },
         { role: 'selectAll' },
       ],
@@ -4678,7 +4692,7 @@ const buildAutoHiddenMenu = () => {
         { label: 'Dark Theme', click: () => dispatchAction('theme-dark') },
         { label: 'System Theme', click: () => dispatchAction('theme-system') },
         { type: 'separator' },
-        { label: 'Toggle Session Sidebar', accelerator: 'Ctrl+L', click: () => dispatchAction('toggle-sidebar') },
+        { label: 'Toggle Session Sidebar', accelerator: 'Ctrl+Alt+L', click: () => dispatchAction('toggle-sidebar') },
         { label: 'Toggle Memory Debug', accelerator: 'Ctrl+Shift+D', click: () => dispatchAction('toggle-memory-debug') },
         { type: 'separator' },
         { role: 'togglefullscreen' },

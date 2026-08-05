@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 
-import { listGlobalSessionPages } from './globalSessions'
+import { listGlobalSessionPages, splitGlobalSessionsByArchived } from './globalSessions'
 
 describe('listGlobalSessionPages', () => {
   test('sanitizes session list records before returning them', async () => {
@@ -118,6 +118,47 @@ describe('listGlobalSessionPages', () => {
     expect(sessions.map((session) => session.id)).toEqual(['ses_archived'])
   })
 
+  test('keeps every record when active pages are requested', async () => {
+    const apiClient = {
+      experimental: {
+        session: {
+          list: async () => ({
+            data: [
+              { id: 'ses_active_1', time: { updated: 20 } },
+              { id: 'ses_active_2', time: { updated: 10 } },
+            ],
+            response: { headers: new Headers() },
+          }),
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const sessions = await listGlobalSessionPages(apiClient, { archived: false, pageSize: 500 })
+
+    expect(sessions.map((session) => session.id)).toEqual(['ses_active_1', 'ses_active_2'])
+  })
+
+  test('returns the inclusive response unfiltered when narrowing is disabled', async () => {
+    const apiClient = {
+      experimental: {
+        session: {
+          list: async () => ({
+            data: [
+              { id: 'ses_active', time: { created: 1, updated: 20 } },
+              { id: 'ses_archived', time: { created: 1, updated: 10, archived: 15 } },
+              { id: 'ses_restored', time: { created: 1, updated: 5, archived: 0 } },
+            ],
+            response: { headers: new Headers() },
+          }),
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const sessions = await listGlobalSessionPages(apiClient, { archived: true, narrowToArchived: false, pageSize: 500 })
+
+    expect(sessions.map((session) => session.id)).toEqual(['ses_active', 'ses_archived', 'ses_restored'])
+  })
+
   test('keeps paginating archived pages that are full of non-archived records', async () => {
     const calls: Array<Record<string, unknown>> = []
     const apiClient = {
@@ -147,12 +188,14 @@ describe('listGlobalSessionPages', () => {
 
     const sessions = await listGlobalSessionPages(apiClient, { archived: true, pageSize: 2 })
 
-    // A fully-filtered first page must not be mistaken for the last page.
+    // A page that is full upstream but fully filtered out here must not be
+    // mistaken for the last page: pagination progress is measured on the raw
+    // response, not on the accepted records.
     expect(calls).toHaveLength(2)
     expect(sessions.map((session) => session.id)).toEqual(['ses_archived'])
   })
 
-  test('reports only archived records to onPage for archived pages', async () => {
+  test('reports only accepted records to onPage for archived pages', async () => {
     const pages: string[][] = []
     const apiClient = {
       experimental: {
@@ -177,24 +220,59 @@ describe('listGlobalSessionPages', () => {
     expect(pages).toEqual([['ses_archived']])
   })
 
-  test('keeps every record when active pages are requested', async () => {
+  test('does not notify onPage for an archived page with no archived records', async () => {
+    const pages: string[][] = []
     const apiClient = {
       experimental: {
         session: {
           list: async () => ({
-            data: [
-              { id: 'ses_active_1', time: { updated: 20 } },
-              { id: 'ses_active_2', time: { updated: 10 } },
-            ],
+            data: [{ id: 'ses_active', time: { updated: 20 } }],
             response: { headers: new Headers() },
           }),
         },
       },
     } as unknown as OpencodeClient
 
-    const sessions = await listGlobalSessionPages(apiClient, { archived: false, pageSize: 500 })
+    const sessions = await listGlobalSessionPages(apiClient, {
+      archived: true,
+      pageSize: 500,
+      onPage: (page) => pages.push(page.map((session) => session.id)),
+    })
 
-    expect(sessions.map((session) => session.id)).toEqual(['ses_active_1', 'ses_active_2'])
+    expect(sessions).toEqual([])
+    expect(pages).toEqual([])
+  })
+
+  test('dedupes archived records by id and stops when a page repeats known ids', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const page = [
+      { id: 'ses_archived_1', time: { updated: 30, archived: 31 } },
+      { id: 'ses_archived_2', time: { updated: 20, archived: 21 } },
+    ]
+    const apiClient = {
+      experimental: {
+        session: {
+          list: async (options: Record<string, unknown>) => {
+            calls.push(options)
+            return {
+              data: page,
+              response: {
+                headers: new Headers({
+                  'x-next-cursor': options.cursor === undefined ? '20' : '10',
+                }),
+              },
+            }
+          },
+        },
+      },
+    } as unknown as OpencodeClient
+
+    const sessions = await listGlobalSessionPages(apiClient, { archived: true, pageSize: 2 })
+
+    // The second page repeats ids already seen, so the dedupe guard stops the
+    // loop and no record is returned twice.
+    expect(calls).toHaveLength(2)
+    expect(sessions.map((session) => session.id)).toEqual(['ses_archived_1', 'ses_archived_2'])
   })
 
   test('retries SDK error responses before treating the load as failed', async () => {
@@ -220,5 +298,18 @@ describe('listGlobalSessionPages', () => {
 
     expect(calls).toBe(2)
     expect(sessions.map((session) => session.id)).toEqual(['ses_1'])
+  })
+})
+
+describe('splitGlobalSessionsByArchived', () => {
+  test('classifies restored (falsy archived) records as active', () => {
+    const { active, archived } = splitGlobalSessionsByArchived([
+      { id: 'ses_active', time: { created: 1, updated: 20 } },
+      { id: 'ses_archived', time: { created: 1, updated: 10, archived: 15 } },
+      { id: 'ses_restored', time: { created: 1, updated: 5, archived: 0 } },
+    ] as unknown as Parameters<typeof splitGlobalSessionsByArchived>[0])
+
+    expect(active.map((session) => session.id)).toEqual(['ses_active', 'ses_restored'])
+    expect(archived.map((session) => session.id)).toEqual(['ses_archived'])
   })
 })

@@ -52,6 +52,8 @@ import { useCurrentSessionActivity } from '@/hooks/useSessionActivity';
 import { toast } from '@/components/ui';
 // useMessageStore removed — messages now come from sync system
 import { isVSCodeRuntime } from '@/lib/desktop';
+import { useTabletLayout } from '@/lib/device';
+import { useHardwareKeyboard } from '@/lib/hardwareKeyboard';
 import { isIMECompositionEvent } from '@/lib/ime';
 import { getCycledPrimaryAgentName, type MobileControlsPanel } from './mobileControlsUtils';
 import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
@@ -157,6 +159,7 @@ const MAX_MOBILE_COMPOSER_LINES = 16;
  */
 const MOBILE_COMPOSER_BOUND_GAP_PX = 4;
 const EMPTY_QUEUE: QueuedMessage[] = [];
+const EMPTY_SENDING_IDS: string[] = [];
 const COMPACT_CHAT_PLACEHOLDER_MAX_WIDTH = 560;
 const renameFileForAttachmentCitation = (file: File, filename: string): File => {
     if (file.name === filename) {
@@ -349,6 +352,8 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
     const getVisibleAgents = useConfigStore((state) => state.getVisibleAgents);
     const agents = getVisibleAgents();
     const isMobile = useUIStore((state) => state.isMobile);
+    const hasHardwareKeyboard = useHardwareKeyboard();
+    const { enabled: isTabletLayout } = useTabletLayout();
     const setImagePreviewOpen = useUIStore((state) => state.setImagePreviewOpen);
     const inputBarOffset = useUIStore((state) => state.inputBarOffset);
     const persistChatDraft = useUIStore((state) => state.persistChatDraft);
@@ -369,6 +374,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
     );
     const ensureGitStatus = useGitStore((state) => state.ensureStatus);
     const fetchGitStatus = useGitStore((state) => state.fetchStatus);
+    const clearGitDiffCache = useGitStore((state) => state.clearDiffCache);
     const [showAbortStatus, setShowAbortStatus] = React.useState(false);
     const setSessionAutoAccept = usePermissionStore((state) => state.setSessionAutoAccept);
     const [isNarrowComposer, setIsNarrowComposer] = React.useState(false);
@@ -445,9 +451,12 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         if (!currentDirectory || !runtimeGit) return;
         return sessionEvents.onGitRefreshHint((hint) => {
             if (normalizePath(hint.directory) !== normalizePath(currentDirectory)) return;
-            void fetchGitStatus(currentDirectory, runtimeGit);
+            if (hint.paths?.length) {
+                clearGitDiffCache(currentDirectory, hint.paths);
+            }
+            void fetchGitStatus(currentDirectory, runtimeGit, { silent: true });
         });
-    }, [currentDirectory, runtimeGit, fetchGitStatus]);
+    }, [clearGitDiffCache, currentDirectory, runtimeGit, fetchGitStatus]);
 
     const handleStartReviewFlow = React.useCallback(async (execution: ReviewFlowExecution) => {
         if (!currentSessionId) return;
@@ -937,9 +946,16 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
                 hasContent: options.presetText.trim().length > 0 || attachedFiles.length > 0 || hasDrafts,
             }
             : getCurrentInputSnapshot();
-        const queuedMessagesToSend = queuedMessageId
+        // A queued item stays in the queue until its own send resolves, so the
+        // auto-send hook may already be delivering one of these. Merging it here
+        // would send the same message twice (the window is seconds over a relay).
+        const sendingIds = messageQueueTarget
+            ? useMessageQueueStore.getState().sendingIds[getMessageQueueKey(messageQueueTarget)] ?? EMPTY_SENDING_IDS
+            : EMPTY_SENDING_IDS;
+        const queuedMessagesToSend = (queuedMessageId
             ? queuedMessages.filter((message) => message.id === queuedMessageId)
-            : queuedMessages;
+            : queuedMessages
+        ).filter((message) => !sendingIds.includes(message.id));
 
         if (queuedOnly && autoReviewRunning) {
             return;
@@ -2233,6 +2249,10 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         editorRef: composerRef,
         formRef: composerFormRef,
         setExpandedInput,
+        // The pill exists to buy screen back from the soft keyboard. A tablet
+        // has the room regardless, and with a hardware keyboard there is no
+        // soft keyboard to buy it back from — keep the real composer up.
+        alwaysExpanded: hasHardwareKeyboard || isTabletLayout,
         holders: {
             controlsPanelOpen: Boolean(mobileControlsPanel),
             attachMenuOpen: mobileAttachMenuOpen,
