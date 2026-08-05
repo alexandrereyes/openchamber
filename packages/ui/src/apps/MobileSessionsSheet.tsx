@@ -71,7 +71,11 @@ import type { WorktreeMetadata } from '@/types/worktree';
 
 import { MobileDeleteWorktreeDialog } from './MobileDeleteWorktreeDialog';
 import { MobileProjectEditSurface } from './MobileProjectEditSurface';
-import { archiveMobileSessionSubtree } from './mobileSessionArchive';
+import {
+  archiveMobileSessionSubtree,
+  deleteMobileSessionSubtree,
+  excludeArchivedMobileSessions,
+} from './mobileSessionArchive';
 
 type MobileSessionsSheetProps = {
   open: boolean;
@@ -872,7 +876,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
   const archiveSessions = useSessionUIStore((state) => state.archiveSessions);
-  const deleteSession = useSessionUIStore((state) => state.deleteSession);
+  const deleteSessions = useSessionUIStore((state) => state.deleteSessions);
   const updateSessionTitle = useSessionUIStore((state) => state.updateSessionTitle);
   const openNewSessionDraft = useSessionUIStore((state) => state.openNewSessionDraft);
   const setActiveProject = useProjectsStore((state) => state.setActiveProject);
@@ -1029,10 +1033,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
     // live copy that has not caught up yet — an in-flight child discovery, a
     // late SSE echo — still carries no `time.archived` and would otherwise
     // resurrect a row that was just archived, until a full reload.
-    const archivedIds = new Set(
-      globalArchivedSessions.filter((session) => session.time?.archived).map((session) => session.id),
-    );
-    return merged.filter((session) => !session.time?.archived && !archivedIds.has(session.id));
+    return excludeArchivedMobileSessions(merged, globalArchivedSessions);
   }, [globalActiveSessions, globalArchivedSessions, liveSessions]);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -1280,6 +1281,13 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
     setConfirmingDeleteSessionId(null);
   };
 
+  const captureMobileSessionDirectory = (sessionId: string, candidate?: Session): string | null => (
+    (candidate ? getSessionDirectory(candidate) : '')
+    || useSessionUIStore.getState().getDirectoryForSession(sessionId)
+    || normalizePath(currentDirectory)
+    || null
+  );
+
   // Archiving a parent must take its subagents with it: the server does not
   // cascade `time.archived`, so archiving the row alone would leave orphaned
   // children in the list. Lineage spans the surface's whole merged list plus the
@@ -1294,6 +1302,7 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
       rootId: session.id,
       expectedRuntimeKey: getRuntimeKey(),
       archiveSessions,
+      captureDirectory: captureMobileSessionDirectory,
     });
 
     if (targetCount === 1) {
@@ -1317,9 +1326,30 @@ export const MobileSessionsSheet: React.FC<MobileSessionsSheetProps> = ({ open, 
   const handleConfirmDelete = async (session: Session) => {
     setRevealedSessionId(null);
     setConfirmingDeleteSessionId(null);
-    const ok = await deleteSession(session.id);
-    if (ok) toast.success(t('sessions.sidebar.session.delete.success'));
-    else toast.error(t('sessions.sidebar.session.delete.error'));
+    const { deletedIds, failedIds, targetCount } = await deleteMobileSessionSubtree({
+      sessions: [...sessions, ...globalArchivedSessions],
+      rootId: session.id,
+      expectedRuntimeKey: getRuntimeKey(),
+      deleteSessions,
+      captureDirectory: captureMobileSessionDirectory,
+    });
+
+    if (targetCount === 1) {
+      if (failedIds.length === 0) toast.success(t('sessions.sidebar.session.delete.success'));
+      else toast.error(t('sessions.sidebar.session.delete.error'));
+      return;
+    }
+
+    if (deletedIds.length > 0) {
+      toast.success(deletedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.deletedSingle', { count: deletedIds.length })
+        : t('sessions.sidebar.bulkActions.deletedPlural', { count: deletedIds.length }));
+    }
+    if (failedIds.length > 0) {
+      toast.error(failedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.failedDeleteSingle', { count: failedIds.length })
+        : t('sessions.sidebar.bulkActions.failedDeletePlural', { count: failedIds.length }));
+    }
   };
 
   const handleRequestRename = (sessionId: string) => {
