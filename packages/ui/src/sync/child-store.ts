@@ -6,6 +6,7 @@ import { readDirCache, persistVcs, persistProjectMeta, persistIcon, persistSessi
 import { normalizePath } from "@/lib/pathNormalization"
 import { startSessionLoadPerformanceEvent } from "./session-load-performance"
 import { countSyncPerformance } from "./performance-diagnostics"
+import { isFilesystemError } from "@/lib/api/files-errors"
 
 export type DirectoryStore = State & {
   /** Apply a partial state update */
@@ -216,6 +217,7 @@ export type DirectoryBootstrapDemand = {
 }
 
 export type DirectoryBootstrapState = "queued" | "running" | "complete" | "failed"
+export type DirectoryBootstrapFailureReason = "os-permission" | "generic"
 
 export type DirectoryBootstrapContext = DirectoryBootstrapDemand & {
   generation: number
@@ -298,6 +300,7 @@ export class ChildStoreManager {
   private readonly runningBootstraps = new Map<string, RunningBootstrap>()
   private readonly bootstrapStates = new Map<string, DirectoryBootstrapState>()
   private readonly latestBootstrapTokens = new Map<string, object>()
+  private readonly bootstrapFailures = new Map<string, DirectoryBootstrapFailureReason>()
 
   private onBootstrap?: (context: DirectoryBootstrapContext) => Promise<void> | void
   private onDispose?: (directory: string) => void
@@ -483,6 +486,11 @@ export class ChildStoreManager {
     return normalizedDirectory ? this.bootstrapStates.get(normalizedDirectory) : undefined
   }
 
+  getBootstrapFailure(directory: string): DirectoryBootstrapFailureReason | undefined {
+    const normalizedDirectory = normalizePath(directory)
+    return normalizedDirectory ? this.bootstrapFailures.get(normalizedDirectory) : undefined
+  }
+
   subscribeBootstrap(listener: () => void): () => void {
     this.bootstrapSubscribers.add(listener)
     return () => this.bootstrapSubscribers.delete(listener)
@@ -534,6 +542,7 @@ export class ChildStoreManager {
       if (demand.force) running.rerunRequested = true
       return false
     }
+    this.bootstrapFailures.delete(directory)
     const existing = this.bootstrapQueue.get(directory)
     const next: QueuedBootstrap = existing
       ? {
@@ -614,14 +623,19 @@ export class ChildStoreManager {
         .then(() => {
           if (isCurrent()) {
             this.bootstrapStates.set(next.directory, "complete")
+            this.bootstrapFailures.delete(next.directory)
             finishPerformanceEvent("complete")
           } else {
             finishPerformanceEvent("stale")
           }
         })
-        .catch(() => {
+        .catch((error) => {
           if (isCurrent()) {
             this.bootstrapStates.set(next.directory, "failed")
+            this.bootstrapFailures.set(
+              next.directory,
+              isFilesystemError(error) && error.reason === "os-permission" ? "os-permission" : "generic",
+            )
             finishPerformanceEvent("error")
           } else {
             finishPerformanceEvent("stale")
@@ -670,6 +684,7 @@ export class ChildStoreManager {
     this.manualBootstrapDemands.delete(directory)
     this.bootstrapStates.delete(directory)
     this.latestBootstrapTokens.delete(directory)
+    this.bootstrapFailures.delete(directory)
     for (const demands of this.bootstrapDemandsByOwner.values()) demands.delete(directory)
     this.children.delete(directory)
     this.notifyRegistrySubscribers()
@@ -732,6 +747,7 @@ export class ChildStoreManager {
     this.runningBootstraps.clear()
     this.bootstrapStates.clear()
     this.latestBootstrapTokens.clear()
+    this.bootstrapFailures.clear()
     this.bootstrapDemandsByOwner.clear()
     this.manualBootstrapDemands.clear()
     this.notifyBootstrapSubscribers()
