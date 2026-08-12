@@ -184,9 +184,8 @@ export const useQuotaStore = create<QuotaStore>()(
             if (fetchAllQuotasInFlight.get(runtimeKey)?.token === token) {
               fetchAllQuotasInFlight.delete(runtimeKey);
             }
-            if (isQuotaRequestCurrent(runtimeKey, generation)) {
-              set({ isLoading: false });
-            }
+            const currentRequest = fetchAllQuotasInFlight.get(getRuntimeKey());
+            set({ isLoading: currentRequest?.generation === quotaRuntimeGeneration });
           }
         })();
         fetchAllQuotasInFlight.set(runtimeKey, { request, token, generation });
