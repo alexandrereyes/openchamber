@@ -10,7 +10,7 @@ import { UsageProviderCards } from '@/components/usage/UsageProviderCards';
 import { useUsageProviderGroups, type UsageProviderGroup } from '@/components/usage/usageGroups';
 import { cn } from '@/lib/utils';
 import { useConfigStore } from '@/stores/useConfigStore';
-import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
+import { QUOTA_REFRESH_INTERVAL_MS, useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { useUIStore, type TimeFormatPreference } from '@/stores/useUIStore';
 import { useSelectionStore } from '@/sync/selection-store';
 import { useSessionMessages } from '@/sync/sync-context';
@@ -337,7 +337,6 @@ export const MobileSessionMetadataButton = React.memo(function MobileSessionMeta
   const fetchAllQuotas = useQuotaStore((state) => state.fetchAllQuotas);
   const isQuotaLoading = useQuotaStore((state) => state.isLoading);
   const quotaLastUpdated = useQuotaStore((state) => state.lastUpdated);
-  const quotaRefreshIntervalMs = useQuotaStore((state) => state.refreshIntervalMs);
   const quotaDisplayMode = useQuotaStore((state) => state.displayMode);
   const dropdownProviderIds = useQuotaStore((state) => state.dropdownProviderIds);
   const timeFormatPreference = useUIStore((state) => state.timeFormatPreference);
@@ -361,7 +360,7 @@ export const MobileSessionMetadataButton = React.memo(function MobileSessionMeta
       dropdownProviderIds,
       results: quotaResults,
       lastUpdated: quotaLastUpdated,
-      refreshIntervalMs: quotaRefreshIntervalMs,
+      refreshIntervalMs: QUOTA_REFRESH_INTERVAL_MS,
       now: Date.now(),
     });
     if (!open) {
@@ -370,7 +369,7 @@ export const MobileSessionMetadataButton = React.memo(function MobileSessionMeta
       wasMetadataOpenRef.current = true;
     }
     if (shouldRefresh) void fetchAllQuotas();
-  }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaLastUpdated, quotaRefreshIntervalMs, quotaResults]);
+  }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaLastUpdated, quotaResults]);
 
   const latestMessageModel = React.useMemo(() => {
     for (let i = activeSessionMessages.length - 1; i >= 0; i -= 1) {

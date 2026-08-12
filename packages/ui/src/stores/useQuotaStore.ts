@@ -10,7 +10,7 @@ import { updateDesktopSettings } from '@/lib/persistence';
 import { runtimeFetch } from '@/lib/runtime-fetch';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 
-const QUOTA_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
+export const QUOTA_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
 const fetchAllQuotasInFlight = new Map<string, { request: Promise<void>; token: symbol; generation: number }>();
 let quotaRuntimeGeneration = 0;
 
