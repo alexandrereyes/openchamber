@@ -283,6 +283,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
     const suppressNextFileDropTextInsertTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     const suppressNextFileMentionPasteRef = React.useRef(false);
     const suppressNextFileMentionPasteTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    const shellTriggerNormalizationRef = React.useRef(false);
     const pendingDroppedAbsolutePathsRef = React.useRef<string[]>([]);
     const canAcceptDropRef = React.useRef(false);
     const mentionRef = React.useRef<FileMentionHandle>(null);
@@ -962,6 +963,9 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         const queuedMessageId = options?.queuedMessageId;
         const delivery = options?.delivery === 'steer' && sessionPhase !== 'idle' ? 'steer' : undefined;
         const capturedTarget = messageQueueTarget;
+        // Snapshot the draft and current-session identity before the first
+        // async gap so a later sidebar selection cannot reroute the send.
+        const capturedDraftSnapshot = newSessionDraftOpen ? { ...newSessionDraft } : null;
         const inputSnapshot = options?.presetText != null
             ? {
                 message: options.presetText,
@@ -1034,9 +1038,17 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
             }
         }
 
-        const sendMessageOptions = capturedTarget
-            ? { target: capturedTarget, ...(delivery ? { delivery } : {}) }
-            : delivery ? { delivery } : undefined;
+        const sendMessageOptions: {
+            target?: NonNullable<typeof capturedTarget>;
+            draftSnapshot?: NonNullable<typeof capturedDraftSnapshot>;
+            delivery?: 'steer';
+        } | undefined = (capturedTarget || capturedDraftSnapshot || delivery)
+            ? {
+                ...(capturedTarget ? { target: capturedTarget } : {}),
+                ...(capturedDraftSnapshot ? { draftSnapshot: capturedDraftSnapshot } : {}),
+                ...(delivery ? { delivery } : {}),
+            }
+            : undefined;
 
         // Inline review comments and synthetic context are consumed before
         // assembly so a failed send can restore exactly what it took.
@@ -1402,6 +1414,19 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         // Uses keyCode === 229 fallback for WebKit where compositionend fires before keydown.
         if (isIMECompositionEvent(e)) return;
 
+        // Enter shell mode before CodeMirror inserts the trigger. Keeping the
+        // document unchanged also keeps the caret at the start for the first
+        // command character.
+        if (inputMode === 'normal' && e.key === '!') {
+            const selection = composerRef.current?.getSelection();
+            if (selection?.start === 0 && selection.end === 0) {
+                e.preventDefault();
+                setInputMode('shell');
+                closeAutocomplete();
+                return;
+            }
+        }
+
         if (inputMode === 'shell' && e.key === 'Escape') {
             e.preventDefault();
             setInputMode('normal');
@@ -1705,6 +1730,12 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
     }, []);
 
     const handleComposerChange = ({ value, selection, fromPaste, insertedText }: ComposerChange) => {
+        if (shellTriggerNormalizationRef.current) {
+            shellTriggerNormalizationRef.current = false;
+            setMessage(value);
+            return;
+        }
+
         // VS Code drops the dragged path as text as well as firing the drop
         // handler; swallow that duplicate insertion.
         if (isVSCodeRuntime() && suppressNextFileDropTextInsertRef.current) {
@@ -1723,13 +1754,21 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({ onOpenSettings, scrollTo
         const inputSource: FileMentionAutocompleteInputSource = isPasteInput ? 'paste' : 'manual';
 
         // A leading `!` switches the composer into shell mode and is consumed.
+        // Mobile keyboards and paste may update the document without a usable
+        // keydown, so consume the trigger in the same editor transaction rather
+        // than moving the caret in a later frame against stale text.
         if (inputMode === 'normal' && value.startsWith('!')) {
             const shellCommand = value.slice(1);
             const nextCursor = Math.max(0, selection.start - 1);
             setInputMode('shell');
-            setMessage(shellCommand);
             closeAutocomplete();
-            requestAnimationFrame(() => composerRef.current?.setSelection(nextCursor));
+            const editor = composerRef.current;
+            if (editor) {
+                shellTriggerNormalizationRef.current = true;
+                editor.replaceRange(0, 1, '', nextCursor);
+            } else {
+                setMessage(shellCommand);
+            }
             return;
         }
 
