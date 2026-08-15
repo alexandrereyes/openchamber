@@ -1,22 +1,31 @@
 import React from 'react';
 import type { Session } from '@opencode-ai/sdk/v2';
 
+import { Icon } from '@/components/icon/Icon';
 import { SessionActivityDuration } from '@/components/session/SessionActivityDuration';
+import { toast } from '@/components/ui';
 import { formatSessionCompactDateLabel } from '@/components/session/sidebar/utils';
 import { useSwitcherItems } from '@/components/session/sidebar/hooks/useSwitcherItems';
 import { useTabletLayout } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
+import { normalizePath } from '@/lib/pathNormalization';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import { cn } from '@/lib/utils';
-import { refreshGlobalSessions, resolveGlobalSessionDirectory } from '@/stores/useGlobalSessionsStore';
+import { useDirectoryStore } from '@/stores/useDirectoryStore';
+import { refreshGlobalSessions, resolveGlobalSessionDirectory, useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useSessionUnseenCount } from '@/sync/notification-store';
 import { useHasSessionActivityDuration } from '@/sync/session-activity-timing';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useGlobalSessionStatus } from '@/sync/sync-context';
 
+import { archiveMobileSessionSubtree, deleteMobileSessionSubtree } from './mobileSessionArchive';
+
 const RECENT_SESSIONS_LIMIT = 10;
 /** Matches the metadata popover's width so both header dropdowns read as a pair. */
 const TABLET_POPOVER_WIDTH = 380;
+const SWITCHER_ROW_ACTIONS_WIDTH = 96;
+const SWITCHER_ROW_SWIPE_SNAP_MS = 180;
 
 const getSessionTitle = (session: Session, fallback: string): string =>
   session.title?.trim() || fallback;
@@ -29,7 +38,24 @@ const SwitcherRow: React.FC<{
   meta: string;
   active: boolean;
   onSelect: () => void;
-}> = ({ session, meta, active, onSelect }) => {
+  revealed: boolean;
+  onRevealedChange: (revealed: boolean) => void;
+  confirmingDelete: boolean;
+  onArchive: () => void;
+  onRequestDelete: () => void;
+  onConfirmDelete: () => void;
+}> = ({
+  session,
+  meta,
+  active,
+  onSelect,
+  revealed,
+  onRevealedChange,
+  confirmingDelete,
+  onArchive,
+  onRequestDelete,
+  onConfirmDelete,
+}) => {
   const { t } = useI18n();
   const status = useGlobalSessionStatus(session.id);
   const unseenCount = useSessionUnseenCount(session.id);
@@ -39,47 +65,163 @@ const SwitcherRow: React.FC<{
   const hasActivityDuration = useHasSessionActivityDuration(session.id, isStreaming);
   const showActivityDuration = (isStreaming || showUnreadDot) && hasActivityDuration;
   const timeLabel = formatSessionCompactDateLabel(session.time?.updated ?? session.time?.created ?? 0);
+  const title = getSessionTitle(session, t('sessions.sidebar.session.untitled'));
+
+  const contentRef = React.useRef<HTMLButtonElement>(null);
+  const startRef = React.useRef<{ x: number; y: number } | null>(null);
+  const draggingRef = React.useRef(false);
+  const offsetRef = React.useRef(0);
+  const revealedRef = React.useRef(revealed);
+  const suppressClickRef = React.useRef(false);
+
+  // Keep the drag on the compositor path. React state changes only when the
+  // gesture snaps open or closed, never for individual touchmove frames.
+  const applyOffset = React.useCallback((px: number, animate: boolean) => {
+    const element = contentRef.current;
+    if (!element) return;
+    element.style.transition = animate ? `transform ${SWITCHER_ROW_SWIPE_SNAP_MS}ms ease-out` : 'none';
+    element.style.transform = px === 0 ? 'none' : `translateX(${px}px)`;
+    offsetRef.current = px;
+  }, []);
+
+  React.useEffect(() => {
+    revealedRef.current = revealed;
+    applyOffset(revealed ? -SWITCHER_ROW_ACTIONS_WIDTH : 0, true);
+  }, [applyOffset, revealed]);
+
+  const handleTouchStart = (event: React.TouchEvent) => {
+    if (event.touches.length !== 1) return;
+    suppressClickRef.current = false;
+    const touch = event.touches[0];
+    startRef.current = { x: touch.clientX, y: touch.clientY };
+    draggingRef.current = false;
+  };
+
+  const handleTouchMove = (event: React.TouchEvent) => {
+    if (!startRef.current) return;
+    const touch = event.touches[0];
+    const dx = touch.clientX - startRef.current.x;
+    const dy = touch.clientY - startRef.current.y;
+    if (!draggingRef.current) {
+      // Let the browser own vertical scrolling; claim the gesture only after
+      // clear horizontal intent.
+      if (Math.abs(dx) < 8 || Math.abs(dx) <= Math.abs(dy)) return;
+      draggingRef.current = true;
+    }
+    const base = revealedRef.current ? -SWITCHER_ROW_ACTIONS_WIDTH : 0;
+    applyOffset(Math.min(0, Math.max(-SWITCHER_ROW_ACTIONS_WIDTH, base + dx)), false);
+  };
+
+  const handleTouchEnd = () => {
+    startRef.current = null;
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    // A touch gesture can still produce one compat click. Consume it so a
+    // snap-open or snap-closed swipe does not immediately toggle/select.
+    suppressClickRef.current = true;
+    const shouldReveal = offsetRef.current < -SWITCHER_ROW_ACTIONS_WIDTH / 2;
+    applyOffset(shouldReveal ? -SWITCHER_ROW_ACTIONS_WIDTH : 0, true);
+    if (shouldReveal !== revealedRef.current) {
+      // Prevent the synthetic click after a swipe from selecting the session.
+      revealedRef.current = shouldReveal;
+      onRevealedChange(shouldReveal);
+    }
+  };
 
   return (
-    <button
-      type="button"
-      className={cn(
-        'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors active:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
-        active && 'bg-[color-mix(in_srgb,var(--primary)_10%,transparent)]',
-      )}
-      onClick={onSelect}
-      style={{ touchAction: 'manipulation' }}
+    <div
+      className="relative overflow-hidden rounded-xl"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      style={{ touchAction: 'pan-y' }}
     >
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className={cn('block truncate typography-ui-label', active ? 'text-primary' : 'text-foreground')}>
-          {getSessionTitle(session, t('sessions.sidebar.session.untitled'))}
-        </span>
-        {meta ? (
-          <span className="block truncate typography-micro text-muted-foreground">{meta}</span>
-        ) : null}
-      </span>
-      {/* Activity sits on the right, before the time — no reserved left gutter. */}
-      {isStreaming || showUnreadDot ? (
-        <span
+      <div
+        className="absolute inset-y-0 right-0 flex items-stretch bg-[var(--surface-elevated)]"
+        style={{ width: SWITCHER_ROW_ACTIONS_WIDTH }}
+        aria-hidden={!revealed}
+      >
+        <button
+          type="button"
+          tabIndex={revealed ? 0 : -1}
+          className="flex flex-1 items-center justify-center text-muted-foreground transition-colors active:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+          aria-label={t('mobile.sessions.archiveSessionAria', { title })}
+          onClick={onArchive}
+          style={{ touchAction: 'manipulation' }}
+        >
+          <Icon name="archive" className="size-[18px]" />
+        </button>
+        <button
+          type="button"
+          tabIndex={revealed ? 0 : -1}
           className={cn(
-            'size-1.5 shrink-0 rounded-full',
-            isStreaming ? 'bg-primary' : 'bg-[var(--status-info)]',
+            'flex flex-1 items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-destructive',
+            confirmingDelete
+              ? 'rounded-lg bg-destructive text-destructive-foreground'
+              : 'text-[var(--status-error)] active:opacity-80',
           )}
-          aria-hidden
-        />
-      ) : null}
-      {/* The elapsed turn takes the time slot while it matters, then hands it
-          back to the relative timestamp. */}
-      {showActivityDuration ? (
-        <SessionActivityDuration
-          sessionId={session.id}
-          running={isStreaming}
-          className="typography-micro"
-        />
-      ) : timeLabel ? (
-        <span className="shrink-0 typography-micro text-muted-foreground tabular-nums">{timeLabel}</span>
-      ) : null}
-    </button>
+          aria-label={confirmingDelete
+            ? t('mobile.sessions.confirmDeleteSessionAria', { title })
+            : t('mobile.sessions.deleteSessionAria', { title })}
+          onClick={confirmingDelete ? onConfirmDelete : onRequestDelete}
+          style={{ touchAction: 'manipulation' }}
+        >
+          <Icon name="delete-bin" className="size-[18px]" />
+        </button>
+      </div>
+      <button
+        ref={contentRef}
+        type="button"
+        className={cn(
+          'relative flex w-full items-center gap-3 rounded-xl bg-[var(--surface-elevated)] px-2.5 py-2 text-left transition-colors active:bg-interactive-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary',
+          active && 'bg-[color-mix(in_srgb,var(--primary)_10%,var(--surface-elevated))]',
+        )}
+        onClick={() => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false;
+            return;
+          }
+          // A tap on an open row closes its actions instead of selecting it.
+          if (revealedRef.current) {
+            onRevealedChange(false);
+            return;
+          }
+          onSelect();
+        }}
+        style={{ touchAction: 'manipulation' }}
+      >
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={cn('block truncate typography-ui-label', active ? 'text-primary' : 'text-foreground')}>
+            {title}
+          </span>
+          {meta ? (
+            <span className="block truncate typography-micro text-muted-foreground">{meta}</span>
+          ) : null}
+        </span>
+        {/* Activity sits on the right, before the time — no reserved left gutter. */}
+        {isStreaming || showUnreadDot ? (
+          <span
+            className={cn(
+              'size-1.5 shrink-0 rounded-full',
+              isStreaming ? 'bg-primary' : 'bg-[var(--status-info)]',
+            )}
+            aria-hidden
+          />
+        ) : null}
+        {/* The elapsed turn takes the time slot while it matters, then hands it
+            back to the relative timestamp. */}
+        {showActivityDuration ? (
+          <SessionActivityDuration
+            sessionId={session.id}
+            running={isStreaming}
+            className="typography-micro"
+          />
+        ) : timeLabel ? (
+          <span className="shrink-0 typography-micro text-muted-foreground tabular-nums">{timeLabel}</span>
+        ) : null}
+      </button>
+    </div>
   );
 };
 
@@ -132,7 +274,11 @@ export const MobileSessionSwitcher: React.FC<{
   const isPopover = isTabletLayout && anchorLeft !== null;
   const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
   const setCurrentSession = useSessionUIStore((state) => state.setCurrentSession);
+  const archiveSessions = useSessionUIStore((state) => state.archiveSessions);
+  const deleteSessions = useSessionUIStore((state) => state.deleteSessions);
   const setActiveProjectIdOnly = useProjectsStore((state) => state.setActiveProjectIdOnly);
+  const [revealedSessionId, setRevealedSessionId] = React.useState<string | null>(null);
+  const [confirmingDeleteSessionId, setConfirmingDeleteSessionId] = React.useState<string | null>(null);
 
   const items = useSwitcherItems(open || shouldRender, { maxParents: RECENT_SESSIONS_LIMIT });
 
@@ -145,6 +291,8 @@ export const MobileSessionSwitcher: React.FC<{
       setIsExiting(false);
       return;
     }
+    setRevealedSessionId(null);
+    setConfirmingDeleteSessionId(null);
     if (!shouldRender) return;
     setIsExiting(true);
     const timeoutId = window.setTimeout(() => {
@@ -182,6 +330,78 @@ export const MobileSessionSwitcher: React.FC<{
     void setCurrentSession(session.id, resolveGlobalSessionDirectory(session));
     onClose();
   }, [onClose, setCurrentSession]);
+
+  const handleRowRevealedChange = (sessionId: string, nextRevealed: boolean) => {
+    setRevealedSessionId(nextRevealed ? sessionId : null);
+    setConfirmingDeleteSessionId(null);
+  };
+
+  const captureMobileSessionDirectory = (sessionId: string, candidate?: Session): string | null => (
+    (candidate ? resolveGlobalSessionDirectory(candidate) : null)
+    ?? useSessionUIStore.getState().getDirectoryForSession(sessionId)
+    ?? normalizePath(useDirectoryStore.getState().currentDirectory)
+    ?? null
+  );
+
+  const handleArchive = async (session: Session) => {
+    const { activeSessions, archivedSessions } = useGlobalSessionsStore.getState();
+    setRevealedSessionId(null);
+    setConfirmingDeleteSessionId(null);
+    const { archivedIds, failedIds, targetCount } = await archiveMobileSessionSubtree({
+      sessions: [...activeSessions, ...archivedSessions],
+      rootId: session.id,
+      expectedRuntimeKey: getRuntimeKey(),
+      archiveSessions,
+      captureDirectory: captureMobileSessionDirectory,
+    });
+
+    if (targetCount === 1) {
+      if (failedIds.length === 0) toast.success(t('sessions.sidebar.session.archive.success'));
+      else toast.error(t('sessions.sidebar.session.archive.error'));
+      return;
+    }
+
+    if (archivedIds.length > 0) {
+      toast.success(archivedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.archivedSingle', { count: archivedIds.length })
+        : t('sessions.sidebar.bulkActions.archivedPlural', { count: archivedIds.length }));
+    }
+    if (failedIds.length > 0) {
+      toast.error(failedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.failedArchiveSingle', { count: failedIds.length })
+        : t('sessions.sidebar.bulkActions.failedArchivePlural', { count: failedIds.length }));
+    }
+  };
+
+  const handleConfirmDelete = async (session: Session) => {
+    const { activeSessions, archivedSessions } = useGlobalSessionsStore.getState();
+    setRevealedSessionId(null);
+    setConfirmingDeleteSessionId(null);
+    const { deletedIds, failedIds, targetCount } = await deleteMobileSessionSubtree({
+      sessions: [...activeSessions, ...archivedSessions],
+      rootId: session.id,
+      expectedRuntimeKey: getRuntimeKey(),
+      deleteSessions,
+      captureDirectory: captureMobileSessionDirectory,
+    });
+
+    if (targetCount === 1) {
+      if (failedIds.length === 0) toast.success(t('sessions.sidebar.session.delete.success'));
+      else toast.error(t('sessions.sidebar.session.delete.error'));
+      return;
+    }
+
+    if (deletedIds.length > 0) {
+      toast.success(deletedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.deletedSingle', { count: deletedIds.length })
+        : t('sessions.sidebar.bulkActions.deletedPlural', { count: deletedIds.length }));
+    }
+    if (failedIds.length > 0) {
+      toast.error(failedIds.length === 1
+        ? t('sessions.sidebar.bulkActions.failedDeleteSingle', { count: failedIds.length })
+        : t('sessions.sidebar.bulkActions.failedDeletePlural', { count: failedIds.length }));
+    }
+  };
 
   if (!shouldRender) return null;
 
@@ -225,6 +445,12 @@ export const MobileSessionSwitcher: React.FC<{
                   session={session}
                   meta={meta}
                   active={session.id === currentSessionId}
+                  revealed={revealedSessionId === session.id}
+                  onRevealedChange={(nextRevealed) => handleRowRevealedChange(session.id, nextRevealed)}
+                  confirmingDelete={confirmingDeleteSessionId === session.id}
+                  onArchive={() => void handleArchive(session)}
+                  onRequestDelete={() => setConfirmingDeleteSessionId(session.id)}
+                  onConfirmDelete={() => void handleConfirmDelete(session)}
                   onSelect={() => {
                     if (item.projectId) setActiveProjectIdOnly(item.projectId);
                     handleSelect(session);
