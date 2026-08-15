@@ -1,5 +1,5 @@
 import express from 'express';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerWalkthroughRoutes } from './routes.js';
 
 // These run over real HTTP on purpose. The bug this file exists for was
@@ -41,6 +41,10 @@ describe('walkthrough routes', () => {
     signal,
   });
 
+  const waitForJob = async () => {
+    await vi.waitFor(() => expect(releaseJob).toBeTypeOf('function'));
+  };
+
   beforeEach(async () => {
     job = null;
     releaseJob = undefined;
@@ -59,7 +63,7 @@ describe('walkthrough routes', () => {
 
   it('answers a generation request that nobody interrupted', async () => {
     const pending = generate();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitForJob();
     releaseJob();
 
     const body = await (await pending).json();
@@ -70,7 +74,7 @@ describe('walkthrough routes', () => {
   it('delivers the result to a client that reconnected after a refresh', async () => {
     const controller = new AbortController();
     generate(controller.signal).catch(() => {});
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitForJob();
     controller.abort();
     await new Promise((resolve) => setTimeout(resolve, 20));
 
