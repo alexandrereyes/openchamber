@@ -35,7 +35,6 @@ const startIdleTick = async (fetchImpl) => {
     buildOpenCodeUrl: (pathname) => `http://opencode.test${pathname}`,
     getOpenCodeAuthHeaders: () => ({}),
     getSmallModelService,
-    isEnabled: () => true,
     idleQuietMs: 10,
   });
   runtime.processPayload({
@@ -157,7 +156,6 @@ describe('session goal live activity gate', () => {
       buildOpenCodeUrl: (pathname) => `http://opencode.test${pathname}`,
       getOpenCodeAuthHeaders: () => ({}),
       getSmallModelService: async () => service,
-      isEnabled: () => true,
       idleQuietMs: 10,
     });
 
