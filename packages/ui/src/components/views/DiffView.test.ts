@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
 import {
+  getBranchDiffStateKey,
   isBranchDiffAvailable,
   loadBranchDiff,
   mapBranchDiffEntries,
@@ -43,6 +44,15 @@ describe('branch diff scope', () => {
     expect(shouldPrefetchBranchDiff(null, null)).toBe(true);
     expect(shouldPrefetchBranchDiff([], null)).toBe(false);
     expect(shouldPrefetchBranchDiff(null, 'request failed')).toBe(false);
+    expect(shouldPrefetchBranchDiff(null, null, false)).toBe(false);
+  });
+
+  test('invalidates retained branch data across runtime and directory scopes', () => {
+    const local = getBranchDiffStateKey('local', '/repo', 'feature', 'main');
+
+    expect(getBranchDiffStateKey('remote', '/repo', 'feature', 'main')).not.toBe(local);
+    expect(getBranchDiffStateKey('local', '/worktree', 'feature', 'main')).not.toBe(local);
+    expect(getBranchDiffStateKey('local', '/repo', 'feature-2', 'main')).not.toBe(local);
   });
 
   test('requests the branch diff with bounded context and preserves an empty success', async () => {

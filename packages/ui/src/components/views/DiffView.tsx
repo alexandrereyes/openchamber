@@ -46,7 +46,7 @@ import { useWalkthroughStore } from '@/stores/useWalkthroughStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useDirectorySync, useSessionMessages, useSessionStatus } from '@/sync/sync-context';
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
-import { isBranchDiffAvailable, loadBranchDiff, mapBranchDiffEntries, shouldPrefetchBranchDiff } from './branchDiff';
+import { getBranchDiffStateKey, isBranchDiffAvailable, loadBranchDiff, mapBranchDiffEntries, shouldPrefetchBranchDiff } from './branchDiff';
 import type { FileDiffMetadata } from '@pierre/diffs';
 import type { VcsFileDiff } from '@opencode-ai/sdk/v2';
 
@@ -1104,11 +1104,16 @@ export const DiffView: React.FC<DiffViewProps> = ({
         branch: vcsBranch,
         default_branch: vcsDefaultBranch,
     });
-    const branchStateKey = `${getRuntimeKey()}\0${effectiveDirectory ?? ''}\0${vcsBranch ?? ''}\0${vcsDefaultBranch ?? ''}`;
+    const branchStateKey = getBranchDiffStateKey(
+        getRuntimeKey(),
+        effectiveDirectory,
+        vcsBranch,
+        vcsDefaultBranch,
+    );
     const branchDiffs = branchDiffState.key === branchStateKey ? branchDiffState.data : null;
     const branchDiffError = branchDiffState.key === branchStateKey ? branchDiffState.error : null;
     const shouldLoadBranchDiff = activeDiffScope === 'branch'
-        || shouldPrefetchBranchDiff(branchDiffs, branchDiffError);
+        || shouldPrefetchBranchDiff(branchDiffs, branchDiffError, !isMobileLayout);
     const isLoadingBranchDiff = activeDiffScope === 'branch'
         && (branchDiffState.key !== branchStateKey || branchDiffState.loading);
 

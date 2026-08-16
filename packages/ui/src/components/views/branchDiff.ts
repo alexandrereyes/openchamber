@@ -55,7 +55,15 @@ export const isBranchDiffAvailable = (vcs: VcsInfo | undefined): boolean => {
 export const shouldPrefetchBranchDiff = (
   diffs: readonly VcsFileDiff[] | null,
   error: string | null,
-): boolean => diffs === null && error === null;
+  enabled = true,
+): boolean => enabled && diffs === null && error === null;
+
+export const getBranchDiffStateKey = (
+  runtimeKey: string,
+  directory: string | null | undefined,
+  branch: string | null | undefined,
+  defaultBranch: string | null | undefined,
+): string => `${runtimeKey}\0${directory ?? ''}\0${branch ?? ''}\0${defaultBranch ?? ''}`;
 
 export const loadBranchDiff = async (
   request: (
