@@ -17,6 +17,8 @@ import { useHasSessionActivityDuration } from '@/sync/session-activity-timing';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useGlobalSessionStatus } from '@/sync/sync-context';
 
+import { resolveSwipeMove, type SwipeAxis } from './mobileSessionSwipe';
+
 const RECENT_SESSIONS_LIMIT = 10;
 /** Matches the metadata popover's width so both header dropdowns read as a pair. */
 const TABLET_POPOVER_WIDTH = 380;
@@ -71,7 +73,7 @@ const SwitcherRow: React.FC<{
   const archiveButtonRef = React.useRef<HTMLButtonElement>(null);
   const startRef = React.useRef<{ x: number; y: number } | null>(null);
   const gestureStartRevealedRef = React.useRef(revealed);
-  const gestureAxisRef = React.useRef<'undecided' | 'vertical' | 'horizontal'>('undecided');
+  const gestureAxisRef = React.useRef<SwipeAxis>('undecided');
   const draggingRef = React.useRef(false);
   const offsetRef = React.useRef(0);
   const revealedRef = React.useRef(revealed);
@@ -151,31 +153,30 @@ const SwitcherRow: React.FC<{
 
   const handleTouchMove = (event: React.TouchEvent) => {
     if (!startRef.current) return;
-    if (event.touches.length !== 1) {
+    const touch = event.touches[0];
+    const move = resolveSwipeMove({
+      touchCount: event.touches.length,
+      dx: touch ? touch.clientX - startRef.current.x : 0,
+      dy: touch ? touch.clientY - startRef.current.y : 0,
+      axis: gestureAxisRef.current,
+      dragging: draggingRef.current,
+      revealed: revealedRef.current,
+      actionsWidth: SWITCHER_ROW_ACTIONS_WIDTH,
+    });
+    if (move.type === 'cancel') {
+      // A second finger cancels the gesture. Restore the state captured at
+      // touchstart so the row cannot remain stranded at a partial offset.
+      applyOffset(gestureStartRevealedRef.current ? -SWITCHER_ROW_ACTIONS_WIDTH : 0, true);
       startRef.current = null;
       gestureAxisRef.current = 'undecided';
       draggingRef.current = false;
+      suppressSyntheticClick();
       return;
     }
-    if (gestureAxisRef.current === 'vertical') return;
-    const touch = event.touches[0];
-    const dx = touch.clientX - startRef.current.x;
-    const dy = touch.clientY - startRef.current.y;
-    if (!draggingRef.current) {
-      // Let the browser own vertical scrolling; claim the gesture only after
-      // clear horizontal intent.
-      const absDx = Math.abs(dx);
-      const absDy = Math.abs(dy);
-      if (Math.max(absDx, absDy) < 8) return;
-      if (absDy >= absDx) {
-        gestureAxisRef.current = 'vertical';
-        return;
-      }
-      gestureAxisRef.current = 'horizontal';
-      draggingRef.current = true;
-    }
-    const base = revealedRef.current ? -SWITCHER_ROW_ACTIONS_WIDTH : 0;
-    applyOffset(Math.min(0, Math.max(-SWITCHER_ROW_ACTIONS_WIDTH, base + dx)), false);
+    gestureAxisRef.current = move.axis;
+    if (move.type === 'ignore') return;
+    draggingRef.current = true;
+    applyOffset(move.offset, false);
   };
 
   const handleTouchEnd = () => {
