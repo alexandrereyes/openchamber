@@ -1,17 +1,17 @@
-import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const listMock = mock(async () => ({ data: [] }));
+const listMock = vi.fn(async () => ({ data: [] }));
 
-mock.module('../git/index.js', () => ({
+vi.mock('../git/index.js', () => ({
   getRemotes: async () => [],
   getStatus: async () => null,
 }));
 
-mock.module('./repo/index.js', () => ({
+vi.mock('./repo/index.js', () => ({
   resolveGitHubRepoFromDirectory: async () => null,
 }));
 
-mock.module('./rate-limit.js', () => ({
+vi.mock('./rate-limit.js', () => ({
   noteIfGitHubRateLimit: () => {},
 }));
 
@@ -63,7 +63,7 @@ describe('findBranchPrCandidates', () => {
   });
 
   afterEach(() => {
-    setSystemTime();
+    vi.useRealTimers();
   });
 
   test('an open PR wins and no history lookup is spent', async () => {
@@ -156,7 +156,7 @@ describe('findBranchPrCandidates', () => {
 
     // Past the "no history" expiry, but far short of the found-record one. The
     // shared open list is re-fetched; the history answer is not re-queried.
-    setSystemTime(new Date(startedAt + 30 * 60 * 1000));
+    vi.useFakeTimers({ now: new Date(startedAt + 30 * 60 * 1000) });
     const { historical } = await call({ force: false });
 
     expect(historical?.number).toBe(12);
@@ -171,7 +171,7 @@ describe('findBranchPrCandidates', () => {
     await call();
     const callsAfterFirst = listMock.mock.calls.length;
 
-    setSystemTime(new Date(startedAt + 30 * 60 * 1000));
+    vi.useFakeTimers({ now: new Date(startedAt + 30 * 60 * 1000) });
     await call({ force: false });
 
     expect(listMock.mock.calls.some((entry) => entry[0]?.state === 'all')).toBe(true);
