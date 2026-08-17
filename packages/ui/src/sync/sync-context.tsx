@@ -1602,8 +1602,7 @@ export function handleEvent(
   }
 
   if (payload.type === "file.watcher.updated" && resolvedDirectory !== "global") {
-    const props = payload.properties as { file?: string }
-    const file = props.file?.replace(/\\/g, "/")
+    const file = payload.properties.file?.replace(/\\/g, "/")
     if (file && !file.includes("/.git/") && !file.startsWith(".git/")) {
       sessionEvents.requestVcsDiffRefresh({ directory: resolvedDirectory })
     }

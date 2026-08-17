@@ -7,6 +7,7 @@ import {
   loadBranchDiff,
   mapBranchDiffEntries,
   shouldPrefetchBranchDiff,
+  type BranchDiffRequest,
 } from './branchDiff';
 
 describe('getFirstChangedModifiedLineFromPatch', () => {
@@ -56,7 +57,7 @@ describe('branch diff scope', () => {
   });
 
   test('requests the branch diff with bounded context and preserves an empty success', async () => {
-    const requests: unknown[] = [];
+    const requests: BranchDiffRequest[] = [];
     const result = await loadBranchDiff(async (input) => {
       requests.push(input);
       return { data: [] };
@@ -71,7 +72,7 @@ describe('branch diff scope', () => {
 
   test('surfaces SDK failures instead of treating them as an empty diff', async () => {
     expect(loadBranchDiff(async () => ({
-      error: { message: 'merge base unavailable' },
+      error: { name: 'BadRequest', data: { message: 'merge base unavailable' } },
       response: { status: 500 },
     }))).rejects.toThrow('Branch diff failed (500): merge base unavailable');
 

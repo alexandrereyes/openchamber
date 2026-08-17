@@ -6,7 +6,7 @@ import { INITIAL_STATE, type State } from "./types"
 
 const createSdk = (options?: {
   commandList?: () => Promise<{ data: unknown[] }>
-  vcsGet?: (input?: unknown) => Promise<{ data: { branch: string; default_branch?: string } }>
+  vcsGet?: (input?: { directory?: string }) => Promise<{ data: { branch: string; default_branch?: string } }>
 }) => ({
   project: { current: async () => ({ data: { id: "project-a" } }) },
   config: { get: async () => ({ data: {} }) },
@@ -31,7 +31,7 @@ const project = { id: "project-a", worktree: "/repo" } as Project
 describe("bootstrapDirectory", () => {
   test("scopes VCS metadata to the bootstrapped directory", async () => {
     let state = createState()
-    const requests: unknown[] = []
+    const requests: Array<{ directory?: string } | undefined> = []
     await bootstrapDirectory({
       directory: "/repo",
       sdk: createSdk({

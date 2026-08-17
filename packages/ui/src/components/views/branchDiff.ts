@@ -1,10 +1,15 @@
-import type { VcsFileDiff } from '@opencode-ai/sdk/v2';
+import type { VcsDiffError, VcsFileDiff } from '@opencode-ai/sdk/v2';
 import type { VcsInfo } from '@opencode-ai/sdk/v2/client';
 
 type BranchDiffResult = {
   data?: VcsFileDiff[];
-  error?: unknown;
+  error?: VcsDiffError;
   response?: { status?: number };
+};
+
+export type BranchDiffRequest = {
+  mode: 'branch';
+  context: number;
 };
 
 type BranchDiffEntry = {
@@ -15,21 +20,7 @@ type BranchDiffEntry = {
   deletions: number;
   isNew: boolean;
   patch: string | null;
-  readOnly: true;
-};
-
-const formatSdkError = (error: unknown): string => {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === 'string') return message;
-  }
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return String(error);
-  }
+  readOnly: boolean;
 };
 
 const statusToGitCode = (status?: VcsFileDiff['status']): string => {
@@ -67,7 +58,7 @@ export const getBranchDiffStateKey = (
 
 export const loadBranchDiff = async (
   request: (
-    input: { mode: 'branch'; context: number },
+    input: BranchDiffRequest,
     options?: { signal?: AbortSignal },
   ) => Promise<BranchDiffResult>,
   signal?: AbortSignal,
@@ -75,7 +66,7 @@ export const loadBranchDiff = async (
   const result = await request({ mode: 'branch', context: 3 }, { signal });
   if (result.error) {
     const status = result.response?.status;
-    throw new Error(`Branch diff failed${status ? ` (${status})` : ''}: ${formatSdkError(result.error)}`);
+    throw new Error(`Branch diff failed${status ? ` (${status})` : ''}: ${result.error.data.message}`);
   }
   if (!Array.isArray(result.data)) {
     throw new Error('Branch diff failed: empty response');
@@ -94,6 +85,6 @@ export const mapBranchDiffEntries = (diffs: VcsFileDiff[]): BranchDiffEntry[] =>
       deletions: diff.deletions,
       isNew: diff.status === 'added',
       patch: hasRenderablePatch(diff.patch) ? diff.patch : null,
-      readOnly: true as const,
+      readOnly: true,
     }))
     .sort((a, b) => a.path.localeCompare(b.path));

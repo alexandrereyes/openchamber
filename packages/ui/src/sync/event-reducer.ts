@@ -512,9 +512,9 @@ export function applyDirectoryEvent(
     }
 
     case "vcs.branch.updated": {
-      const { branch } = event.properties as { branch: string }
-      if (typeof branch !== "string" || draft.vcs?.branch === branch) return false
-      draft.vcs = { ...draft.vcs, branch }
+      const props = event.properties
+      if (draft.vcs?.branch === props.branch) return false
+      draft.vcs = { ...draft.vcs, branch: props.branch }
       return true
     }
 

@@ -276,26 +276,19 @@ describe("applyDirectoryEvent", () => {
   test("preserves the default branch when the current branch changes", () => {
     const draft = state({ vcs: { branch: "feature/old", default_branch: "trunk" } })
 
-    expect(applyDirectoryEvent(draft, {
+    const branchUpdate: Event = {
+      id: "evt_branch_update",
       type: "vcs.branch.updated",
       properties: { branch: "feature/new" },
-    } as Event)).toBe(true)
+    }
+    expect(applyDirectoryEvent(draft, branchUpdate)).toBe(true)
     expect(draft.vcs).toEqual({ branch: "feature/new", default_branch: "trunk" })
 
     expect(applyDirectoryEvent(draft, {
+      id: "evt_branch_update_repeat",
       type: "vcs.branch.updated",
       properties: { branch: "feature/new" },
-    } as Event)).toBe(false)
-  })
-
-  test("ignores malformed branch updates", () => {
-    const draft = state({ vcs: { branch: "feature/current", default_branch: "trunk" } })
-
-    expect(applyDirectoryEvent(draft, {
-      type: "vcs.branch.updated",
-      properties: {},
-    } as Event)).toBe(false)
-    expect(draft.vcs).toEqual({ branch: "feature/current", default_branch: "trunk" })
+    })).toBe(false)
   })
 
   test("updates permission request arrays immutably", () => {
