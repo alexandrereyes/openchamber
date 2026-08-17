@@ -385,7 +385,7 @@ export const MobileSessionSwitcher: React.FC<{
     // Re-anchor if the chat column shifts while the popover is open (sidebar
     // toggle/resize, orientation change) — the header buttons move with it.
     const wrapper = wrapperRef.current;
-    if (typeof ResizeObserver === 'undefined' || !wrapper) return;
+    if (!("ResizeObserver" in globalThis) || !wrapper) return;
     const observer = new ResizeObserver(compute);
     observer.observe(wrapper);
     return () => observer.disconnect();
