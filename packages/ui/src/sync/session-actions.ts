@@ -1082,10 +1082,9 @@ export async function deleteSessions(
       failedIds.push(...ids.slice(index))
       break
     }
-    if (await deleteSession(id, {
-      expectedRuntimeKey,
-      ...(options?.directory !== undefined ? { directory: options.directory } : {}),
-    })) deletedIds.push(id)
+    const deleteOptions: DeleteSessionOptions = { expectedRuntimeKey }
+    if (options?.directory !== undefined) deleteOptions.directory = options.directory
+    if (await deleteSession(id, deleteOptions)) deletedIds.push(id)
     else failedIds.push(id)
   }
 

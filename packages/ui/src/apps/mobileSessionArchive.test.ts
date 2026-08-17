@@ -11,12 +11,17 @@ import {
   deleteMobileSessionSubtree,
 } from './mobileSessionArchive';
 
-const session = (id: string, parentID?: string, archivedAt?: number, directory?: string): Session => ({
+type MutationOptions = { expectedRuntimeKey: string; directory: string | null };
+
+const session = (id: string, parentID?: string, archivedAt?: number, directory?: string): Session => {
+  // SAFETY: Tests only exercise session identity, lineage, archive time, and directory.
+  return ({
   id,
   parentID,
   directory,
   time: archivedAt ? { archived: archivedAt } : {},
-}) as Session;
+  }) as Session;
+};
 
 const RUNTIME_KEY = getRuntimeKey();
 
@@ -26,10 +31,10 @@ beforeEach(() => {
 
 /** Records every call it receives and archives everything except `failing`. */
 const createArchiveSpy = (failing: string[] = []) => {
-  const calls: Array<{ ids: string[]; options?: Record<string, unknown> }> = [];
+  const calls: Array<{ ids: string[]; options?: MutationOptions }> = [];
   const archiveSessions = async (
     ids: string[],
-    options?: Record<string, unknown>,
+    options?: MutationOptions,
   ): Promise<ArchiveSessionsResult> => {
     calls.push({ ids, options });
     return {
@@ -281,10 +286,10 @@ describe('mobile session archive subtree', () => {
 
 describe('mobile session delete subtree', () => {
   const createDeleteSpy = (failing: string[] = []) => {
-    const calls: Array<{ ids: string[]; options?: Record<string, unknown> }> = [];
+    const calls: Array<{ ids: string[]; options?: MutationOptions }> = [];
     const deleteSessions = async (
       ids: string[],
-      options?: Record<string, unknown>,
+      options?: MutationOptions,
     ) => {
       calls.push({ ids, options });
       return {
