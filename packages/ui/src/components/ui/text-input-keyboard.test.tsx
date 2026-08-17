@@ -12,23 +12,21 @@ mock.module('@/components/session/TodoSendDialog', () => ({
 
 const { ProjectNotesTodoPanel } = await import('@/components/session/ProjectNotesTodoPanel');
 
-type TestWindow = {
-  Capacitor?: {
-    getPlatform?: () => string;
-  };
-};
-
 function withPlatform<T>(platform: 'ios' | 'android' | undefined, callback: () => T): T {
-  const globals = globalThis as unknown as { window?: TestWindow };
-  const previousWindow = globals.window;
-  globals.window = platform
-    ? { Capacitor: { getPlatform: () => platform } }
-    : undefined;
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: platform ? { Capacitor: { getPlatform: () => platform } } : undefined,
+  });
 
   try {
     return callback();
   } finally {
-    globals.window = previousWindow;
+    if (previousWindow) {
+      Object.defineProperty(globalThis, 'window', previousWindow);
+    } else {
+      Reflect.deleteProperty(globalThis, 'window');
+    }
   }
 }
 
