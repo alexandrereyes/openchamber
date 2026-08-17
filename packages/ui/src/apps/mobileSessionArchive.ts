@@ -39,13 +39,8 @@ export const excludeArchivedMobileSessions = (
 };
 
 const getSessionDirectory = (session?: Session): string | null => {
-  if (!session) return null;
-  const record = session as Session & {
-    directory?: string | null;
-    project?: { worktree?: string | null } | null;
-  };
-  const directory = record.directory ?? record.project?.worktree ?? null;
-  return typeof directory === 'string' && directory.trim().length > 0 ? directory : null;
+  const directory = session?.directory?.trim();
+  return directory || null;
 };
 
 const collectMobileSessionTargets = (args: {
