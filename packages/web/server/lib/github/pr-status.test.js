@@ -1,17 +1,17 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, mock, test, vi } from 'bun:test';
 
-const listMock = vi.fn(async () => ({ data: [] }));
+const listMock = mock(async () => ({ data: [] }));
 
-vi.mock('../git/index.js', () => ({
+mock.module('../git/index.js', () => ({
   getRemotes: async () => [],
   getStatus: async () => null,
 }));
 
-vi.mock('./repo/index.js', () => ({
+mock.module('./repo/index.js', () => ({
   resolveGitHubRepoFromDirectory: async () => null,
 }));
 
-vi.mock('./rate-limit.js', () => ({
+mock.module('./rate-limit.js', () => ({
   noteIfGitHubRateLimit: () => {},
 }));
 
@@ -156,7 +156,8 @@ describe('findBranchPrCandidates', () => {
 
     // Past the "no history" expiry, but far short of the found-record one. The
     // shared open list is re-fetched; the history answer is not re-queried.
-    vi.useFakeTimers({ now: new Date(startedAt + 30 * 60 * 1000) });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(startedAt + 30 * 60 * 1000));
     const { historical } = await call({ force: false });
 
     expect(historical?.number).toBe(12);
@@ -171,7 +172,8 @@ describe('findBranchPrCandidates', () => {
     await call();
     const callsAfterFirst = listMock.mock.calls.length;
 
-    vi.useFakeTimers({ now: new Date(startedAt + 30 * 60 * 1000) });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(startedAt + 30 * 60 * 1000));
     await call({ force: false });
 
     expect(listMock.mock.calls.some((entry) => entry[0]?.state === 'all')).toBe(true);
