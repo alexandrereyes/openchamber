@@ -123,9 +123,6 @@ async function runPipelineWithEvents(events, waitMs = 80) {
   const sdk = createSdkWithEvents(events, hold);
   const { cleanup } = createEventPipeline({
     sdk,
-    // This fixture supplies an SSE-style async iterator. Pin the transport so
-    // the suite does not select the WebSocket path from ambient test state.
-    transport: 'sse',
     onEvent: (directory, payload) => {
       received.push({ directory, payload });
     },
