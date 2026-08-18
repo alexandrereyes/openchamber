@@ -123,7 +123,6 @@ async function runPipelineWithEvents(events, waitMs = 80) {
   const sdk = createSdkWithEvents(events, hold);
   const { cleanup } = createEventPipeline({
     sdk,
-    transport: 'sse',
     onEvent: (directory, payload) => {
       received.push({ directory, payload });
     },
