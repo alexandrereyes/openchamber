@@ -1,5 +1,6 @@
 import type { VcsDiffError, VcsFileDiff } from '@opencode-ai/sdk/v2';
-import type { VcsInfo } from '@opencode-ai/sdk/v2/client';
+import type { GitBranch, GitStatus } from '@/lib/api/types';
+import { deriveBaseBranch, hasResolvableBaseBranch } from './git/baseBranch';
 
 type BranchDiffResult = {
   data?: VcsFileDiff[];
@@ -37,10 +38,39 @@ const hasRenderablePatch = (patch: string | undefined): patch is string => {
     || /^GIT binary patch$/m.test(patch);
 };
 
-export const isBranchDiffAvailable = (vcs: VcsInfo | undefined): boolean => {
-  const branch = vcs?.branch?.trim();
-  const defaultBranch = vcs?.default_branch?.trim();
-  return Boolean(branch && defaultBranch && branch !== defaultBranch);
+type BranchDiffSource = { baseRef: string; headRef: string };
+
+export const resolveBranchDiffSource = (
+  status: GitStatus | null,
+  branches: GitBranch | null,
+): BranchDiffSource | null => {
+  if (!status || !branches) return null;
+  const headRef = status.current.trim();
+  if (!headRef) return null;
+
+  const localBranches = branches.all.filter((name) => !name.startsWith('remotes/'));
+  const remoteBranches = branches.all
+    .filter((name) => name.startsWith('remotes/'))
+    .map((name) => name.slice('remotes/'.length));
+  const remoteNames = new Set(
+    remoteBranches
+      .map((name) => name.split('/')[0])
+      .filter(Boolean),
+  );
+  const trackingRemote = status.tracking?.split('/')[0];
+  const defaultBranch = (trackingRemote && branches.defaultBranches?.[trackingRemote])
+    ?? branches.defaultBranches?.origin;
+  const baseRef = deriveBaseBranch({
+    remoteNames,
+    localBranches,
+    defaultBranch,
+    headBranch: headRef,
+  });
+
+  if (!baseRef || baseRef === headRef || !hasResolvableBaseBranch({ baseBranch: baseRef, localBranches, remoteBranches })) {
+    return null;
+  }
+  return { baseRef, headRef };
 };
 
 export const shouldPrefetchBranchDiff = (

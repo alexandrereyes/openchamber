@@ -3,9 +3,9 @@ import { describe, expect, test } from 'bun:test';
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
 import {
   getBranchDiffStateKey,
-  isBranchDiffAvailable,
   loadBranchDiff,
   mapBranchDiffEntries,
+  resolveBranchDiffSource,
   shouldPrefetchBranchDiff,
   type BranchDiffRequest,
 } from './branchDiff';
@@ -34,11 +34,27 @@ describe('getFirstChangedModifiedLineFromPatch', () => {
 });
 
 describe('branch diff scope', () => {
-  test('is available only on a feature branch with a known default branch', () => {
-    expect(isBranchDiffAvailable({ branch: 'feature', default_branch: 'trunk' })).toBe(true);
-    expect(isBranchDiffAvailable({ branch: 'trunk', default_branch: 'trunk' })).toBe(false);
-    expect(isBranchDiffAvailable({ branch: 'feature' })).toBe(false);
-    expect(isBranchDiffAvailable({ default_branch: 'trunk' })).toBe(false);
+  test('uses the current Git store branch and its resolvable repository base', () => {
+    const branches = {
+      all: ['feature', 'main', 'remotes/origin/feature', 'remotes/origin/main'],
+      current: 'feature',
+      branches: {},
+      defaultBranches: { origin: 'main' },
+    };
+    const status = (current: string, tracking: string | null = null) => ({
+      current,
+      tracking,
+      ahead: 0,
+      behind: 0,
+      files: [],
+      isClean: true,
+    });
+
+    expect(resolveBranchDiffSource(status('feature', 'origin/feature'), branches))
+      .toEqual({ baseRef: 'main', headRef: 'feature' });
+    expect(resolveBranchDiffSource(status('main', 'origin/main'), branches)).toBeNull();
+    expect(resolveBranchDiffSource(status('feature'), { ...branches, all: ['feature'] })).toBeNull();
+    expect(resolveBranchDiffSource(null, branches)).toBeNull();
   });
 
   test('prefetches an unknown branch count once without retrying a failed request', () => {

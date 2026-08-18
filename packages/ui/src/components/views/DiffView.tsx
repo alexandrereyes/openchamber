@@ -2,7 +2,7 @@ import React from 'react';
 
 import { useUIStore } from '@/stores/useUIStore';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
-import { useGitStore, useGitStatus, useIsGitRepo, useGitLoadingStatus } from '@/stores/useGitStore';
+import { useGitBranches, useGitStore, useGitStatus, useIsGitRepo, useGitLoadingStatus } from '@/stores/useGitStore';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 import { cn } from '@/lib/utils';
 import type { GitStatus } from '@/lib/api/types';
@@ -44,9 +44,9 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { WALKTHROUGH_ACTION_CLASS } from '@/components/views/walkthrough/walkthroughAction';
 import { useWalkthroughStore } from '@/stores/useWalkthroughStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
-import { useDirectorySync, useSessionMessages, useSessionStatus } from '@/sync/sync-context';
+import { useSessionMessages, useSessionStatus } from '@/sync/sync-context';
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
-import { getBranchDiffStateKey, isBranchDiffAvailable, loadBranchDiff, mapBranchDiffEntries, shouldPrefetchBranchDiff } from './branchDiff';
+import { getBranchDiffStateKey, loadBranchDiff, mapBranchDiffEntries, resolveBranchDiffSource, shouldPrefetchBranchDiff } from './branchDiff';
 import type { FileDiffMetadata } from '@pierre/diffs';
 import type { VcsFileDiff } from '@opencode-ai/sdk/v2';
 
@@ -1010,9 +1010,10 @@ export const DiffView: React.FC<DiffViewProps> = ({
 
     const isGitRepo = useIsGitRepo(effectiveDirectory ?? null);
     const status = useGitStatus(effectiveDirectory ?? null);
+    const branches = useGitBranches(effectiveDirectory ?? null);
     const isLoadingStatus = useGitLoadingStatus(effectiveDirectory ?? null);
     const setActiveDirectory = useGitStore((state) => state.setActiveDirectory);
-    const ensureStatus = useGitStore((state) => state.ensureStatus);
+    const ensureAll = useGitStore((state) => state.ensureAll);
     const fetchStatus = useGitStore((state) => state.fetchStatus);
     const clearDiffCache = useGitStore((state) => state.clearDiffCache);
     const setDiff = useGitStore((state) => state.setDiff);
@@ -1052,9 +1053,6 @@ export const DiffView: React.FC<DiffViewProps> = ({
     const currentSessionId = useSessionUIStore((state) => state.currentSessionId);
     const sessionMessages = useSessionMessages(currentSessionId ?? '', effectiveDirectory ?? undefined);
     const sessionStatus = useSessionStatus(currentSessionId ?? '', effectiveDirectory ?? undefined);
-    const vcsBranch = useDirectorySync((state) => state.vcs?.branch, effectiveDirectory ?? undefined);
-    const vcsDefaultBranch = useDirectorySync((state) => state.vcs?.default_branch, effectiveDirectory ?? undefined);
-    const vcsStatus = useDirectorySync((state) => state.vcs_status, effectiveDirectory ?? undefined);
     const diffWrapLines = diffWrapLinesStore;
     const forcedStaged = activeDiffScope === 'staged' ? true : activeDiffScope === 'working' ? false : null;
     const activeDiffStaged = forcedStaged ?? displayFileStaged;
@@ -1100,15 +1098,16 @@ export const DiffView: React.FC<DiffViewProps> = ({
         return anchor;
     }, [activeDiffScope, captureScrollAnchor]);
 
-    const branchAvailable = isBranchDiffAvailable({
-        branch: vcsBranch,
-        default_branch: vcsDefaultBranch,
-    });
+    const branchSource = React.useMemo(
+        () => resolveBranchDiffSource(status, branches),
+        [branches, status],
+    );
+    const branchAvailable = branchSource !== null;
     const branchStateKey = getBranchDiffStateKey(
         getRuntimeKey(),
         effectiveDirectory,
-        vcsBranch,
-        vcsDefaultBranch,
+        branchSource?.headRef,
+        branchSource?.baseRef,
     );
     const branchDiffs = branchDiffState.key === branchStateKey ? branchDiffState.data : null;
     const branchDiffError = branchDiffState.key === branchStateKey ? branchDiffState.error : null;
@@ -1118,10 +1117,10 @@ export const DiffView: React.FC<DiffViewProps> = ({
         && (branchDiffState.key !== branchStateKey || branchDiffState.loading);
 
     React.useEffect(() => {
-        if (!isActive || activeDiffScope !== 'branch' || vcsStatus === 'loading' || branchAvailable) return;
+        if (!isActive || activeDiffScope !== 'branch' || !branches || branchAvailable) return;
         setActiveDiffScope('working');
         onDiffScopeChange?.('working');
-    }, [activeDiffScope, branchAvailable, isActive, onDiffScopeChange, vcsStatus]);
+    }, [activeDiffScope, branchAvailable, branches, isActive, onDiffScopeChange]);
 
     React.useEffect(() => {
         const nextType = sessionStatus?.type;
@@ -1448,9 +1447,9 @@ export const DiffView: React.FC<DiffViewProps> = ({
     React.useEffect(() => {
         if (isActive && effectiveDirectory) {
             setActiveDirectory(effectiveDirectory);
-            void ensureStatus(effectiveDirectory, git);
+            void ensureAll(effectiveDirectory, git);
         }
-    }, [effectiveDirectory, setActiveDirectory, ensureStatus, git, isActive]);
+    }, [effectiveDirectory, setActiveDirectory, ensureAll, git, isActive]);
 
     React.useEffect(() => {
         if (!isActive || !effectiveDirectory) {
@@ -2065,11 +2064,11 @@ export const DiffView: React.FC<DiffViewProps> = ({
                         size="sm"
                         onClick={() => {
                             const directory = effectiveDirectory ?? '';
-                            if (activeDiffScope === 'branch' && vcsBranch && vcsDefaultBranch) {
+                            if (activeDiffScope === 'branch' && branchSource) {
                                 requestWalkthroughSource(directory, {
                                     kind: 'branch',
-                                    baseRef: vcsDefaultBranch.trim(),
-                                    headRef: vcsBranch.trim(),
+                                    baseRef: branchSource.baseRef,
+                                    headRef: branchSource.headRef,
                                 });
                             } else {
                                 // Carry the working-tree scope across instead of
