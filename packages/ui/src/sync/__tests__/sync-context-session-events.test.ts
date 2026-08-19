@@ -146,4 +146,21 @@ describe("applySessionEventToGlobalSessions", () => {
     expect(mutationCalls).toBe(1)
     expect(upsertedSessions).toHaveLength(1_000)
   })
+
+  test("ignores internal session create and update events", () => {
+    const buildCreatedEvent = (session: Session): Event => ({
+      type: "session.created",
+      properties: { info: session },
+    } as Event)
+    const internal = {
+      ...buildSession("Walkthrough", { created: 1, updated: 10 }),
+      metadata: { openchamber: { internalSession: { kind: "walkthrough-inference", version: 1 } } },
+    } as Session
+
+    applySessionEventToGlobalSessions(buildCreatedEvent(internal))
+    applySessionEventToGlobalSessions(buildEvent({ ...internal, time: { created: 1, updated: 20 } }))
+    applySessionEventToGlobalSessions(buildLifecycleEvent("session.idle", internal.id))
+
+    expect(upsertedSessions).toEqual([])
+  })
 })

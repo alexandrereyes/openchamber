@@ -100,6 +100,22 @@ When a change consists only of generated files, generation is refused with
 
 ## Model selection
 
+Generation is dispatched through the normal OpenCode SDK v2 session pipeline.
+The resolved walkthrough model is passed to `session.promptAsync`, so OpenCode
+owns provider authentication and model dispatch rather than this feature calling
+provider APIs directly. Each attempt uses a root temporary session atomically
+marked as `metadata.openchamber.internalSession.kind = walkthrough-inference`.
+That marker is durable authority for hiding the session; a bounded server
+registry covers status and message events that carry only a session id. Tools
+and permissions are denied, cancellation or timeout aborts the turn, and
+deletion is always attempted in `finally`.
+On the next walkthrough use after startup or a cleanup failure, a bounded scan
+of at most 100 sessions deletes up to 20 marked orphans with concurrency two.
+Active walkthrough sessions are excluded. True orphans are aborted before
+deletion, and successful/404 cleanup forgets their classification immediately.
+Failures schedule another bounded scan; a cursor advances across full pages on
+later uses, and no directory or content is logged.
+
 The walkthrough has its own model setting (Settings → Sessions → Changes
 Walkthrough Model), read by `model-settings.js`:
 
@@ -125,18 +141,20 @@ in its cache entry, so reopening a panel resolves the picker as *explicit choice
 of the cache key, switching models and back returns the earlier review for free.
 
 The picker hides models the catalog reports as `structured_output: false` —
-offering them would move the same refusal one click later — and, like the small
-model picker, only shows providers with a usable login. The in-panel picker on a
+offering them would move the same refusal one click later. It otherwise follows
+OpenCode's model catalog rather than the direct Small Model login allowlist,
+because plugin-backed providers may not have an `auth.json` or API-key entry.
+OpenCode owns provider availability and authentication; inference maps a real
+`ProviderAuthError` to the user-facing login failure. The in-panel picker on a
 blocked walkthrough writes this setting too, so recovering from a refusal never
 silently changes the model behind commit messages.
 
-A settings or `opencode.json` `small_model` override can still name a provider
-with no usable login (neither `auth.json` nor `provider.<id>.options.apiKey`).
-`describeSmallModel` reports that as `hasLogin: false`, readiness refuses with
-`reason: 'no-provider-login'` and omits the unusable model so the panel cannot
-present it as selected, and generation maps the same code to HTTP 401. The UI
-disables Generate and keeps the picker on authenticated providers only — it does
-not surface a raw auth error or a special login blocker for this case.
+A settings or `opencode.json` model can be supplied by an OpenCode plugin even
+when direct-provider discovery finds neither `auth.json` nor an API key.
+Walkthrough readiness therefore does not use `hasLogin` as authority and its
+picker follows the OpenCode model catalog instead of the direct-provider login
+list. `session.promptAsync` is authoritative: a real OpenCode
+`ProviderAuthError` still maps to HTTP 401 with `code: 'no-provider-login'`.
 
 ## Output language
 
@@ -198,10 +216,11 @@ half of all models, and treating unknown as unsupported would hide models that
 work.
 
 Providers that do not declare the capability sometimes reject the schema at
-request time (a plain `400`, or Alibaba/Qwen's "'messages' must contain the word
-'json'"). A rejected request shape is not a dead end, so a `4xx` on a schema
-request triggers exactly one retry with the schema moved into the prompt and the
-tolerant parser handling the result. Only if *that* fails to yield usable JSON is
+request time. An explicit `StructuredOutputError`, or an SDK `APIError` whose
+message identifies JSON schema/response-format rejection, triggers exactly one
+retry with the schema moved into the prompt and the tolerant parser handling the
+result. Generic `4xx` errors such as an invalid model or missing session do not
+poison schema-refusal memory. Only if the fallback fails to yield usable JSON is
 `structured-output-unsupported` reported — at which point it is a real capability
 problem the user can fix by switching model.
 
@@ -216,28 +235,14 @@ also satisfies the providers that scan the request for the word `json` before
 honouring `response_format`. That keeps them on the fast path instead of paying
 for a wasted first call.
 
-## Output budget
+## Output allowance
 
-A walkthrough itself is only a few thousand tokens of JSON. The budget exists
-for what comes before it: reasoning models spend the same allowance thinking and
-return nothing when it runs out, which is a bill for no answer.
-
-The ask is therefore derived from the resolved model rather than fixed:
-`min(96k, max(24k, a quarter of the context))`, then capped by the catalog's
-`limit.output`. A flat 24k was the same number for a 64k-context model and for
-one that admits to 384k output tokens and a million of context — and on the
-latter it was the only reason generation failed.
-
-The bounds are not arbitrary. The **same number is reserved from the input
-allowance**, so the ceiling and the context share are what stop a generous
-answer budget from eating the diff it is supposed to describe; the 24k floor is
-what this feature always asked for, so no model gets less room than before. A
-model whose own `limit.output` is below the floor gets its limit, because asking
-for more than a provider allows is rejected by some and ignored by others.
-
-`describeSmallModel` decides this once — the walkthrough hands it the rule as a
-function and reads back `outputTokens` — so the reserve and the request cannot
-drift apart.
+`session.promptAsync` has no per-turn maximum-output field. Readiness therefore
+reserves the resolved model catalog's full `limit.output` from the context: that
+is the allowance OpenCode can actually consume for reasoning and JSON. If the
+catalog omits the limit, readiness uses a conservative 24k-token fallback. This
+may refuse a large diff earlier than a provider would in practice, but it never
+claims that an unsupported cap was sent to OpenCode.
 
 When a model exhausts even that, `code: 'output-exhausted'` reports it as what
 it is: this model cannot finish this job, so pick another or review a narrower

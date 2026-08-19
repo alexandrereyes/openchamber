@@ -9,6 +9,7 @@ import { getRuntimeKey, subscribeRuntimeEndpointWillChange } from "@/lib/runtime
 import { streamPerfCount, streamPerfMark } from "@/stores/utils/streamDebug"
 import { stripSessionDiffSnapshots } from "./sanitize"
 import { shouldSkipStaleSessionEvent } from "./session-event-freshness"
+import { isOpenChamberInternalSessionEvent } from "@/lib/sessionInternalMetadata"
 
 const pendingGlobalSessionUpdates = new Map<string, { runtimeKey: string; session: Session }>()
 
@@ -62,6 +63,7 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): 
   }
 
   for (const payload of payloads) {
+    if (isOpenChamberInternalSessionEvent(payload)) continue
     if (payload.type === "session.idle" || payload.type === "session.error") {
       const sessionID = (payload as { properties?: { sessionID?: unknown } }).properties?.sessionID
       if (typeof sessionID !== "string") continue

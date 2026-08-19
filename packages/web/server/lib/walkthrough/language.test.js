@@ -15,14 +15,15 @@ vi.mock('../git/service.js', () => ({
 }));
 vi.mock('../small-model/index.js', () => ({
   describeSmallModel: vi.fn(),
-  generateSmallModelText: vi.fn(),
 }));
+vi.mock('./inference.js', () => ({ generateWalkthroughText: vi.fn() }));
 
 const { normalizeLanguage, languageName } = await import('./languages.js');
 const { buildPrompt } = await import('./prompt.js');
 const { buildCacheKey } = await import('./store.js');
 const { generateWalkthrough, getWalkthrough } = await import('./index.js');
-const { describeSmallModel, generateSmallModelText } = await import('../small-model/index.js');
+const { describeSmallModel } = await import('../small-model/index.js');
+const { generateWalkthroughText: generateSmallModelText } = await import('./inference.js');
 const { getDiff } = await import('../git/service.js');
 
 const SOURCE = { kind: 'working-tree', scope: 'all' };

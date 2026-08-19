@@ -17,6 +17,7 @@ import { isAmbiguousTransportFailure, markAmbiguousTransportFailure } from "@/li
 import { FilesystemError, parseFilesystemErrorReason } from "@/lib/api/files-errors";
 import type { PermissionRequest } from "@/types/permission";
 import type { QuestionRequest } from "@/types/question";
+import { visibleOpenCodeSessions } from "@/lib/sessionInternalMetadata";
 
 /**
  * Tagged result of `OpencodeService.fetchPermission()`. The caller can
@@ -628,7 +629,7 @@ class OpencodeService {
     const response = await this.client.session.list(
       this.currentDirectory ? { directory: this.currentDirectory } : undefined
     );
-    return Array.isArray(response.data) ? response.data : [];
+    return visibleOpenCodeSessions(Array.isArray(response.data) ? response.data : []);
   }
 
   async createSession(params?: { parentID?: string; title?: string; metadata?: Record<string, unknown> }, directory?: string | null): Promise<Session> {

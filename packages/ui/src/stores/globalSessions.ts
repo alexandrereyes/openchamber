@@ -4,6 +4,7 @@ import { retry } from "@/sync/retry";
 import { stripSessionListDetails } from "@/sync/sanitize";
 import { startSessionLoadPerformanceEvent } from "@/sync/session-load-performance";
 import { isChatDirectoryPath } from '@/lib/chatDirectories';
+import { rememberOpenChamberInternalSession } from '@/lib/sessionInternalMetadata';
 
 export type GlobalSessionRecord = Session & {
     project?: {
@@ -184,6 +185,7 @@ export async function listGlobalSessionPages(
             if (!session?.id || seenIds.has(session.id)) continue;
             seenIds.add(session.id);
             appended += 1;
+            if (rememberOpenChamberInternalSession(session)) continue;
             if (options.archived && narrowToArchived && !isArchivedSession(session)) continue;
             all.push(session);
             accepted.push(session);

@@ -160,6 +160,28 @@ describe('listGlobalSessionPages', () => {
     expect(sessions.map((session) => session.id)).toEqual(['ses_active_1', 'ses_active_2'])
   })
 
+  test('filters internal sessions from list pages without stopping pagination', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const apiClient = {
+      experimental: { session: { list: async (options: Record<string, unknown>) => {
+        calls.push(options)
+        if (options.cursor === undefined) return {
+          data: [
+            { id: 'ses_internal', time: { updated: 20 }, metadata: { openchamber: { internalSession: { kind: 'walkthrough-inference', version: 1 } } } },
+            { id: 'ses_visible', time: { updated: 10 } },
+          ],
+          response: { headers: new Headers({ 'x-next-cursor': '10' }) },
+        }
+        return { data: [{ id: 'ses_visible_2', time: { updated: 5 } }], response: { headers: new Headers() } }
+      } } },
+    } as unknown as OpencodeClient
+
+    const sessions = await listGlobalSessionPages(apiClient, { directory: '/repo', archived: false, pageSize: 2 })
+
+    expect(calls).toHaveLength(2)
+    expect(sessions.map((session) => session.id)).toEqual(['ses_visible', 'ses_visible_2'])
+  })
+
   test('returns the inclusive response unfiltered when narrowing is disabled', async () => {
     const apiClient = {
       experimental: {

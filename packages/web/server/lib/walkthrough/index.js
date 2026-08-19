@@ -1,9 +1,10 @@
 import { getRepositoryRoot } from '../git/service.js';
-import { describeSmallModel, generateSmallModelText } from '../small-model/index.js';
+import { describeSmallModel } from '../small-model/index.js';
+import { generateWalkthroughText } from './inference.js';
 import { buildDigest } from './digest.js';
 import { indexHunks } from './hunks.js';
 import { normalizeLanguage } from './languages.js';
-import { buildPrompt, JSON_SHAPE_INSTRUCTION } from './prompt.js';
+import { buildPrompt, WALKTHROUGH_JSON_INSTRUCTION } from './prompt.js';
 import { normalizeWalkthrough, parseModelJson, responseSchema } from './schema.js';
 import {
   buildCacheKey,
@@ -42,41 +43,18 @@ const generationTimeoutMs = (hunkCount) => Math.min(
   GENERATION_TIMEOUT_MAX_MS,
   GENERATION_TIMEOUT_BASE_MS + Math.max(0, hunkCount) * GENERATION_TIMEOUT_PER_HUNK_MS,
 );
-// A full walkthrough is a few thousand tokens of JSON. The budget exists for
-// what comes before it: reasoning models spend the same allowance thinking and
-// return nothing when it runs out, which is a bill for no answer.
-//
-// So the ask is derived from the model rather than fixed. A flat 24k was the
-// same number for a 64k-context model and for one that admits to 384k output
-// tokens, and on the latter it was the only reason generation failed.
-//
-// The reserve subtracted from the input budget is the same number, always: ask
-// for more than was reserved and a large diff overruns the context mid-answer,
-// which surfaces as a truncation bug rather than a budgeting one.
+// promptAsync has no per-turn output cap. Reserve the model catalog's effective
+// output allowance because OpenCode may use all of it for reasoning + JSON. For
+// models whose catalog omits the limit, retain the historical conservative 24k
+// fallback rather than claiming an unsupported cap was sent.
 const MIN_OUTPUT_TOKENS = 24_000;
-// A ceiling, because the reserve is taken out of the input allowance: a model
-// that would let us ask for 384k tokens of answer would also let us spend a
-// third of a million tokens of context reserving them, and no walkthrough needs
-// that much thinking.
-const MAX_OUTPUT_TOKENS = 96_000;
-// Above this share of the context, the reserve starts costing more diff than
-// the extra room is worth.
-const OUTPUT_CONTEXT_SHARE = 0.25;
 
 /**
- * Answer allowance for a specific model: as much as it admits it can emit,
- * bounded by a share of its context and never below what this feature always
- * asked for.
+ * Effective allowance OpenCode can consume for a specific model.
  */
-const walkthroughOutputTokens = ({ contextTokens, outputTokenLimit }) => {
-  const wanted = Math.min(
-    MAX_OUTPUT_TOKENS,
-    Math.max(MIN_OUTPUT_TOKENS, Math.floor((Number(contextTokens) || 0) * OUTPUT_CONTEXT_SHARE)),
-  );
-  // A model whose own limit is below the floor gets its limit: asking for more
-  // than a provider allows is rejected outright by some and ignored by others.
-  return Number(outputTokenLimit) > 0 ? Math.min(wanted, Number(outputTokenLimit)) : wanted;
-};
+const walkthroughOutputTokens = ({ outputTokenLimit }) => (
+  Number(outputTokenLimit) > 0 ? Number(outputTokenLimit) : MIN_OUTPUT_TOKENS
+);
 
 const fail = (message, statusCode, extra = {}) =>
   Object.assign(new Error(message), { statusCode, ...extra });
@@ -90,7 +68,7 @@ const fail = (message, statusCode, extra = {}) =>
 // and cancelling is an explicit request rather than a side effect of leaving.
 const jobs = new Map();
 
-// Providers that answered a schema request with a 4xx. Retrying the schema on
+// Providers that explicitly refused a schema request. Retrying the schema on
 // every generation means paying for a call we already know will fail, so the
 // refusal is remembered and the fallback goes first next time.
 //
@@ -331,13 +309,6 @@ function computeReadiness({ model, digest, files, fileCount, hunkCount, generate
     return { ready: false, reason, model, generatedFileCount };
   }
 
-  // A resolved override/config model can still have no usable login. Refuse up
-  // front and omit the model — offering an unauthenticated selection in the
-  // picker is what made the old raw auth error feel like a product bug.
-  if (model.hasLogin === false) {
-    return { ready: false, reason: 'no-provider-login' };
-  }
-
   // Built with the same language the generation would use: the instruction is
   // part of the prompt, so a readiness answer computed without it would be
   // measuring a request nobody is going to send.
@@ -397,14 +368,6 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
   if (!model) {
     throw fail('No model is available — sign in to a provider first', 404, { code: 'no-model' });
   }
-  if (model.hasLogin === false) {
-    throw fail(
-      `No OpenCode login found for provider "${model.providerID}" — sign in or choose a different model`,
-      401,
-      { code: 'no-provider-login', model },
-    );
-  }
-
   const { digest, files, idByAlias, fileCount, hunkCount, generatedFileCount } = await loadCurrentDiff(directory, source, deps);
   setStage(repoRoot, key, 'asking');
   if (hunkCount === 0) {
@@ -461,6 +424,15 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
   }
 
   const { prompt, system } = buildPrompt({ digest, fileCount, hunkCount, source, previousWalkthrough, language });
+  const requiredChars = prompt.length + system.length;
+  if (requiredChars > model.inputCharBudget) {
+    throw fail(`${modelLabel(model)} does not have enough context for this walkthrough`, 409, {
+      code: 'context-too-small',
+      model,
+      requiredChars,
+      availableChars: model.inputCharBudget,
+    });
+  }
 
   if (model.structuredOutput === false) {
     throw fail(
@@ -470,17 +442,16 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
     );
   }
 
-  const run = (options) => generateSmallModelText({
+  const run = (options) => (deps.generateWalkthroughText ?? generateWalkthroughText)({
     prompt: options.prompt,
     system: options.system,
     directory,
-    model: `${model.providerID}/${model.modelID}`,
+    model,
     responseSchema: options.responseSchema,
-    onOverflow: 'error',
     timeoutMs: generationTimeoutMs(hunkCount),
-    // The number the input budget was already reduced by, not a fresh guess.
-    maxOutputTokens: model.outputTokens ?? MIN_OUTPUT_TOKENS,
     signal,
+    baseUrl: deps.openCodeBaseUrl,
+    headers: deps.openCodeAuthHeaders,
   });
 
   // Roughly half the catalog does not declare `structured_output`, and some of
@@ -490,7 +461,7 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
   const withSchema = () => run({ prompt, system, responseSchema });
   const withoutSchema = () => run({
     prompt,
-    system: `${system}\n${JSON_SHAPE_INSTRUCTION}`,
+    system: `${system}\n${WALKTHROUGH_JSON_INSTRUCTION}`,
     responseSchema: undefined,
   });
 
@@ -512,8 +483,8 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
     return null;
   };
 
-  const refusesSchema = (error) => error?.code === 'structured-output-unsupported'
-    || (Number(error?.status) >= 400 && Number(error?.status) < 500);
+  const refusesSchema = (error) => error?.code === 'structured-output-unsupported';
+  const remembersSchemaRefusal = (error) => error?.schemaRefusal === true;
 
   let raw;
   let usedSchema = false;
@@ -536,7 +507,7 @@ async function runGeneration({ directory, source, repoRoot, key, force, explicit
       if (failure) throw failure;
       if (!refusesSchema(error)) throw error;
 
-      schemaRefusedBy.add(modelKey(model));
+      if (remembersSchemaRefusal(error)) schemaRefusedBy.add(modelKey(model));
       setStage(repoRoot, key, 'retrying');
       try {
         raw = await withoutSchema();

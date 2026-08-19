@@ -297,11 +297,8 @@ export const DefaultsSettings: React.FC = () => {
     [walkthroughModelOverride]
   );
   React.useEffect(() => {
-    // Both pickers offer the same providers — the walkthrough runs through the
-    // small model — and the walkthrough picker is always visible, so this is
-    // always worth fetching. The server answers with the providers it has a
-    // credential and an endpoint for, including plugin-registered ones that
-    // exist only inside the running OpenCode.
+    // Only the direct Small Model picker needs OpenChamber's credential list.
+    // Walkthrough inference delegates provider availability to OpenCode.
     let cancelled = false;
     (async () => {
       try {
@@ -480,7 +477,6 @@ export const DefaultsSettings: React.FC = () => {
                   providerId={parsedWalkthroughModel.providerId}
                   modelId={parsedWalkthroughModel.modelId}
                   onChange={handleWalkthroughModelOverrideChange}
-                  allowedProviderIds={smallModelProviders}
                   isModelAllowed={isStructuredOutputCapable}
                   placeholder={t('settings.openchamber.defaults.walkthroughModel.usesSmallModel')}
                   className={SETTINGS_CUSTOM_TRIGGER_CLASS}

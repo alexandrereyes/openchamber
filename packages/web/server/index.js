@@ -73,6 +73,7 @@ import { resolveOpenCodeUpgradeCapability } from './lib/opencode/upgrade-capabil
 import { createBootstrapRuntime } from './lib/opencode/bootstrap-runtime.js';
 import { createSessionRuntime } from './lib/opencode/session-runtime.js';
 import { configureOpenCodeRuntimeProviders, resetOpenCodeRuntimeProviders } from './lib/small-model/runtime-providers.js';
+import { classifyOpenChamberInternalSessionEvent, isOpenChamberInternalSession, isOpenChamberInternalSessionEvent, resetOpenChamberInternalSessions } from './lib/opencode/internal-sessions.js';
 import { createOpenCodeWatcherRuntime } from './lib/opencode/watcher.js';
 import { createSessionAssistRuntime } from './lib/session-assist/runtime.js';
 import { createSessionGoalRuntime } from './lib/session-goal/runtime.js';
@@ -1171,6 +1172,10 @@ const openCodeLifecycleRuntime = createOpenCodeLifecycleRuntime({
     // A restart reloads plugins: provider ports, credentials and the provider
     // list itself can all differ from what was cached.
     resetOpenCodeRuntimeProviders();
+    resetOpenChamberInternalSessions();
+    void import('./lib/walkthrough/inference.js').then(({ resetWalkthroughInferenceRuntime }) => {
+      resetWalkthroughInferenceRuntime();
+    }).catch(() => {});
     try {
       messageStreamRuntime?.rebindUpstream();
     } catch (error) {
