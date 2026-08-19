@@ -44,7 +44,7 @@ import { getReconnectCandidateSessionIds, mergeBootstrapSessions } from "./recon
 import { messagesBefore } from "./message-ordering"
 import { opencodeClient } from "@/lib/opencode/client"
 import { usePermissionStore } from "@/stores/permissionStore"
-import { isOpenChamberInternalSessionEvent, visibleOpenCodeSessions } from "@/lib/sessionInternalMetadata"
+import { getOpenChamberInternalSessionGeneration, isOpenChamberInternalSessionEvent, visibleOpenCodeSessions } from "@/lib/sessionInternalMetadata"
 import {
   processVSCodePermissionAutoAccept,
   processVSCodeReconciledPermissionAutoAccept,
@@ -2390,8 +2390,9 @@ export function SyncProvider(props: {
       if (parentSessionIds.length === 0) return
       try {
         const scopedClient = opencodeClient.getScopedSdkClient(directory)
-        const result: unknown = await runBackgroundNetworkTask(() => scopedClient.session.list({ directory, limit: 200 }))
-        const allSessions = visibleOpenCodeSessions(((result as { data?: unknown }).data ?? []) as Session[])
+        const internalSessionGeneration = getOpenChamberInternalSessionGeneration()
+        const result = await runBackgroundNetworkTask(() => scopedClient.session.list({ directory, limit: 200 }))
+        const allSessions = visibleOpenCodeSessions(result.data ?? [], internalSessionGeneration)
         const state = store.getState()
         const existingIds = new Set(state.session.map((s) => s.id))
         const parentIdSet = new Set(parentSessionIds)
