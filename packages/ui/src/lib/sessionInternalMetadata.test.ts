@@ -50,4 +50,19 @@ describe('internal session metadata', () => {
     // SAFETY: The test constructs the exact session.idle fields consumed by the predicate.
     expect(isOpenChamberInternalSessionEvent({ id: 'evt_current', type: 'session.idle', properties: { sessionID: 'ses_current' } } as Event)).toBe(true)
   })
+
+  test('stale deletion cannot clear a current-runtime classification', () => {
+    const staleGeneration = getOpenChamberInternalSessionGeneration()
+    resetOpenChamberInternalSessions()
+    const marked = session('ses_delete_collision', { openchamber: { internalSession: { kind: 'walkthrough-inference' } } })
+    expect(isOpenChamberInternalSessionEvent(created(marked))).toBe(true)
+    // SAFETY: The test constructs the SDK session.deleted fields consumed by the predicate.
+    expect(isOpenChamberInternalSessionEvent({
+      id: 'evt_stale_delete', type: 'session.deleted', properties: { sessionID: marked.id },
+    } as Event, staleGeneration)).toBe(false)
+    // SAFETY: The test constructs the SDK session.idle fields consumed by the predicate.
+    expect(isOpenChamberInternalSessionEvent({
+      id: 'evt_current_idle', type: 'session.idle', properties: { sessionID: marked.id },
+    } as Event)).toBe(true)
+  })
 })

@@ -47,7 +47,10 @@ const getSessionInfoFromPayload = (event: Event): Session | null => {
   return stripSessionDiffSnapshots(session as Session)
 }
 
-export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): void => {
+export const applySessionEventsToGlobalSessions = (
+  payloads: readonly Event[],
+  internalSessionGeneration?: number,
+): void => {
   if (payloads.length === 0) return
   const runtimeKey = getRuntimeKey()
   const store = useGlobalSessionsStore.getState()
@@ -63,7 +66,7 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): 
   }
 
   for (const payload of payloads) {
-    if (isOpenChamberInternalSessionEvent(payload)) continue
+    if (isOpenChamberInternalSessionEvent(payload, internalSessionGeneration)) continue
     if (payload.type === "session.idle" || payload.type === "session.error") {
       const sessionID = (payload as { properties?: { sessionID?: unknown } }).properties?.sessionID
       if (typeof sessionID !== "string") continue
@@ -124,6 +127,6 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): 
   streamPerfCount("ui.global_sessions.event_update_publication")
 }
 
-export const applySessionEventToGlobalSessions = (payload: Event): void => {
-  applySessionEventsToGlobalSessions([payload])
+export const applySessionEventToGlobalSessions = (payload: Event, internalSessionGeneration?: number): void => {
+  applySessionEventsToGlobalSessions([payload], internalSessionGeneration)
 }

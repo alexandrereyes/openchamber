@@ -235,8 +235,8 @@ const getDirectoryEventState = (
   batch?: DirectoryEventBatch,
 ): DirectoryStore => batch?.states.get(store) ?? store.getState()
 
-const publishDirectoryEventBatch = (batch: DirectoryEventBatch): void => {
-  applySessionEventsToGlobalSessions(batch.globalSessionEvents)
+const publishDirectoryEventBatch = (batch: DirectoryEventBatch, internalSessionGeneration?: number): void => {
+  applySessionEventsToGlobalSessions(batch.globalSessionEvents, internalSessionGeneration)
   for (const [directory, events] of batch.globalStatusEventsByDirectory) {
     applyGlobalSessionStatusEvents(directory, events)
   }
@@ -1489,8 +1489,9 @@ export function handleEvent(
   streamingDirectory?: string,
   batch?: DirectoryEventBatch,
   globalEffectsAlreadyApplied = false,
+  internalSessionGeneration?: number,
 ) {
-  if (isOpenChamberInternalSessionEvent(payload)) return
+  if (isOpenChamberInternalSessionEvent(payload, internalSessionGeneration)) return
   if ((payload as { type?: unknown }).type === "openchamber:permission-auto-accept.updated") {
     const properties = (payload as unknown as { properties?: unknown }).properties
     if (properties && typeof properties === "object") {
@@ -1525,7 +1526,7 @@ export function handleEvent(
       if (statusEvents) statusEvents.push(payload)
       else batch.globalStatusEventsByDirectory.set(directory, [payload])
     } else {
-      applySessionEventToGlobalSessions(payload)
+      applySessionEventToGlobalSessions(payload, internalSessionGeneration)
       // Child stores remain the primary source for synced directories; this
       // index covers unopened directories and list/status races.
       applyGlobalSessionStatusEvent(directory, payload)
@@ -2301,7 +2302,7 @@ export function SyncProvider(props: {
       routeDirectory: (directory, payload) => {
         return resolveDirectoryFromRoutingIndex(routingIndex, directory, payload, childStores)
       },
-      onEvents: (directory, payloads) => {
+      onEvents: (directory, payloads, internalSessionGeneration) => {
         // Track ALL stream activity (including heartbeats) as proof of
         // connection health. The watchdog stale check uses this to distinguish
         // a genuinely dead stream (no heartbeats for 20s) from a quiet-but-
@@ -2321,10 +2322,10 @@ export function SyncProvider(props: {
                 dispatchOpenCodeUpdateAvailable({ version })
               }
             }
-            handleEvent(directory, payload, childStores, routingIndex, runtimeKey, false, currentDirectoryRef.current, batch)
+            handleEvent(directory, payload, childStores, routingIndex, runtimeKey, false, currentDirectoryRef.current, batch, false, internalSessionGeneration)
           }
         } finally {
-          publishDirectoryEventBatch(batch)
+          publishDirectoryEventBatch(batch, internalSessionGeneration)
         }
       },
       onReconnect: () => {
