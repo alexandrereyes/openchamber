@@ -67,8 +67,8 @@ const getGlobalSessionSnapshot = (sessionId: string): Session | null => {
   return [...global.activeSessions, ...global.archivedSessions].find((session) => session.id === sessionId) ?? null
 }
 
-export const applySessionEventToGlobalSessions = (payload: Event): void => {
-  if (isOpenChamberInternalSessionEvent(payload)) return
+export const applySessionEventToGlobalSessions = (payload: Event, internalSessionGeneration?: number): void => {
+  if (isOpenChamberInternalSessionEvent(payload, internalSessionGeneration)) return
   if (payload.type === "session.idle" || payload.type === "session.error") {
     // SAFETY: session.idle/error share this SDK-owned properties contract.
     const sessionID = (payload as { properties?: { sessionID?: string } }).properties?.sessionID

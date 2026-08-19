@@ -36,19 +36,23 @@ export const visibleOpenCodeSessions = <T extends Session>(sessions: T[], genera
   sessions.filter((session) => !rememberOpenChamberInternalSession(session, generation))
 )
 
-export const isOpenChamberInternalSessionEvent = (event: Event): boolean => {
+export const isOpenChamberInternalSessionEvent = (
+  event: Event,
+  generation = internalSessionGeneration,
+): boolean => {
   // SAFETY: every OpenCode event carries a properties object; the optional
   // fields below are the union members shared by session-addressed events.
   const properties = (event as { properties?: { info?: Session; sessionID?: string } }).properties
   const info = properties?.info
   const sessionID = properties?.sessionID ?? info?.id
+  const currentGeneration = generation === internalSessionGeneration
   if (event.type === 'session.deleted') {
-    const hidden = Boolean((info && isOpenChamberInternalSession(info)) || (sessionID && internalSessionIds.has(sessionID)))
-    if (sessionID) internalSessionIds.delete(sessionID)
+    const hidden = Boolean((info && isOpenChamberInternalSession(info)) || (currentGeneration && sessionID && internalSessionIds.has(sessionID)))
+    if (currentGeneration && sessionID) internalSessionIds.delete(sessionID)
     return hidden
   }
-  if (info && rememberOpenChamberInternalSession(info)) return true
-  return Boolean(sessionID && internalSessionIds.has(sessionID))
+  if (info && rememberOpenChamberInternalSession(info, generation)) return true
+  return Boolean(currentGeneration && sessionID && internalSessionIds.has(sessionID))
 }
 
 subscribeRuntimeEndpointWillChange(resetOpenChamberInternalSessions)
