@@ -1,6 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 
 import { getFirstChangedModifiedLineFromPatch } from './diffPatchUtils';
+import {
+  getBranchDiffStateKey,
+  loadBranchDiff,
+  mapBranchDiffEntries,
+  resolveBranchDiffSource,
+  shouldPrefetchBranchDiff,
+  type BranchDiffRequest,
+} from './branchDiff';
 
 describe('getFirstChangedModifiedLineFromPatch', () => {
   test('returns the first added line instead of the hunk context start', () => {
@@ -22,5 +30,122 @@ describe('getFirstChangedModifiedLineFromPatch', () => {
 
   test('returns null when the patch has no hunk change lines', () => {
     expect(getFirstChangedModifiedLineFromPatch('Binary files a/image.png and b/image.png differ')).toBeNull();
+  });
+});
+
+describe('branch diff scope', () => {
+  test('uses the current Git store branch and its resolvable repository base', () => {
+    const branches = {
+      all: ['feature', 'main', 'remotes/origin/feature', 'remotes/origin/main'],
+      current: 'feature',
+      branches: {},
+      defaultBranches: { origin: 'main' },
+    };
+    const status = (current: string, tracking: string | null = null) => ({
+      current,
+      tracking,
+      ahead: 0,
+      behind: 0,
+      files: [],
+      isClean: true,
+    });
+
+    expect(resolveBranchDiffSource(status('feature', 'origin/feature'), branches))
+      .toEqual({ baseRef: 'main', headRef: 'feature' });
+    expect(resolveBranchDiffSource(status('main', 'origin/main'), branches)).toBeNull();
+    expect(resolveBranchDiffSource(status('feature'), { ...branches, all: ['feature'] })).toBeNull();
+    expect(resolveBranchDiffSource(null, branches)).toBeNull();
+  });
+
+  test('prefetches an unknown branch count once without retrying a failed request', () => {
+    expect(shouldPrefetchBranchDiff(null, null)).toBe(true);
+    expect(shouldPrefetchBranchDiff([], null)).toBe(false);
+    expect(shouldPrefetchBranchDiff(null, 'request failed')).toBe(false);
+    expect(shouldPrefetchBranchDiff(null, null, false)).toBe(false);
+  });
+
+  test('invalidates retained branch data across runtime and directory scopes', () => {
+    const local = getBranchDiffStateKey('local', '/repo', 'feature', 'main');
+
+    expect(getBranchDiffStateKey('remote', '/repo', 'feature', 'main')).not.toBe(local);
+    expect(getBranchDiffStateKey('local', '/worktree', 'feature', 'main')).not.toBe(local);
+    expect(getBranchDiffStateKey('local', '/repo', 'feature-2', 'main')).not.toBe(local);
+  });
+
+  test('requests the branch diff with bounded context and preserves an empty success', async () => {
+    const requests: BranchDiffRequest[] = [];
+    const result = await loadBranchDiff(async (input) => {
+      requests.push(input);
+      return { data: [] };
+    });
+
+    expect(requests).toEqual([{
+      mode: 'branch',
+      context: 3,
+    }]);
+    expect(result).toEqual([]);
+  });
+
+  test('surfaces SDK failures instead of treating them as an empty diff', async () => {
+    expect(loadBranchDiff(async () => ({
+      error: { name: 'BadRequest', data: { message: 'merge base unavailable' } },
+      response: { status: 500 },
+    }))).rejects.toThrow('Branch diff failed (500): merge base unavailable');
+
+    expect(loadBranchDiff(async () => ({}))).rejects.toThrow('Branch diff failed: empty response');
+  });
+
+  test('maps branch status and totals into read-only stacked entries', () => {
+    const entries = mapBranchDiffEntries([
+      { file: 'src/added.ts', status: 'added', additions: 4, deletions: 0, patch: '@@ -0,0 +1 @@\n+new' },
+      { file: 'src/deleted.ts', status: 'deleted', additions: 0, deletions: 3, patch: '@@ -1 +0,0 @@\n-old' },
+      { file: 'src/modified.ts', status: 'modified', additions: 2, deletions: 1 },
+    ]);
+
+    expect(entries).toEqual([
+      {
+        path: 'src/added.ts',
+        index: '',
+        working_dir: 'A',
+        insertions: 4,
+        deletions: 0,
+        isNew: true,
+        patch: '@@ -0,0 +1 @@\n+new',
+        readOnly: true,
+      },
+      {
+        path: 'src/deleted.ts',
+        index: '',
+        working_dir: 'D',
+        insertions: 0,
+        deletions: 3,
+        isNew: false,
+        patch: '@@ -1 +0,0 @@\n-old',
+        readOnly: true,
+      },
+      {
+        path: 'src/modified.ts',
+        index: '',
+        working_dir: 'M',
+        insertions: 2,
+        deletions: 1,
+        isNew: false,
+        patch: null,
+        readOnly: true,
+      },
+    ]);
+  });
+
+  test('marks capped header-only patches as unavailable instead of rendering a blank diff', () => {
+    const [entry] = mapBranchDiffEntries([{
+      file: 'src/large.ts',
+      status: 'modified',
+      additions: 500_000,
+      deletions: 500_000,
+      patch: 'Index: src/large.ts\n===================================================================\n--- src/large.ts\n+++ src/large.ts\n',
+    }]);
+
+    expect(entry?.patch).toBeNull();
+    expect(entry?.readOnly).toBe(true);
   });
 });

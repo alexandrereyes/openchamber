@@ -123,6 +123,9 @@ async function runPipelineWithEvents(events, waitMs = 80) {
   const sdk = createSdkWithEvents(events, hold);
   const { cleanup } = createEventPipeline({
     sdk,
+    // Bun exposes a global WebSocket even when the experimental transport env
+    // flag is absent. This helper tests SSE event ordering/coalescing; the
+    // WebSocket cases below install FakeWebSocket explicitly.
     transport: 'sse',
     onEvent: (directory, payload) => {
       received.push({ directory, payload });
