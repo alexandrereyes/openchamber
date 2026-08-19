@@ -46,7 +46,7 @@ export const getModelInputCharBudget = ({ catalog, providerID, modelID, outputRe
   const known = Number(limit?.context) > 0;
   const contextTokens = known ? Number(limit.context) : DEFAULT_CONTEXT_TOKENS;
   const reserve = Number(outputReserveTokens) > 0 ? Number(outputReserveTokens) : OUTPUT_RESERVE_TOKENS;
-  const inputBudgetTokens = Math.max(1_000, contextTokens - reserve);
+  const inputBudgetTokens = Math.max(0, contextTokens - reserve);
   return { maxChars: inputBudgetTokens * 4, contextTokens, contextKnown: known };
 };
 

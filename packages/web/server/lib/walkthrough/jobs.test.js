@@ -17,8 +17,8 @@ vi.mock('../git/service.js', () => ({
 }));
 vi.mock('../small-model/index.js', () => ({
   describeSmallModel: vi.fn(),
-  generateSmallModelText: vi.fn(),
 }));
+vi.mock('./inference.js', () => ({ generateWalkthroughText: vi.fn() }));
 const {
   generateWalkthrough,
   cancelWalkthroughGeneration,
@@ -26,7 +26,8 @@ const {
   getGenerationStage,
   __testing: walkthroughTesting,
 } = await import('./index.js');
-const { describeSmallModel, generateSmallModelText } = await import('../small-model/index.js');
+const { describeSmallModel } = await import('../small-model/index.js');
+const { generateWalkthroughText: generateSmallModelText } = await import('./inference.js');
 const { getDiff } = await import('../git/service.js');
 
 // bun's vitest shim has no `vi.waitFor`.
@@ -137,9 +138,7 @@ describe('generation jobs', () => {
       .toEqual({ cancelled: false });
   });
 
-  // The reserve and the request must be the same number: asking for more than
-  // was subtracted from the input allowance overruns the context mid-answer.
-  it('requests exactly the budget the model resolution reserved', async () => {
+  it('passes the resolved model through OpenCode', async () => {
     describeSmallModel.mockResolvedValue({
       providerID: 'opencode-go',
       modelID: 'deepseek-v4-flash',
@@ -153,7 +152,30 @@ describe('generation jobs', () => {
 
     await generateWalkthrough({ directory: '/repo', source: SOURCE });
 
-    expect(generateSmallModelText.mock.calls.at(-1)[0].maxOutputTokens).toBe(96_000);
+    expect(generateSmallModelText.mock.calls.at(-1)[0].model).toMatchObject({
+      providerID: 'opencode-go',
+      modelID: 'deepseek-v4-flash',
+      outputTokens: 96_000,
+    });
+  });
+
+  it('lets OpenCode handle auth when direct-provider discovery reports no login', async () => {
+    describeSmallModel.mockResolvedValue({
+      providerID: 'plugin-provider',
+      modelID: 'plugin-model',
+      source: 'request',
+      hasLogin: false,
+      inputCharBudget: 1_000_000,
+      structuredOutput: true,
+    });
+    generateSmallModelText.mockResolvedValue({ text: RESPONSE });
+
+    const result = await generateWalkthrough({ directory: '/repo', source: SOURCE });
+
+    expect(result.walkthrough.title).toBe('Change');
+    expect(generateSmallModelText).toHaveBeenCalledWith(expect.objectContaining({
+      model: expect.objectContaining({ providerID: 'plugin-provider', modelID: 'plugin-model', hasLogin: false }),
+    }));
   });
 
   it('serves the cache once the job has finished, without calling the model again', async () => {
@@ -190,31 +212,39 @@ describe('generation timeout', () => {
   });
 });
 
-// The failure this replaced: a flat 24k ask, spent entirely on reasoning by a
-// model that advertises 384k output tokens and a million of context. The ceiling
-// exists because the same number is reserved out of the input allowance.
 describe('output budget', () => {
   const { walkthroughOutputTokens } = walkthroughTesting;
 
-  it('asks a roomy model for far more than the old fixed budget', () => {
-    expect(walkthroughOutputTokens({ contextTokens: 1_000_000, outputTokenLimit: 384_000 })).toBe(96_000);
+  it('reserves the catalog output allowance because promptAsync cannot cap it', () => {
+    expect(walkthroughOutputTokens({ contextTokens: 1_000_000, outputTokenLimit: 384_000 })).toBe(384_000);
   });
 
   it('never asks for more than the model says it can emit', () => {
     expect(walkthroughOutputTokens({ contextTokens: 202_752, outputTokenLimit: 32_768 })).toBe(32_768);
   });
 
-  it('keeps the reserve to a share of the context', () => {
-    expect(walkthroughOutputTokens({ contextTokens: 200_000, outputTokenLimit: 64_000 })).toBe(50_000);
-  });
-
-  it('holds the old floor for a small or uncatalogued model', () => {
+  it('uses the conservative historical fallback for an uncatalogued model', () => {
     expect(walkthroughOutputTokens({ contextTokens: 64_000, outputTokenLimit: null })).toBe(24_000);
     expect(walkthroughOutputTokens({ contextTokens: 0, outputTokenLimit: null })).toBe(24_000);
   });
 
-  it('yields to a model whose own limit is below the floor', () => {
+  it('uses a catalog limit even when it is below the fallback', () => {
     expect(walkthroughOutputTokens({ contextTokens: 128_000, outputTokenLimit: 8_192 })).toBe(8_192);
+  });
+
+  it('leaves no fake input floor when output allowance consumes the context', () => {
+    expect(walkthroughOutputTokens({ contextTokens: 8_000, outputTokenLimit: 8_000 })).toBe(8_000);
+  });
+
+  it('refuses generation when the effective output allowance leaves no input room', async () => {
+    describeSmallModel.mockResolvedValue({
+      providerID: 'test', modelID: 'no-input-room', source: 'request', hasLogin: true,
+      inputCharBudget: 0, structuredOutput: true, outputTokenLimit: 8_000,
+    });
+    await expect(generateWalkthrough({ directory: '/repo', source: SOURCE })).rejects.toMatchObject({
+      code: 'context-too-small', availableChars: 0,
+    });
+    expect(generateSmallModelText).not.toHaveBeenCalled();
   });
 });
 
@@ -255,7 +285,7 @@ describe('generation stages', () => {
     generateSmallModelText.mockImplementation(async () => {
       attempt += 1;
       seen.push(getGenerationStage('/repo', 'working-tree:all'));
-      if (attempt === 1) throw Object.assign(new Error('bad request'), { status: 400 });
+      if (attempt === 1) throw Object.assign(new Error('schema unsupported'), { code: 'structured-output-unsupported', status: 400, schemaRefusal: true });
       return { text: RESPONSE };
     });
 
@@ -285,7 +315,7 @@ describe('schema refusal memory', () => {
     const sentSchema = [];
     generateSmallModelText.mockImplementation(async ({ responseSchema }) => {
       sentSchema.push(Boolean(responseSchema));
-      if (responseSchema) throw Object.assign(new Error('bad request'), { status: 400 });
+      if (responseSchema) throw Object.assign(new Error('schema unsupported'), { code: 'structured-output-unsupported', status: 400, schemaRefusal: true });
       return { text: RESPONSE };
     });
 
@@ -299,5 +329,28 @@ describe('schema refusal memory', () => {
     await generateWalkthrough({ directory: '/repo', source: SOURCE });
 
     expect(sentSchema).toEqual([true, false, false]);
+  });
+
+  it('does not retry or remember an unrelated generic 400', async () => {
+    generateSmallModelText.mockRejectedValue(Object.assign(new Error('invalid model'), { status: 400 }));
+    await expect(generateWalkthrough({ directory: '/repo', source: SOURCE })).rejects.toThrow('invalid model');
+    expect(generateSmallModelText).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back for StructuredOutputError without remembering provider refusal', async () => {
+    describeSmallModel.mockResolvedValue({
+      providerID: 'anthropic', modelID: 'structured-only-test', source: 'config',
+      inputCharBudget: 1_000_000, structuredOutput: null,
+    });
+    const sentSchema = [];
+    generateSmallModelText.mockImplementation(async ({ responseSchema }) => {
+      sentSchema.push(Boolean(responseSchema));
+      if (responseSchema) throw Object.assign(new Error('generation did not match schema'), { code: 'structured-output-unsupported' });
+      return { text: RESPONSE };
+    });
+    await generateWalkthrough({ directory: '/repo', source: SOURCE });
+    getDiff.mockImplementation(async (_dir, options) => options?.staged ? '' : PATCH.replace('true', 'false'));
+    await generateWalkthrough({ directory: '/repo', source: SOURCE });
+    expect(sentSchema).toEqual([true, false, true, false]);
   });
 });

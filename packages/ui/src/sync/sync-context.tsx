@@ -43,6 +43,7 @@ import { getReconnectCandidateSessionIds, mergeBootstrapSessions } from "./recon
 import { messagesBefore } from "./message-ordering"
 import { opencodeClient } from "@/lib/opencode/client"
 import { usePermissionStore } from "@/stores/permissionStore"
+import { isOpenChamberInternalSessionEvent, visibleOpenCodeSessions } from "@/lib/sessionInternalMetadata"
 import {
   processVSCodePermissionAutoAccept,
   processVSCodeReconciledPermissionAutoAccept,
@@ -1456,6 +1457,7 @@ export function handleEvent(
   streamingDirectory?: string,
   batch?: DirectoryEventBatch,
 ) {
+  if (isOpenChamberInternalSessionEvent(payload)) return
   if ((payload as { type?: unknown }).type === "openchamber:permission-auto-accept.updated") {
     const properties = (payload as unknown as { properties?: unknown }).properties
     if (properties && typeof properties === "object") {
@@ -2341,7 +2343,7 @@ export function SyncProvider(props: {
       try {
         const scopedClient = opencodeClient.getScopedSdkClient(directory)
         const result: unknown = await runBackgroundNetworkTask(() => scopedClient.session.list({ directory, limit: 200 }))
-        const allSessions = ((result as { data?: unknown }).data ?? []) as Session[]
+        const allSessions = visibleOpenCodeSessions(((result as { data?: unknown }).data ?? []) as Session[])
         const state = store.getState()
         const existingIds = new Set(state.session.map((s) => s.id))
         const parentIdSet = new Set(parentSessionIds)

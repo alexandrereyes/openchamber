@@ -7,6 +7,7 @@ import { deleteSessionInDirectory } from '@/sync/session-actions';
 import { retry } from '@/sync/retry';
 import type { WorktreeMetadata } from '@/types/worktree';
 import type { Session } from '@opencode-ai/sdk/v2';
+import { visibleOpenCodeSessions } from '@/lib/sessionInternalMetadata';
 
 // ---------------------------------------------------------------------------
 // Utilities
@@ -238,7 +239,7 @@ export const useAgentGroupsStore = create<Store>()(
               }
               return result;
             });
-            const list = Array.isArray(res.data) ? res.data : [];
+            const list = visibleOpenCodeSessions(Array.isArray(res.data) ? res.data : []);
             for (const s of list) if (s?.id) allSessions.push(s);
           } catch {
             failedDirectories.add(dir);
