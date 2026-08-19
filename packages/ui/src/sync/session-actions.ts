@@ -887,7 +887,7 @@ function removeSessionFromLiveStores(
       || Object.prototype.hasOwnProperty.call(current.message ?? {}, sessionId)
       || Object.values(current.part ?? {}).some((parts) => (
         parts ?? []
-      ).some((part) => (part as { sessionID?: string }).sessionID === sessionId))
+      ).some((part) => part.sessionID === sessionId))
     )
     if (!hasSession && !hasCachedSession) {
       continue
