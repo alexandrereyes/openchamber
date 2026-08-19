@@ -3,7 +3,7 @@ import { runBackgroundNetworkTask } from '@/lib/background-network';
 import { retry } from "@/sync/retry";
 import { stripSessionListDetails } from "@/sync/sanitize";
 import { startSessionLoadPerformanceEvent } from "@/sync/session-load-performance";
-import { rememberOpenChamberInternalSession } from '@/lib/sessionInternalMetadata';
+import { getOpenChamberInternalSessionGeneration, rememberOpenChamberInternalSession } from '@/lib/sessionInternalMetadata';
 
 export type GlobalSessionRecord = Session & {
     project?: {
@@ -116,9 +116,10 @@ export async function listGlobalSessionPages(
             operation,
             caller: cursor === undefined ? "initial-page" : "pagination",
         });
-        const { response, payload } = await runBackgroundNetworkTask(() => retry(
+        const { response, payload, internalSessionGeneration } = await runBackgroundNetworkTask(() => retry(
             async () => {
                 attempts += 1;
+                const internalSessionGeneration = getOpenChamberInternalSessionGeneration();
                 const request: Parameters<typeof apiClient.experimental.session.list>[0] = {
                     archived: options.archived,
                     limit: options.pageSize,
@@ -129,7 +130,7 @@ export async function listGlobalSessionPages(
                 const response = await apiClient.experimental.session.list(request);
                 const payload = unwrapSessionList(response, "experimental.session.list")
                     .map((session) => stripSessionListDetails(session));
-                return { response, payload };
+                return { response, payload, internalSessionGeneration };
             },
             { attempts: 3, delay: 500, retryIf: () => true },
         )).catch((error) => {
@@ -153,7 +154,7 @@ export async function listGlobalSessionPages(
             if (!session?.id || seenIds.has(session.id)) continue;
             seenIds.add(session.id);
             appended += 1;
-            if (rememberOpenChamberInternalSession(session)) continue;
+            if (rememberOpenChamberInternalSession(session, internalSessionGeneration)) continue;
             if (options.archived && narrowToArchived && !isArchivedSession(session)) continue;
             all.push(session);
             accepted.push(session);

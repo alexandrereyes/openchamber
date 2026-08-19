@@ -4,8 +4,14 @@ import { subscribeRuntimeEndpointWillChange } from '@/lib/runtime-switch'
 const INTERNAL_SESSION_KIND = 'walkthrough-inference'
 const MAX_TRACKED_INTERNAL_SESSIONS = 10_000
 const internalSessionIds = new Map<string, true>()
+let internalSessionGeneration = 0
 
-export const resetOpenChamberInternalSessions = (): void => internalSessionIds.clear()
+export const getOpenChamberInternalSessionGeneration = (): number => internalSessionGeneration
+
+export const resetOpenChamberInternalSessions = (): void => {
+  internalSessionGeneration += 1
+  internalSessionIds.clear()
+}
 
 const isOpenChamberInternalSession = (session: Pick<Session, 'metadata'> | null | undefined): boolean => {
   // SAFETY: Session.metadata is SDK-owned but intentionally open-ended; this
@@ -14,8 +20,9 @@ const isOpenChamberInternalSession = (session: Pick<Session, 'metadata'> | null 
   return metadata?.openchamber?.internalSession?.kind === INTERNAL_SESSION_KIND
 }
 
-export const rememberOpenChamberInternalSession = (session: Session): boolean => {
+export const rememberOpenChamberInternalSession = (session: Session, generation = internalSessionGeneration): boolean => {
   if (!isOpenChamberInternalSession(session)) return false
+  if (generation !== internalSessionGeneration) return true
   internalSessionIds.delete(session.id)
   internalSessionIds.set(session.id, true)
   while (internalSessionIds.size > MAX_TRACKED_INTERNAL_SESSIONS) {
@@ -25,8 +32,8 @@ export const rememberOpenChamberInternalSession = (session: Session): boolean =>
   return true
 }
 
-export const visibleOpenCodeSessions = <T extends Session>(sessions: T[]): T[] => (
-  sessions.filter((session) => !rememberOpenChamberInternalSession(session))
+export const visibleOpenCodeSessions = <T extends Session>(sessions: T[], generation = internalSessionGeneration): T[] => (
+  sessions.filter((session) => !rememberOpenChamberInternalSession(session, generation))
 )
 
 export const isOpenChamberInternalSessionEvent = (event: Event): boolean => {

@@ -2,8 +2,70 @@ import { describe, expect, test } from 'bun:test'
 import type { OpencodeClient } from '@opencode-ai/sdk/v2'
 
 import { listGlobalSessionPages, splitGlobalSessionsByArchived } from './globalSessions'
+import { isOpenChamberInternalSessionEvent, resetOpenChamberInternalSessions } from '@/lib/sessionInternalMetadata'
+import type { Event, Session } from '@opencode-ai/sdk/v2/client'
 
 describe('listGlobalSessionPages', () => {
+  test('a stale runtime response filters marked sessions without repopulating the current registry', async () => {
+    let resolveList: ((value: { data: Session[]; response: { headers: Headers } }) => void) | undefined
+    const apiClient = {
+      experimental: { session: { list: () => new Promise((resolve) => { resolveList = resolve }) } },
+    } as unknown as OpencodeClient
+    const loading = listGlobalSessionPages(apiClient, { archived: false, pageSize: 500 })
+    await Promise.resolve()
+    resetOpenChamberInternalSessions()
+    resolveList?.({
+      data: [{
+        id: 'ses_runtime_collision',
+        slug: 'runtime-collision',
+        projectID: 'project',
+        directory: '/runtime-a',
+        title: 'Internal',
+        version: '1',
+        metadata: { openchamber: { internalSession: { kind: 'walkthrough-inference' } } },
+        time: { created: 1, updated: 2 },
+      }],
+      response: { headers: new Headers() },
+    })
+
+    expect(await loading).toEqual([])
+    // SAFETY: This fixture contains the SDK session.created fields consumed by the public event predicate.
+    const currentRuntimeEvent = {
+      id: 'evt_current_runtime',
+      type: 'session.created',
+      properties: { info: {
+        id: 'ses_runtime_collision', slug: 'runtime-collision', projectID: 'project', directory: '/runtime-b',
+        title: 'User session', version: '1', time: { created: 3, updated: 3 },
+      } },
+    } as Event
+    expect(isOpenChamberInternalSessionEvent(currentRuntimeEvent)).toBe(false)
+  })
+
+  test('registers a marked session from the successful runtime-B retry attempt', async () => {
+    let attempts = 0
+    const marked = {
+      id: 'ses_retry_runtime', slug: 'retry-runtime', projectID: 'project', directory: '/runtime-b',
+      title: 'Internal', version: '1', time: { created: 1, updated: 2 },
+      metadata: { openchamber: { internalSession: { kind: 'walkthrough-inference' } } },
+    }
+    const apiClient = {
+      experimental: { session: { list: async () => {
+        attempts += 1
+        if (attempts === 1) {
+          resetOpenChamberInternalSessions()
+          throw new Error('runtime A disconnected')
+        }
+        return { data: [marked], response: { headers: new Headers() } }
+      } } },
+    } as unknown as OpencodeClient
+
+    expect(await listGlobalSessionPages(apiClient, { archived: false, pageSize: 500 })).toEqual([])
+    // SAFETY: The fixture contains the SDK session.idle fields consumed by the event predicate.
+    expect(isOpenChamberInternalSessionEvent({
+      id: 'evt_retry_runtime', type: 'session.idle', properties: { sessionID: marked.id },
+    } as Event)).toBe(true)
+  })
+
   test('sanitizes session list records before returning them', async () => {
     const apiClient = {
       experimental: {

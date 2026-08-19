@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test'
 import type { Event, Session } from '@opencode-ai/sdk/v2/client'
 import {
   isOpenChamberInternalSessionEvent,
+  getOpenChamberInternalSessionGeneration,
   resetOpenChamberInternalSessions,
+  visibleOpenCodeSessions,
 } from './sessionInternalMetadata'
 
 const session = (id: string, metadata?: Session['metadata']): Session => ({
@@ -31,5 +33,21 @@ describe('internal session metadata', () => {
     expect(isOpenChamberInternalSessionEvent(deleted)).toBe(true)
     // SAFETY: The test constructs the exact session.idle fields consumed by the predicate.
     expect(isOpenChamberInternalSessionEvent({ id: 'evt_idle', type: 'session.idle', properties: { sessionID: 'ses_delete' } } as Event)).toBe(false)
+  })
+
+  test('stale list filtering hides marked records without repopulating ids after a runtime switch', () => {
+    const runtimeAGeneration = getOpenChamberInternalSessionGeneration()
+    resetOpenChamberInternalSessions()
+    const marked = session('ses_race', { openchamber: { internalSession: { kind: 'walkthrough-inference' } } })
+    expect(visibleOpenCodeSessions([marked], runtimeAGeneration)).toEqual([])
+    expect(isOpenChamberInternalSessionEvent(created(session('ses_race')))).toBe(false)
+  })
+
+  test('current list filtering registers marked ids for later id-only events', () => {
+    const generation = getOpenChamberInternalSessionGeneration()
+    const marked = session('ses_current', { openchamber: { internalSession: { kind: 'walkthrough-inference' } } })
+    expect(visibleOpenCodeSessions([marked], generation)).toEqual([])
+    // SAFETY: The test constructs the exact session.idle fields consumed by the predicate.
+    expect(isOpenChamberInternalSessionEvent({ id: 'evt_current', type: 'session.idle', properties: { sessionID: 'ses_current' } } as Event)).toBe(true)
   })
 })
