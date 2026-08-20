@@ -17,6 +17,7 @@ import { buildWalkthroughView } from '@/lib/walkthrough/model';
 import type { WalkthroughSource, WalkthroughWorkingTreeScope } from '@/lib/walkthrough/types';
 import { ModelSelector } from '@/components/sections/agents/ModelSelector';
 import { deriveBaseBranch, hasResolvableBaseBranch } from '@/components/views/git/baseBranch';
+import { runtimeFetch } from '@/lib/runtime-fetch';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useGitBranches, useGitStatus, useGitStore } from '@/stores/useGitStore';
 import { useGitHubAuthStore } from '@/stores/useGitHubAuthStore';
@@ -347,16 +348,59 @@ export const WalkthroughView = ({ directory }: WalkthroughViewProps) => {
   // Explicit pick first, then the model that actually produced what is on
   // screen, then whatever settings resolve to. The middle step is what makes
   // reopening a review show the model behind it rather than the default.
+  // Never present a provider without a usable login as the current selection —
+  // the picker already hides them from the menu; showing one as selected was
+  // the whole "why say so?" failure mode.
   const modelsMetadata = useConfigStore((state) => state.modelsMetadata);
+  const [modelProviders, setModelProviders] = useState<string[] | undefined>(undefined);
+
+  const providerIsAuthenticated = (providerId: string | undefined) => {
+    if (!providerId) return false;
+    // Until the auth list loads, do not present a candidate as selected —
+    // otherwise an unauthenticated config model flashes in the picker.
+    if (modelProviders === undefined) return false;
+    return modelProviders.includes(providerId);
+  };
   const readinessModelRef = entry.readiness?.model
+    && entry.readiness.model.hasLogin !== false
+    && providerIsAuthenticated(entry.readiness.model.providerID)
     ? `${entry.readiness.model.providerID}/${entry.readiness.model.modelID}`
     : undefined;
   const resultModelRef = entry.result?.model
+    && providerIsAuthenticated(entry.result.model.providerID)
     ? `${entry.result.model.providerID}/${entry.result.model.modelID}`
     : undefined;
-  const activeModel = selectedModel ?? resultModelRef ?? readinessModelRef;
+  const selectedModelUsable = selectedModel
+    && providerIsAuthenticated(selectedModel.split('/')[0])
+    ? selectedModel
+    : undefined;
+  const activeModel = selectedModelUsable ?? resultModelRef ?? readinessModelRef;
   const [activeProviderId, ...activeModelParts] = (activeModel ?? '').split('/');
   const activeModelId = activeModelParts.join('/');
+
+  useEffect(() => {
+    if (modelProviders !== undefined) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await runtimeFetch('/api/small-model', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        });
+        if (!response.ok) return;
+        const payload = (await response.json().catch(() => null)) as { authenticatedProviders?: unknown } | null;
+        if (!cancelled && Array.isArray(payload?.authenticatedProviders)) {
+          setModelProviders(payload.authenticatedProviders.filter((id): id is string => typeof id === 'string'));
+        }
+      } catch {
+        // Leave undefined: the picker then offers every provider, which is
+        // worse but not broken.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modelProviders]);
 
   const isStructuredOutputCapable = useCallback(
     (providerId: string, modelId: string) =>
@@ -576,6 +620,8 @@ export const WalkthroughView = ({ directory }: WalkthroughViewProps) => {
             onChange={(providerId, modelId) => {
               selectModel(directory, source, providerId && modelId ? `${providerId}/${modelId}` : null);
             }}
+            // While the auth list is loading, allow none — not every provider.
+            allowedProviderIds={modelProviders ?? []}
             isModelAllowed={isStructuredOutputCapable}
             tooltipsEnabled={false}
             dropdownPortalToBody

@@ -2,6 +2,7 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import express from 'express';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -13,8 +14,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 // message `No OpenCode login found for provider "deepseek"` — shown in the
 // error banner above the "No walkthrough yet" empty state.
 //
-// Direct-provider calls still refuse missing credentials. Walkthrough itself
-// now delegates auth to OpenCode so plugin-backed providers can run.
+// After the fix: readiness refuses with `no-provider-login`, and generation
+// answers 401 with the same structured code so the UI can show a blocker.
 // ---------------------------------------------------------------------------
 
 const TEMP_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'oc-home-2607-'));
@@ -84,11 +85,13 @@ describe('issue 2607 — walkthrough blocks unauthenticated providers', () => {
     fs.rmSync(REPO_DIR, { recursive: true, force: true });
   });
 
-  it('does not treat direct-provider login discovery as walkthrough authority', async () => {
+  it('resolves the deepseek model but reports not ready without a login', async () => {
     const result = await walkthrough.getWalkthrough({ directory: REPO_DIR, source: SOURCE });
 
-    expect(result.readiness.ready).toBe(true);
-    expect(result.readiness.model).toMatchObject({ providerID: 'deepseek', modelID: 'deepseek-v4-flash', hasLogin: false });
+    expect(result.readiness.ready).toBe(false);
+    expect(result.readiness.reason).toBe('no-provider-login');
+    // Unusable models must not be offered as the current selection.
+    expect(result.readiness.model).toBeUndefined();
   });
 
   it('callSmallModel throws a structured no-provider-login error', async () => {
@@ -107,4 +110,39 @@ describe('issue 2607 — walkthrough blocks unauthenticated providers', () => {
     expect(error.statusCode).toBe(401);
   });
 
+  it('generateWalkthrough rejects with structured no-provider-login', async () => {
+    const error = await walkthrough.generateWalkthrough({ directory: REPO_DIR, source: SOURCE })
+      .then(() => null, (e) => e);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error.code).toBe('no-provider-login');
+    expect(error.statusCode).toBe(401);
+    expect(error.model).toMatchObject({ providerID: 'deepseek', modelID: 'deepseek-v4-flash' });
+  });
+
+  it('answers the generate route with HTTP 401 and code no-provider-login', async () => {
+    const service = { ...walkthrough, getPullRequestDiff: async () => { throw new Error('not used'); } };
+    const app = express();
+    app.use(express.json());
+    const { registerWalkthroughRoutes } = await import('./routes.js');
+    registerWalkthroughRoutes(app, { getWalkthroughService: async () => service });
+
+    const server = app.listen(0);
+    await new Promise((resolve) => server.once('listening', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    try {
+      const response = await fetch(`${base}/api/walkthrough/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ directory: REPO_DIR, source: SOURCE }),
+      });
+      const body = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(body.code).toBe('no-provider-login');
+      expect(body.model).toMatchObject({ providerID: 'deepseek', modelID: 'deepseek-v4-flash' });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
 });
