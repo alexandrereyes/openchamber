@@ -57,6 +57,15 @@ const requireData = (result, operation) => {
 
 const eventProperties = (event) => event?.properties ?? event?.data;
 
+const eventSessionId = (event, properties) => {
+  const outerSessionId = properties?.sessionID;
+  const nestedSessionId = event.type === 'message.updated'
+    ? properties?.info?.sessionID
+    : (event.type === 'message.part.updated' ? properties?.part?.sessionID : undefined);
+  if (outerSessionId && nestedSessionId && outerSessionId !== nestedSessionId) return undefined;
+  return nestedSessionId ?? outerSessionId;
+};
+
 const collectAssistantResult = async ({ stream, sessionId, promptMessageId }) => {
   const textParts = new Map();
   let assistantMessageId = '';
@@ -85,7 +94,7 @@ const collectAssistantResult = async ({ stream, sessionId, promptMessageId }) =>
 
   for await (const event of stream) {
     const properties = eventProperties(event);
-    if (properties?.sessionID !== sessionId) continue;
+    if (eventSessionId(event, properties) !== sessionId) continue;
 
     if (event.type === 'message.part.updated') {
       const part = properties.part;

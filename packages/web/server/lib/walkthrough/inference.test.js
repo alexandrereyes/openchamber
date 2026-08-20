@@ -13,7 +13,7 @@ const waitFor = async (predicate, { timeout = 2_000, interval = 5 } = {}) => {
   }
 };
 
-const assistant = ({ promptId, structured, text, finish = 'stop', error }) => {
+const assistant = ({ promptId, structured, text, finish = 'stop', error, nestedSessionId = false }) => {
   const info = {
     id: 'msg_assistant',
     sessionID: 'ses_internal',
@@ -28,12 +28,15 @@ const assistant = ({ promptId, structured, text, finish = 'stop', error }) => {
     ...(text === undefined ? [] : [{
       type: 'message.part.updated',
       properties: {
-        sessionID: 'ses_internal',
+        ...(!nestedSessionId && { sessionID: 'ses_internal' }),
         part: { id: 'part_text', sessionID: 'ses_internal', messageID: info.id, type: 'text', text },
         time: 1,
       },
     }]),
-    { type: 'message.updated', properties: { sessionID: 'ses_internal', info } },
+    {
+      type: 'message.updated',
+      properties: { ...(!nestedSessionId && { sessionID: 'ses_internal' }), info },
+    },
   ];
 };
 
@@ -159,6 +162,50 @@ describe('walkthrough OpenCode inference', () => {
     });
 
     await expect(generate(harness, { responseSchema: undefined })).resolves.toEqual({ text: 'new' });
+  });
+
+  it('correlates canonical message events whose session ID is nested in the payload', async () => {
+    const harness = createHarness({
+      events: (request) => assistant({
+        promptId: request.messageID,
+        text: 'nested event result',
+        nestedSessionId: true,
+      }),
+    });
+
+    await expect(generate(harness, { responseSchema: undefined })).resolves.toEqual({ text: 'nested event result' });
+  });
+
+  it('rejects message events whose outer and nested session IDs conflict', async () => {
+    const harness = createHarness({
+      events: (request) => [
+        {
+          type: 'message.part.updated',
+          properties: {
+            sessionID: 'ses_other',
+            part: { id: 'part_wrong', sessionID: 'ses_internal', messageID: 'msg_assistant', type: 'text', text: 'wrong' },
+          },
+        },
+        {
+          type: 'message.updated',
+          properties: {
+            sessionID: 'ses_other',
+            info: {
+              id: 'msg_wrong',
+              sessionID: 'ses_internal',
+              role: 'assistant',
+              parentID: request.messageID,
+              structured: { title: 'Wrong' },
+              finish: 'stop',
+              time: { created: 1, completed: 2 },
+            },
+          },
+        },
+        ...assistant({ promptId: request.messageID, text: 'right', nestedSessionId: true }),
+      ],
+    });
+
+    await expect(generate(harness, { responseSchema: undefined })).resolves.toEqual({ text: 'right' });
   });
 
   it('maps a correlated terminal assistant error', async () => {
