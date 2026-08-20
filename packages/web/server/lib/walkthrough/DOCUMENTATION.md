@@ -100,11 +100,21 @@ When a change consists only of generated files, generation is refused with
 
 ## Model selection
 
-Generation is dispatched through the normal OpenCode SDK v2 session pipeline.
-The resolved walkthrough model is passed to `session.promptAsync`, so OpenCode
-owns provider authentication and model dispatch rather than this feature calling
-provider APIs directly. Each attempt uses a root temporary session atomically
-marked as `metadata.openchamber.internalSession.kind = walkthrough-inference`.
+Generation uses the direct Small Model dispatcher first. That path has an
+explicit output cap and handles providers whose runtime credential and endpoint
+are enough to reproduce their protocol. A runtime-only provider whose adapter
+is not OpenAI-compatible, or whose endpoint rejects the compatible protocol,
+returns `plugin-transport-required`; only then does Walkthrough use the normal
+OpenCode SDK v2 session pipeline so the plugin's custom `fetch` remains active.
+
+The fallback subscribes to the official directory event stream before calling
+`session.promptAsync`. It reads the correlated assistant result from
+`message.updated` and `message.part.updated`. It never polls
+`session.messages`: OpenCode 1.18.18 cannot encode a persisted plain `format`
+object when that endpoint reads a structured-output turn and returns HTTP 400.
+
+Each fallback attempt uses a root temporary session atomically marked as
+`metadata.openchamber.internalSession.kind = walkthrough-inference`.
 That marker is durable authority for hiding the session; a bounded server
 registry covers status and message events that carry only a session id. Tools
 and permissions are denied, cancellation or timeout aborts the turn, and
@@ -140,21 +150,14 @@ in its cache entry, so reopening a panel resolves the picker as *explicit choice
 → model that generated what is on screen → settings*. Because the model is part
 of the cache key, switching models and back returns the earlier review for free.
 
-The picker hides models the catalog reports as `structured_output: false` —
-offering them would move the same refusal one click later. It otherwise follows
-OpenCode's model catalog rather than the direct Small Model login allowlist,
-because plugin-backed providers may not have an `auth.json` or API-key entry.
-OpenCode owns provider availability and authentication; inference maps a real
-`ProviderAuthError` to the user-facing login failure. The in-panel picker on a
-blocked walkthrough writes this setting too, so recovering from a refusal never
-silently changes the model behind commit messages.
-
-A settings or `opencode.json` model can be supplied by an OpenCode plugin even
-when direct-provider discovery finds neither `auth.json` nor an API key.
-Walkthrough readiness therefore does not use `hasLogin` as authority and its
-picker follows the OpenCode model catalog instead of the direct-provider login
-list. `session.promptAsync` is authoritative: a real OpenCode
-`ProviderAuthError` still maps to HTTP 401 with `code: 'no-provider-login'`.
+The picker hides models the catalog reports as `structured_output: false` and
+providers for which the Small Model runtime found neither a usable credential
+nor an endpoint. The latter list includes plugin-registered providers resolved
+from the running OpenCode process. A selected provider still needs a real login;
+the direct call and fallback both map auth failure to HTTP 401 with
+`code: 'no-provider-login'`. The in-panel picker on a blocked walkthrough writes
+this setting too, so recovering from a refusal never silently changes the model
+behind commit messages.
 
 ## Output language
 
@@ -237,12 +240,16 @@ for a wasted first call.
 
 ## Output allowance
 
-`session.promptAsync` has no per-turn maximum-output field. Readiness therefore
-reserves the resolved model catalog's full `limit.output` from the context: that
-is the allowance OpenCode can actually consume for reasoning and JSON. If the
-catalog omits the limit, readiness uses a conservative 24k-token fallback. This
-may refuse a large diff earlier than a provider would in practice, but it never
-claims that an unsupported cap was sent to OpenCode.
+The direct path requests the same output budget that readiness reserves. It is
+bounded to 96k tokens, 25% of context, and the model's catalog output limit,
+with a 24k-token target for small or uncatalogued models. The Small Model input
+calculation keeps at least 1k tokens of input even when a catalog reports output
+at or above context, so a one-line diff is not rejected with a zero budget.
+
+`session.promptAsync` has no per-turn maximum-output field. The rare plugin
+fallback therefore cannot enforce the direct path's cap, but it keeps the same
+readiness reserve rather than making all normal inputs unusable for models whose
+catalog output limit equals their context.
 
 When a model exhausts even that, `code: 'output-exhausted'` reports it as what
 it is: this model cannot finish this job, so pick another or review a narrower

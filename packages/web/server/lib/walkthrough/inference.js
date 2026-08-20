@@ -1,8 +1,6 @@
 import { createOpencodeClient } from '@opencode-ai/sdk/v2';
 import { forgetOpenChamberInternalSession, internalSessionMetadata, trackOpenChamberInternalSession } from '../opencode/internal-sessions.js';
 
-const POLL_INTERVAL_MS = 250;
-const MAX_POLL_INTERVAL_MS = 2_000;
 const CLEANUP_TIMEOUT_MS = 5_000;
 const DISABLED_TOOLS = Object.fromEntries([
   'bash', 'edit', 'glob', 'grep', 'patch', 'question', 'read', 'skill',
@@ -42,7 +40,7 @@ const normalizedOpenCodeError = (raw, operation, responseStatus) => {
     statusCode: code === 'no-provider-login' ? 401 : (code ? undefined : 502),
   });
   if (code) normalized.code = code;
-  if (code === 'structured-output-unsupported' && name === 'APIError') normalized.schemaRefusal = true;
+  if (code === 'structured-output-unsupported') normalized.schemaRefusal = true;
   return normalized;
 };
 
@@ -57,38 +55,68 @@ const requireData = (result, operation) => {
   return result.data;
 };
 
-const sleep = (ms, signal) => new Promise((resolve, reject) => {
-  const onAbort = () => {
-    clearTimeout(timer);
-    reject(signal.reason ?? Object.assign(new Error('Aborted'), { name: 'AbortError' }));
-  };
-  const timer = setTimeout(() => {
-    signal.removeEventListener('abort', onAbort);
-    resolve();
-  }, ms);
-  if (signal.aborted) return onAbort();
-  signal.addEventListener('abort', onAbort, { once: true });
-});
+const eventProperties = (event) => event?.properties ?? event?.data;
 
-const assistantOutcomeFor = (messages, promptMessageId) => {
-  if (!Array.isArray(messages)) return null;
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    const info = message?.info;
-    if (info?.role !== 'assistant' || info.parentID !== promptMessageId) continue;
-    if (!info.time?.completed) return null;
-    if (info.error) return { error: normalizedOpenCodeError(info.error, 'assistant message') };
-    if (!info.finish) return null;
-    if (info.finish === 'length' || info.finish === 'max_tokens') {
-      return { error: Object.assign(new Error('The model exhausted its output allowance'), { code: 'output-exhausted' }) };
+const collectAssistantResult = async ({ stream, sessionId, promptMessageId }) => {
+  const textParts = new Map();
+  let assistantMessageId = '';
+  let terminalAssistant = null;
+
+  const textForAssistant = () => [...textParts.values()]
+    .filter((part) => part.messageID === assistantMessageId)
+    .map((part) => part.text)
+    .join('\n')
+    .trim();
+
+  const completedResult = () => {
+    if (!terminalAssistant) return null;
+    if (terminalAssistant.error) {
+      throw normalizedOpenCodeError(terminalAssistant.error, 'assistant message');
     }
-    if (info.structured != null) return { result: { text: JSON.stringify(info.structured) } };
-    const text = Array.isArray(message.parts)
-      ? message.parts.filter((part) => part?.type === 'text' && part.text?.constructor === String).map((part) => part.text).join('\n').trim()
-      : '';
-    return text ? { result: { text } } : null;
+    if (terminalAssistant.finish === 'length' || terminalAssistant.finish === 'max_tokens') {
+      throw Object.assign(new Error('The model exhausted its output allowance'), { code: 'output-exhausted' });
+    }
+    if (terminalAssistant.structured != null) {
+      return { text: JSON.stringify(terminalAssistant.structured) };
+    }
+    const text = textForAssistant();
+    return text ? { text } : null;
+  };
+
+  for await (const event of stream) {
+    const properties = eventProperties(event);
+    if (properties?.sessionID !== sessionId) continue;
+
+    if (event.type === 'message.part.updated') {
+      const part = properties.part;
+      if (part?.type !== 'text' || part.text?.constructor !== String) continue;
+      textParts.set(part.id, part);
+      const result = completedResult();
+      if (result) return result;
+      continue;
+    }
+
+    if (event.type === 'message.updated') {
+      const info = properties.info;
+      if (info?.role !== 'assistant' || info.parentID !== promptMessageId) continue;
+      assistantMessageId = info.id;
+      if (!info.time?.completed || !info.finish) continue;
+      terminalAssistant = info;
+      const result = completedResult();
+      if (result) return result;
+      continue;
+    }
+
+    if (event.type === 'session.error') {
+      throw normalizedOpenCodeError(properties.error, 'session generation');
+    }
+
+    if (event.type === 'session.idle' && terminalAssistant) {
+      throw new Error('OpenCode completed walkthrough inference without output');
+    }
   }
-  return null;
+
+  throw new Error('OpenCode event stream ended before walkthrough inference completed');
 };
 
 const cleanupOrphanedWalkthroughSessions = async (client) => {
@@ -136,7 +164,7 @@ const cleanupOrphanedWalkthroughSessions = async (client) => {
 
 export async function generateWalkthroughText({
   prompt, system, directory, model, responseSchema, timeoutMs, signal, baseUrl, headers,
-  createClient = createOpencodeClient, pollIntervalMs = POLL_INTERVAL_MS,
+  createClient = createOpencodeClient,
 }) {
   if (!baseUrl) throw new Error('OpenCode API is unavailable');
   const client = createClient({ baseUrl: baseUrl.replace(/\/$/, ''), headers: headers ?? {} });
@@ -146,7 +174,10 @@ export async function generateWalkthroughText({
   const requestOptions = () => ({ signal: combinedSignal });
   const promptMessageId = `msg_${crypto.randomUUID().replaceAll('-', '')}`;
   let sessionId = '';
-  let pollDelayMs = pollIntervalMs;
+  let turnStarted = false;
+  let completed = false;
+  let streamController;
+  let resultPromise;
 
   try {
     const session = requireData(await client.session.create({
@@ -160,6 +191,17 @@ export async function generateWalkthroughText({
     trackOpenChamberInternalSession(sessionId);
     activeSessionIds.add(sessionId);
 
+    streamController = new AbortController();
+    const streamSignal = AbortSignal.any([combinedSignal, streamController.signal]);
+    const subscription = await client.event.subscribe({ directory }, { signal: streamSignal });
+    resultPromise = collectAssistantResult({
+      stream: subscription.stream,
+      sessionId,
+      promptMessageId,
+    });
+    void resultPromise.catch(() => {});
+
+    turnStarted = true;
     const promptResult = await client.session.promptAsync({
       sessionID: sessionId,
       directory,
@@ -172,30 +214,18 @@ export async function generateWalkthroughText({
     }, requestOptions());
     const promptError = sdkError(promptResult, 'session.promptAsync');
     if (promptError) throw promptError;
-
-    while (!combinedSignal.aborted) {
-      const [statusResult, messagesResult] = await Promise.all([
-        client.session.status({ directory }, requestOptions()),
-        client.session.messages({ sessionID: sessionId, directory, limit: 20 }, requestOptions()),
-      ]);
-      const statusError = sdkError(statusResult, 'session.status');
-      if (statusError) throw statusError;
-      const messagesError = sdkError(messagesResult, 'session.messages');
-      if (messagesError) throw messagesError;
-      const status = statusResult.data?.[sessionId];
-      const outcome = assistantOutcomeFor(messagesResult.data, promptMessageId);
-      if (outcome?.error) throw outcome.error;
-      if (status?.type !== 'busy' && status?.type !== 'retry' && outcome?.result) return outcome.result;
-      await sleep(pollDelayMs, combinedSignal);
-      pollDelayMs = Math.min(MAX_POLL_INTERVAL_MS, Math.ceil(pollDelayMs * 1.5));
-    }
-    throw combinedSignal.reason;
+    const result = await resultPromise;
+    completed = true;
+    return result;
   } catch (error) {
-    if (sessionId && combinedSignal.aborted) {
+    streamController?.abort();
+    if (sessionId && turnStarted && !completed) {
       await client.session.abort({ sessionID: sessionId, directory }, { signal: AbortSignal.timeout(CLEANUP_TIMEOUT_MS) }).catch(() => {});
     }
+    await resultPromise?.catch(() => {});
     throw error;
   } finally {
+    streamController?.abort();
     if (sessionId) {
       activeSessionIds.delete(sessionId);
       try {
@@ -214,7 +244,7 @@ export async function generateWalkthroughText({
 
 export const __testing = {
   normalizedOpenCodeError,
-  sleep,
+  collectAssistantResult,
   requireOrphanCleanup: resetWalkthroughInferenceRuntime,
   activeSessionIds,
 };
