@@ -643,6 +643,10 @@ export interface SettingsPayload {
   opencodeBinary?: string;
   projects?: ProjectEntry[];
   activeProjectId?: string;
+  sidebarProjectDisplayMode?: 'all' | 'single';
+  sidebarSessionGroupingMode?: 'by-worktree' | 'flat';
+  sidebarProjectSortOrder?: 'manual' | 'a-z' | 'z-a' | 'date-added' | 'recent';
+  sidebarShowRecentSection?: boolean;
   securityScopedBookmarks?: string[];
   pinnedDirectories?: string[];
   showReasoningTraces?: boolean;
@@ -1247,7 +1251,7 @@ export type RuntimeAPISelector<TValue> = (apis: RuntimeAPIs) => TValue;
 
 type SkillsCatalogSourceId = string;
 
-type SkillsCatalogSourceType = 'github' | 'clawdhub';
+type SkillsCatalogSourceType = 'github';
 
 export interface SkillsCatalogSource {
   id: SkillsCatalogSourceId;
@@ -1256,24 +1260,16 @@ export interface SkillsCatalogSource {
   source: string;
   defaultSubpath?: string;
   sourceType?: SkillsCatalogSourceType;
+  /** GitHub repository star count (null when unavailable) */
+  stars?: number | null;
+  /** GitHub repository last-push timestamp, ISO (null when unavailable) */
+  repoUpdatedAt?: string | null;
 }
 
 interface SkillsCatalogItemInstalledBadge {
   isInstalled: boolean;
   scope?: 'user' | 'project';
   source?: 'opencode' | 'agents' | 'claude';
-}
-
-interface ClawdHubSkillMetadata {
-  slug: string;
-  version: string;
-  displayName?: string;
-  owner?: string;
-  downloads?: number;
-  stars?: number;
-  versionsCount?: number;
-  createdAt?: number;
-  updatedAt?: number;
 }
 
 export interface SkillsCatalogItem {
@@ -1288,22 +1284,18 @@ export interface SkillsCatalogItem {
   installable: boolean;
   warnings?: string[];
   installed?: SkillsCatalogItemInstalledBadge;
-  /** ClawdHub-specific metadata (present only for ClawdHub sources) */
-  clawdhub?: ClawdHubSkillMetadata;
 }
 
 export interface SkillsCatalogResponse {
   ok: boolean;
   sources?: SkillsCatalogSource[];
   itemsBySource?: Record<SkillsCatalogSourceId, SkillsCatalogItem[]>;
-  pageInfoBySource?: Record<SkillsCatalogSourceId, { nextCursor?: string | null }>;
   error?: { kind: string; message: string };
 }
 
 export interface SkillsCatalogSourceResponse {
   ok: boolean;
   items?: SkillsCatalogItem[];
-  nextCursor?: string | null;
   error?: { kind: string; message: string };
 }
 
@@ -1328,11 +1320,6 @@ export interface SkillsRepoScanResponse {
 
 interface SkillsInstallSelection {
   skillDir: string;
-  /** ClawdHub-specific metadata for installation */
-  clawdhub?: {
-    slug: string;
-    version: string;
-  };
 }
 
 export interface SkillsInstallRequest {
