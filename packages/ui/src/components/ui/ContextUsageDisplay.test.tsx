@@ -24,6 +24,7 @@ describe('ContextUsageDisplay accessibility', () => {
 
     expect(markup).not.toContain('<button');
     expect(markup).toContain('tabindex="0"');
+    expect(markup).toContain('data-focus-ring="accent"');
     expect(markup).toContain('role="progressbar"');
     expect(markup).toContain('aria-label="Context usage"');
     expect(markup).toContain('aria-valuetext="32.2K, 3.1% of context used"');

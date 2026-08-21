@@ -170,6 +170,7 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
   ) : (
     <div
       className={sharedClassName}
+      data-focus-ring={!isMobile ? 'accent' : undefined}
       role={!isMobile ? 'progressbar' : undefined}
       aria-label={!isMobile ? t('contextUsage.aria.label') : undefined}
       aria-valuenow={!isMobile ? Math.round(progressPct) : undefined}
