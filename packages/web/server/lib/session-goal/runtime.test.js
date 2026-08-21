@@ -35,14 +35,14 @@ const startIdleTick = async (fetchImpl) => {
     buildOpenCodeUrl: (pathname) => `http://opencode.test${pathname}`,
     getOpenCodeAuthHeaders: () => ({}),
     getSmallModelService,
-    idleQuietMs: 10,
     isEnabled: () => true,
+    idleQuietMs: 10,
   });
   runtime.processPayload({
     type: 'session.status',
     properties: { sessionID: SESSION_ID, status: { type: 'idle' }, directory: DIRECTORY },
   });
-  await vi.advanceTimersByTimeAsync(10);
+  await vi.runOnlyPendingTimersAsync();
   return { runtime, getSmallModelService };
 };
 
@@ -165,7 +165,7 @@ describe('session goal live activity gate', () => {
       type: 'session.status',
       properties: { sessionID: SESSION_ID, status: { type: 'idle' }, directory: DIRECTORY },
     });
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.runOnlyPendingTimersAsync();
 
     expect(service.generateSmallModelText).toHaveBeenCalledOnce();
     const patch = requests.find((request) => request.pathname === `/session/${SESSION_ID}` && request.method === 'PATCH');

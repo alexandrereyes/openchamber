@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -664,6 +664,20 @@ describe('cli API target resolution', () => {
 });
 
 describe('network-exposed auth validation', () => {
+  const allowUnauthenticatedLan = process.env.OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN;
+
+  beforeEach(() => {
+    delete process.env.OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN;
+  });
+
+  afterEach(() => {
+    if (typeof allowUnauthenticatedLan === 'string') {
+      process.env.OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN = allowUnauthenticatedLan;
+    } else {
+      delete process.env.OPENCHAMBER_ALLOW_UNAUTHENTICATED_LAN;
+    }
+  });
+
   it('allows loopback without a UI password', () => {
     expect(() => assertAuthenticatedNetworkExposure({ host: '127.0.0.1' })).not.toThrow();
     expect(() => assertAuthenticatedNetworkExposure({ host: 'localhost' })).not.toThrow();

@@ -249,6 +249,7 @@ export const createSessionGoalRuntime = ({
   getOpenCodeAuthHeaders,
   getSmallModelService,
   emitGoalNotification,
+  isEnabled = isSessionGoalEnabled,
   idleQuietMs = IDLE_QUIET_MS,
   isEnabled = isSessionGoalEnabled,
   kickoffQuietMs = KICKOFF_QUIET_MS,
