@@ -34,9 +34,13 @@ export const trackOpenChamberInternalSession = (sessionId) => {
   rememberClassification(sessionId, true);
 };
 
-const sessionIdFromEvent = (payload) => payload?.properties?.sessionID
-  ?? payload?.properties?.info?.sessionID
-  ?? payload?.properties?.info?.id;
+const sessionIdFromEvent = (payload) => {
+  const properties = payload?.properties;
+  if (properties?.sessionID) return properties.sessionID;
+  if (payload?.type === 'message.updated') return properties?.info?.sessionID;
+  if (payload?.type?.startsWith('message.part.')) return properties?.part?.sessionID;
+  return properties?.info?.id;
+};
 
 export const isOpenChamberInternalSessionEvent = (payload) => {
   const info = payload?.properties?.info;
@@ -46,11 +50,11 @@ export const isOpenChamberInternalSessionEvent = (payload) => {
     if (sessionId) classifiedSessionIds.delete(sessionId);
     return internal;
   }
-  if (isOpenChamberInternalSession(info)) {
+  if (payload?.type?.startsWith('session.') && isOpenChamberInternalSession(info)) {
     trackOpenChamberInternalSession(info.id ?? sessionId);
     return true;
   }
-  if (info?.id) {
+  if (payload?.type?.startsWith('session.') && info?.id) {
     rememberClassification(info.id, false);
   }
   return classifiedSessionIds.get(sessionId) === true;

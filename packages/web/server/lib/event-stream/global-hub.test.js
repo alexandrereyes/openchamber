@@ -159,4 +159,32 @@ describe('createGlobalMessageStreamHub', () => {
       hub.stop();
     }
   });
+
+  it('drops an event whose async filter finishes after the reader stops', async () => {
+    let releaseFilter;
+    const filterGate = new Promise((resolve) => { releaseFilter = resolve; });
+    const received = [];
+    const hub = createGlobalMessageStreamHub({
+      buildOpenCodeUrl: (pathname) => `http://127.0.0.1:4096${pathname}`,
+      getOpenCodeAuthHeaders: () => ({}),
+      upstreamReconnectDelayMs: 100,
+      eventFilter: async () => {
+        await filterGate;
+        return false;
+      },
+      fetchImpl: async () => createSseResponse({ blocks: [
+        'id: evt-stale\ndata: {"type":"session.updated","properties":{}}\n\n',
+      ] }),
+    });
+    hub.subscribeEvent((event) => received.push(event.eventId));
+
+    hub.start();
+    await waitForAssertion(() => expect(releaseFilter).toBeDefined());
+    hub.stop();
+    releaseFilter();
+    await hub.drainEvents();
+
+    expect(received).toEqual([]);
+    expect(hub.replayAfter('evt-stale')).toEqual([]);
+  });
 });

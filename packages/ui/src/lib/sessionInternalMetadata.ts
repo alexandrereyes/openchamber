@@ -42,16 +42,25 @@ export const isOpenChamberInternalSessionEvent = (
 ): boolean => {
   // SAFETY: every OpenCode event carries a properties object; the optional
   // fields below are the union members shared by session-addressed events.
-  const properties = (event as { properties?: { info?: Session; sessionID?: string } }).properties
+  const properties = (event as {
+    properties?: {
+      info?: Session & { sessionID?: string }
+      part?: { sessionID?: string }
+      sessionID?: string
+    }
+  }).properties
   const info = properties?.info
-  const sessionID = properties?.sessionID ?? info?.id
+  const sessionID = properties?.sessionID
+    ?? (event.type === 'message.updated' ? info?.sessionID : undefined)
+    ?? (event.type.startsWith('message.part.') ? properties?.part?.sessionID : undefined)
+    ?? (event.type.startsWith('session.') ? info?.id : undefined)
   const currentGeneration = generation === internalSessionGeneration
   if (event.type === 'session.deleted') {
     const hidden = Boolean((info && isOpenChamberInternalSession(info)) || (currentGeneration && sessionID && internalSessionIds.has(sessionID)))
     if (currentGeneration && sessionID) internalSessionIds.delete(sessionID)
     return hidden
   }
-  if (info && rememberOpenChamberInternalSession(info, generation)) return true
+  if (event.type.startsWith('session.') && info && rememberOpenChamberInternalSession(info, generation)) return true
   return Boolean(currentGeneration && sessionID && internalSessionIds.has(sessionID))
 }
 

@@ -23,6 +23,7 @@ export function createGlobalMessageStreamHub({
   let everConnected = false;
   let buildUrlFailed = false;
   let eventQueue = Promise.resolve();
+  let readerGeneration = 0;
 
   const notifySubscriber = (kind, subscriber, payload) => {
     try {
@@ -63,6 +64,7 @@ export function createGlobalMessageStreamHub({
       return;
     }
 
+    const generation = ++readerGeneration;
     controller = new AbortController();
     reader = createUpstreamSseReader({
       signal: controller.signal,
@@ -92,7 +94,9 @@ export function createGlobalMessageStreamHub({
       onEvent(event) {
         const normalized = normalizeEvent(event);
         eventQueue = eventQueue.then(async () => {
+          if (generation !== readerGeneration) return;
           if (eventFilter instanceof Function && await eventFilter(normalized)) return;
+          if (generation !== readerGeneration) return;
           if (normalized.eventId) {
             replay.push(normalized);
             if (replay.length > replayLimit) {
@@ -124,6 +128,7 @@ export function createGlobalMessageStreamHub({
   };
 
   const stop = () => {
+    readerGeneration += 1;
     connected = false;
     reader?.stop();
     if (controller && !controller.signal.aborted) {

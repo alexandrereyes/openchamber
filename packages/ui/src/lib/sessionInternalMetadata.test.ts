@@ -49,6 +49,21 @@ describe('internal session metadata', () => {
     expect(visibleOpenCodeSessions([marked], generation)).toEqual([])
     // SAFETY: The test constructs the exact session.idle fields consumed by the predicate.
     expect(isOpenChamberInternalSessionEvent({ id: 'evt_current', type: 'session.idle', properties: { sessionID: 'ses_current' } } as Event)).toBe(true)
+    expect(isOpenChamberInternalSessionEvent({
+      id: 'evt_part', type: 'message.part.updated', properties: {
+        part: { id: 'part_1', messageID: 'msg_1', sessionID: 'ses_current', type: 'text', text: 'hidden' },
+      },
+    } as Event)).toBe(true)
+  })
+
+  test('message ids are not treated as session ids', () => {
+    const marked = session('ses_internal', { openchamber: { internalSession: { kind: 'walkthrough-inference' } } })
+    expect(isOpenChamberInternalSessionEvent(created(marked))).toBe(true)
+    expect(isOpenChamberInternalSessionEvent({
+      id: 'evt_message', type: 'message.updated', properties: {
+        info: { id: 'ses_internal', sessionID: 'ses_visible', role: 'user', time: { created: 1 }, agent: 'build', model: { providerID: 'p', modelID: 'm' } },
+      },
+    } as Event)).toBe(false)
   })
 
   test('stale deletion cannot clear a current-runtime classification', () => {

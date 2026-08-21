@@ -34,6 +34,21 @@ describe('internal session event registry', () => {
       async () => ({ id: 'ses_restart', metadata: internalSessionMetadata() }),
     )).resolves.toBe(true);
     expect(isOpenChamberInternalSessionEvent({ type: 'message.updated', properties: { info: { sessionID: 'ses_restart' } } })).toBe(true);
+    expect(isOpenChamberInternalSessionEvent({
+      type: 'message.part.updated', properties: { part: { sessionID: 'ses_restart', messageID: 'msg_1', id: 'part_1' } },
+    })).toBe(true);
+  });
+
+  it('does not confuse message and part ids with session ids', () => {
+    expect(isOpenChamberInternalSessionEvent({
+      type: 'session.created', properties: { info: { id: 'ses_internal', metadata: internalSessionMetadata() } },
+    })).toBe(true);
+    expect(isOpenChamberInternalSessionEvent({
+      type: 'message.updated', properties: { info: { id: 'ses_internal', sessionID: 'ses_visible' } },
+    })).toBe(false);
+    expect(isOpenChamberInternalSessionEvent({
+      type: 'message.part.updated', properties: { part: { id: 'ses_internal', sessionID: 'ses_visible' } },
+    })).toBe(false);
   });
 
   it('deduplicates failed lookups, forwards during the short failure TTL, and retries after reset', async () => {
