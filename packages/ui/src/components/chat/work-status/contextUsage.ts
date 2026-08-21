@@ -27,7 +27,27 @@ type MessageTokens = {
 type MessageLike = {
   id?: string;
   role?: string;
+  providerID?: string;
+  modelID?: string;
   tokens?: MessageTokens;
+};
+
+type ModelLike = {
+  id: string;
+  limit?: {
+    context?: number;
+    output?: number;
+  };
+};
+
+type ProviderLike = {
+  id: string;
+  models: readonly ModelLike[];
+};
+
+export type SessionModelLimits = {
+  context: number;
+  output: number;
 };
 
 type WorkStatusContextUsage = {
@@ -40,6 +60,28 @@ type WorkStatusContextUsage = {
 
 /** The store's own fallback when a model exposes no context limit. */
 export const DEFAULT_CONTEXT_LIMIT = 200_000;
+
+/** Resolve limits from the newest assistant message that identifies its model. */
+export const resolveSessionModelLimits = (
+  messages: readonly MessageLike[],
+  providers: readonly ProviderLike[],
+): SessionModelLimits => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant' || !message.providerID || !message.modelID) continue;
+
+    const provider = providers.find((entry) => entry.id === message.providerID);
+    const model = provider?.models.find((entry) => entry.id === message.modelID);
+    if (!model) continue;
+
+    return {
+      context: model.limit?.context ?? 0,
+      output: model.limit?.output ?? 0,
+    };
+  }
+
+  return { context: 0, output: 0 };
+};
 
 /**
  * Usage from the newest assistant message that reported a non-zero token count.

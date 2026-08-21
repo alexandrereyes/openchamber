@@ -118,6 +118,11 @@ subscribes to `currentProviderId` / `currentModelId` for the limits.
 `contextUsage.test.ts` pins the arithmetic — notably that the *latest*
 reporting assistant turn is the answer, not a sum across turns.
 
+The desktop context-panel chat header reuses this computation for its active
+chat tab. It resolves the context and output limits from the newest assistant
+message's recorded provider and model, so a subagent using a different model
+does not inherit the main session's selected model window.
+
 Two further rules on this readout:
 
 - The displayed percentage is computed **unrounded**. `clampPercent` applies

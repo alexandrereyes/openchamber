@@ -3,6 +3,7 @@ import React from 'react';
 import { FileTypeIcon } from '@/components/icons/FileTypeIcon';
 import { DiffViewIcon } from '@/components/icons/DiffIcon';
 import { Button } from '@/components/ui/button';
+import { ContextUsageDisplay } from '@/components/ui/ContextUsageDisplay';
 import { SortableTabsStrip } from '@/components/ui/sortable-tabs-strip';
 import { PullRequestView } from '@/components/views/PullRequestView';
 import { TerminalView } from '@/components/views/TerminalView';
@@ -26,7 +27,9 @@ import { useBrowserFaviconStore } from '@/stores/useBrowserFaviconStore';
 import { useFilesViewTabsStore } from '@/stores/useFilesViewTabsStore';
 import { useUIStore, type ContextPanelMode, type PendingDiffScope } from '@/stores/useUIStore';
 import { markSessionViewed } from '@/sync/notification-store';
-import { setExternallyViewedSession, useDirectoryStore } from '@/sync/sync-context';
+import { setExternallyViewedSession, useDirectoryStore, useSessionMessages } from '@/sync/sync-context';
+import { useConfigStore } from '@/stores/useConfigStore';
+import { computeContextUsage, resolveSessionModelLimits } from '@/components/chat/work-status/contextUsage';
 import { ContextPanelContent } from './ContextSidebarTab';
 import { BrowserPane } from '@/components/browser/BrowserPane';
 import { browserUrlLabel } from '@/lib/browser/url';
@@ -55,6 +58,40 @@ const RESIZE_FOLLOW_INTERVAL_MS = 100;
 const CONTEXT_TAB_LABEL_MAX_CHARS = 24;
 type TranslateFn = ReturnType<typeof useI18n>['t'];
 const EMPTY_SESSION_TITLE_MAP = new Map<string, string>();
+
+const SessionContextUsageIndicator: React.FC<{
+  sessionID: string;
+  directory: string;
+}> = ({ sessionID, directory }) => {
+  const messages = useSessionMessages(sessionID, directory);
+  const providers = useConfigStore((state) => state.providers);
+  const limits = React.useMemo(
+    () => resolveSessionModelLimits(messages, providers),
+    [messages, providers],
+  );
+  const usage = React.useMemo(
+    () => computeContextUsage(messages, limits.context),
+    [limits.context, messages],
+  );
+
+  if (!usage) return null;
+
+  return (
+    <ContextUsageDisplay
+      totalTokens={usage.totalTokens}
+      percentage={usage.percent}
+      colorPercentage={Math.round(usage.percent)}
+      contextLimit={usage.limit}
+      outputLimit={limits.output}
+      size="compact"
+      hideIcon
+      showPercentIcon
+      className="h-7 shrink-0 px-1"
+      valueClassName="typography-ui-label font-medium leading-none text-foreground"
+      percentIconClassName="h-4 w-4"
+    />
+  );
+};
 
 
 
@@ -1008,6 +1045,9 @@ export const ContextPanel: React.FC = () => {
         </div>
       )}
       <div className="flex items-center gap-1 px-1.5">
+        {activeChatSessionID && directoryKey ? (
+          <SessionContextUsageIndicator sessionID={activeChatSessionID} directory={directoryKey} />
+        ) : null}
         {activeTab?.mode === 'browser' ? (
           <Button
             type="button"

@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { computeContextUsage, DEFAULT_CONTEXT_LIMIT } from './contextUsage';
+import { computeContextUsage, DEFAULT_CONTEXT_LIMIT, resolveSessionModelLimits } from './contextUsage';
 
-const assistant = (tokens: Record<string, unknown>, id = 'msg') => ({ id, role: 'assistant', tokens });
+type TestTokens = {
+  total?: number;
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  cache?: { read?: number; write?: number };
+};
+
+const assistant = (tokens: TestTokens, id = 'msg') => ({ id, role: 'assistant', tokens });
 
 describe('computeContextUsage', () => {
   test('sums every token bucket of the newest reporting assistant message', () => {
@@ -80,5 +88,41 @@ describe('computeContextUsage', () => {
       100_000,
     );
     expect(usage?.totalTokens).toBe(5_000);
+  });
+});
+
+describe('resolveSessionModelLimits', () => {
+  const providers = [
+    { id: 'main-provider', models: [{ id: 'large', limit: { context: 1_000_000, output: 32_000 } }] },
+    { id: 'subagent-provider', models: [{ id: 'small', limit: { context: 128_000, output: 8_000 } }] },
+  ];
+
+  test('uses the model recorded by the subagent message', () => {
+    const limits = resolveSessionModelLimits([
+      {
+        id: 'subagent-turn',
+        role: 'assistant',
+        providerID: 'subagent-provider',
+        modelID: 'small',
+        tokens: { total: 32_000 },
+      },
+    ], providers);
+
+    expect(limits).toEqual({ context: 128_000, output: 8_000 });
+  });
+
+  test('uses the newest assistant model instead of a previous turn model', () => {
+    const limits = resolveSessionModelLimits([
+      { role: 'assistant', providerID: 'main-provider', modelID: 'large' },
+      { role: 'assistant', providerID: 'subagent-provider', modelID: 'small' },
+    ], providers);
+
+    expect(limits.context).toBe(128_000);
+  });
+
+  test('does not substitute an unrelated selected model', () => {
+    expect(resolveSessionModelLimits([
+      { role: 'assistant', providerID: 'missing', modelID: 'missing' },
+    ], providers)).toEqual({ context: 0, output: 0 });
   });
 });
