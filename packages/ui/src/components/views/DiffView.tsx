@@ -111,16 +111,20 @@ type ChangeDescriptor = {
     descriptionKey: I18nKey;
 };
 
-const CHANGE_DESCRIPTORS: Record<string, ChangeDescriptor> = {
-    '?': { code: '?', color: 'var(--status-info)', descriptionKey: 'diffView.change.untracked' },
-    A: { code: 'A', color: 'var(--status-success)', descriptionKey: 'diffView.change.new' },
-    D: { code: 'D', color: 'var(--status-error)', descriptionKey: 'diffView.change.deleted' },
-    R: { code: 'R', color: 'var(--status-info)', descriptionKey: 'diffView.change.renamed' },
-    C: { code: 'C', color: 'var(--status-info)', descriptionKey: 'diffView.change.copied' },
-    M: { code: 'M', color: 'var(--status-warning)', descriptionKey: 'diffView.change.modified' },
+const DEFAULT_CHANGE_DESCRIPTOR: ChangeDescriptor = {
+    code: 'M',
+    color: 'var(--status-warning)',
+    descriptionKey: 'diffView.change.modified',
 };
 
-const DEFAULT_CHANGE_DESCRIPTOR = CHANGE_DESCRIPTORS.M;
+const CHANGE_DESCRIPTORS = new Map<string, ChangeDescriptor>([
+    ['?', { code: '?', color: 'var(--status-info)', descriptionKey: 'diffView.change.untracked' }],
+    ['A', { code: 'A', color: 'var(--status-success)', descriptionKey: 'diffView.change.new' }],
+    ['D', { code: 'D', color: 'var(--status-error)', descriptionKey: 'diffView.change.deleted' }],
+    ['R', { code: 'R', color: 'var(--status-info)', descriptionKey: 'diffView.change.renamed' }],
+    ['C', { code: 'C', color: 'var(--status-info)', descriptionKey: 'diffView.change.copied' }],
+    ['M', DEFAULT_CHANGE_DESCRIPTOR],
+]);
 
 const getChangeSymbol = (file: GitStatus['files'][number]): string => {
     const indexCode = file.index?.trim();
@@ -134,7 +138,7 @@ const getChangeSymbol = (file: GitStatus['files'][number]): string => {
 
 const describeChange = (file: GitStatus['files'][number]): ChangeDescriptor => {
     const symbol = getChangeSymbol(file);
-    return CHANGE_DESCRIPTORS[symbol] ?? DEFAULT_CHANGE_DESCRIPTOR;
+    return CHANGE_DESCRIPTORS.get(symbol) ?? DEFAULT_CHANGE_DESCRIPTOR;
 };
 
 const isNewStatusFile = (file: GitStatus['files'][number]): boolean => {
@@ -184,13 +188,8 @@ const getFirstChangedModifiedLine = (original: string, modified: string): number
 const isBinaryPatch = (patch: string): boolean =>
     /^Binary files .+ differ$/m.test(patch) || /^GIT binary patch$/m.test(patch);
 
-const listTurnDiffs = (value: unknown): TurnSnapshotDiff[] => {
-    if (!Array.isArray(value)) return [];
-    return value.filter((diff): diff is TurnSnapshotDiff => {
-        if (!diff || typeof diff !== 'object') return false;
-        return typeof (diff as TurnSnapshotDiff).file === 'string';
-    });
-};
+const listTurnDiffs = (value?: TurnSnapshotDiff[]): TurnSnapshotDiff[] =>
+    value?.filter((diff) => diff.file !== undefined) ?? [];
 
 const statusToGitCode = (status?: string): string => {
     if (status === 'added') return 'A';
@@ -1218,7 +1217,10 @@ export const DiffView: React.FC<DiffViewProps> = ({
 
     const lastTurnDiffs = React.useMemo(() => {
         for (let index = sessionMessages.length - 1; index >= 0; index -= 1) {
-            const message = sessionMessages[index] as { role?: string; summary?: { diffs?: unknown } };
+            // SAFETY: OpenCode user messages carry the summary payload used by
+            // the existing turn-summary projections, but the SDK omits it from
+            // the public Message union.
+            const message = sessionMessages[index] as { role?: string; summary?: { diffs?: TurnSnapshotDiff[] } };
             if (message.role !== 'user') continue;
             return listTurnDiffs(message.summary?.diffs);
         }
@@ -1229,7 +1231,7 @@ export const DiffView: React.FC<DiffViewProps> = ({
         const map = new Map<string, DiffData>();
         for (const diff of lastTurnDiffs) {
             if (!diff.file) continue;
-            if (typeof diff.patch === 'string') {
+            if (diff.patch !== undefined) {
                 map.set(diff.file, createTextDiffDataFromPatch(diff.file, diff.patch, 'patch'));
                 continue;
             }
@@ -1393,7 +1395,6 @@ export const DiffView: React.FC<DiffViewProps> = ({
     }, [activeDiffScope, expandedFiles]);
 
     const queueVisibleStackedFilesSync = React.useCallback(() => {
-        if (typeof window === 'undefined') return;
         if (visibleSyncFrameRef.current !== null) return;
         visibleSyncFrameRef.current = window.requestAnimationFrame(syncVisibleStackedFiles);
     }, [syncVisibleStackedFiles]);
