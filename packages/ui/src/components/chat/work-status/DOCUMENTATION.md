@@ -126,6 +126,12 @@ models.dev metadata cache; metadata can resolve a model before the live provider
 list arrives. If neither source knows the recorded model, the indicator waits
 rather than presenting the 200K fallback as authoritative.
 
+The shared indicator keeps action semantics honest. A read-only desktop
+indicator is a focusable `progressbar` that opens its tooltip on keyboard focus;
+only callers with an `onClick` render a button. The SVG ring is decorative, and
+the progress value is one localized sentence built from locale-aware compact
+token and percentage formatting.
+
 Two further rules on this readout:
 
 - The displayed percentage is computed **unrounded**. `clampPercent` applies
