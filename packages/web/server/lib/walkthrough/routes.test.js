@@ -9,15 +9,6 @@ import { registerWalkthroughRoutes } from './routes.js';
 
 const SOURCE = { kind: 'working-tree', scope: 'all' };
 
-const waitFor = async (predicate, { timeout = 2_000, interval = 5 } = {}) => {
-  const deadline = Date.now() + timeout;
-  for (;;) {
-    if (predicate()) return;
-    if (Date.now() > deadline) throw new Error('waitFor timed out');
-    await new Promise((resolve) => setTimeout(resolve, interval));
-  }
-};
-
 describe('walkthrough routes', () => {
   let server;
   let base;

@@ -159,7 +159,6 @@ describe('session goal live activity gate', () => {
       getSmallModelService: async () => service,
       isEnabled: () => true,
       idleQuietMs: 10,
-      isEnabled: () => true,
     });
 
     runtime.processPayload({
