@@ -3,9 +3,10 @@ import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
 import { Icon } from "@/components/icon/Icon";
-import { useI18n } from '@/lib/i18n';
+import { getCurrentIntlLocale, useI18n } from '@/lib/i18n';
 import { formatMoney } from '@/lib/money';
 import { clampPercent, resolveUsageTone } from '@/lib/quota';
+import { formatContextUsageValues } from './contextUsageFormat';
 
 interface ContextUsageDisplayProps {
   totalTokens: number;
@@ -44,6 +45,7 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
 }) => {
   const { t } = useI18n();
   const [mobileTooltipOpen, setMobileTooltipOpen] = React.useState(false);
+  const intlLocale = getCurrentIntlLocale();
   const colorPct = typeof colorPercentage === 'number' ? colorPercentage : percentage;
   const progressPct = clampPercent(percentage) ?? 0;
   const progressTone = resolveUsageTone(colorPct);
@@ -54,14 +56,21 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
       : 'var(--status-success)';
 
   const formatTokens = (tokens: number) => {
-    if (tokens >= 1_000_000) {
-      return `${(tokens / 1_000_000).toFixed(1)}M`;
-    }
-    if (tokens >= 1_000) {
-      return `${(tokens / 1_000).toFixed(1)}K`;
-    }
-    return tokens.toFixed(1).replace(/\.0$/, '');
+    return new Intl.NumberFormat(intlLocale, {
+      notation: tokens >= 1_000 ? 'compact' : 'standard',
+      maximumFractionDigits: 1,
+    }).format(tokens);
   };
+
+  const { tokens: formattedTokens, percentage: formattedPercentage } = formatContextUsageValues(
+    totalTokens,
+    percentage,
+    intlLocale,
+  );
+  const accessibleValue = t('contextUsage.aria.value', {
+    tokens: formattedTokens,
+    percentage: formattedPercentage,
+  });
 
   const getPercentageColor = (pct: number) => {
     if (pct >= 90) return 'text-status-error';
@@ -96,10 +105,7 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
             <svg
               viewBox={`0 0 ${circularProgressSize} ${circularProgressSize}`}
               className={cn('h-3.5 w-3.5 -rotate-90', percentIconClassName)}
-              role="progressbar"
-              aria-valuenow={Math.round(progressPct)}
-              aria-valuemin={0}
-              aria-valuemax={100}
+              aria-hidden="true"
             >
               <circle
                 cx={circularProgressSize / 2}
@@ -123,12 +129,12 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
               />
             </svg>
             <span className="whitespace-nowrap text-foreground">
-              {formatTokens(totalTokens)} ({Math.min(percentage, 999).toFixed(1)}%)
+              {formattedTokens} ({formattedPercentage})
             </span>
           </>
         ) : (
           <>
-            <span className={getPercentageColor(colorPct)}>{Math.min(percentage, 999).toFixed(1)}</span>%
+            <span className={getPercentageColor(colorPct)}>{formattedPercentage}</span>
           </>
         )}
       </span>
@@ -144,7 +150,10 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
         'hover:bg-interactive-hover',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
       )
-      : 'text-muted-foreground/60',
+      : cn(
+        'rounded-sm text-muted-foreground/60',
+        !isMobile && 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+      ),
     className,
   );
 
@@ -152,7 +161,7 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
     <button
       type="button"
       className={sharedClassName}
-      aria-label={t('contextUsage.aria.label')}
+      aria-label={accessibleValue}
       aria-pressed={pressed}
       onClick={onClick}
     >
@@ -161,7 +170,14 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
   ) : (
     <div
       className={sharedClassName}
-      aria-label={t('contextUsage.aria.label')}
+      data-focus-ring={!isMobile ? 'accent' : undefined}
+      role={!isMobile ? 'progressbar' : undefined}
+      aria-label={!isMobile ? t('contextUsage.aria.label') : undefined}
+      aria-valuenow={!isMobile ? Math.round(progressPct) : undefined}
+      aria-valuemin={!isMobile ? 0 : undefined}
+      aria-valuemax={!isMobile ? 100 : undefined}
+      aria-valuetext={!isMobile ? accessibleValue : undefined}
+      tabIndex={!isMobile ? 0 : undefined}
       onClick={isMobile ? () => setMobileTooltipOpen(true) : undefined}
     >
       {contextContent}
@@ -200,7 +216,7 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
               <div className="flex justify-between items-center pt-1 border-t border-border/40">
                 <span className="typography-meta text-muted-foreground">{t('contextUsage.mobile.usage')}</span>
                 <span className={cn('typography-meta font-semibold', getPercentageColor(colorPct))}>
-                  {Math.min(percentage, 999).toFixed(1)}%
+                  {formattedPercentage}
                 </span>
               </div>
             </div>

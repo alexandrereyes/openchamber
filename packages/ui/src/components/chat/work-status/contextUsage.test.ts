@@ -1,7 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import { computeContextUsage, DEFAULT_CONTEXT_LIMIT } from './contextUsage';
+import {
+  computeContextUsage,
+  DEFAULT_CONTEXT_LIMIT,
+  resolveSessionContextSnapshot,
+} from './contextUsage';
+import type { ModelMetadata } from '@/types';
 
-const assistant = (tokens: Record<string, unknown>, id = 'msg') => ({ id, role: 'assistant', tokens });
+type TestTokens = {
+  total?: number;
+  input?: number;
+  output?: number;
+  reasoning?: number;
+  cache?: { read?: number; write?: number };
+};
+
+const assistant = (tokens: TestTokens, id = 'msg') => ({ id, role: 'assistant', tokens });
 
 describe('computeContextUsage', () => {
   test('sums every token bucket of the newest reporting assistant message', () => {
@@ -80,5 +93,106 @@ describe('computeContextUsage', () => {
       100_000,
     );
     expect(usage?.totalTokens).toBe(5_000);
+  });
+});
+
+describe('resolveSessionContextSnapshot', () => {
+  const providers = [
+    { id: 'provider-a', models: [{ id: 'model-a', limit: { context: 100_000, output: 4_000 } }] },
+    { id: 'provider-b', models: [{ id: 'model-b', limit: { context: 200_000, output: 8_000 } }] },
+  ];
+  const noMetadata = new Map<string, ModelMetadata>();
+
+  test('keeps tokens and limits on the same reporting message during a model change', () => {
+    const first = resolveSessionContextSnapshot([
+      { id: 'a', role: 'assistant', providerID: 'provider-a', modelID: 'model-a', tokens: { total: 20_000 } },
+    ], providers, noMetadata);
+    expect(first).toEqual({
+      messageID: 'a',
+      providerID: 'provider-a',
+      modelID: 'model-a',
+      totalTokens: 20_000,
+      contextLimit: 100_000,
+      outputLimit: 4_000,
+      percent: 20,
+    });
+
+    const whileBHasNoTokens = resolveSessionContextSnapshot([
+      { id: 'a', role: 'assistant', providerID: 'provider-a', modelID: 'model-a', tokens: { total: 20_000 } },
+      { id: 'b-pending', role: 'assistant', providerID: 'provider-b', modelID: 'model-b' },
+    ], providers, noMetadata);
+    expect(whileBHasNoTokens).toEqual(first);
+
+    const firstBReport = resolveSessionContextSnapshot([
+      { id: 'a', role: 'assistant', providerID: 'provider-a', modelID: 'model-a', tokens: { total: 20_000 } },
+      { id: 'b', role: 'assistant', providerID: 'provider-b', modelID: 'model-b', tokens: { total: 50_000 } },
+    ], providers, noMetadata);
+    expect(firstBReport).toEqual({
+      messageID: 'b',
+      providerID: 'provider-b',
+      modelID: 'model-b',
+      totalTokens: 50_000,
+      contextLimit: 200_000,
+      outputLimit: 8_000,
+      percent: 25,
+    });
+  });
+
+  test('uses metadata limits when the live provider list has not loaded', () => {
+    const metadata = new Map<string, ModelMetadata>([[
+      'provider-a/model-a',
+      { id: 'model-a', providerId: 'provider-a', limit: { context: 160_000, output: 12_000 } },
+    ]]);
+
+    expect(resolveSessionContextSnapshot([
+      { role: 'assistant', providerID: 'PROVIDER-A', modelID: 'model-a', tokens: { total: 40_000 } },
+    ], [], metadata)).toEqual({
+      providerID: 'PROVIDER-A',
+      modelID: 'model-a',
+      totalTokens: 40_000,
+      contextLimit: 160_000,
+      outputLimit: 12_000,
+      percent: 25,
+    });
+  });
+
+  test('stays unresolved while providers and metadata are empty', () => {
+    expect(resolveSessionContextSnapshot([
+      { role: 'assistant', providerID: 'provider-a', modelID: 'model-a', tokens: { total: 40_000 } },
+    ], [], noMetadata)).toBeNull();
+  });
+
+  test('resolves after provider data arrives and prefers its live limits', () => {
+    const messages = [
+      { role: 'assistant', providerID: 'provider-a', modelID: 'model-a', tokens: { total: 20_000 } },
+    ];
+    expect(resolveSessionContextSnapshot(messages, [], noMetadata)).toBeNull();
+
+    const metadata = new Map<string, ModelMetadata>([[
+      'provider-a/model-a',
+      { id: 'model-a', providerId: 'provider-a', limit: { context: 160_000, output: 12_000 } },
+    ]]);
+    expect(resolveSessionContextSnapshot(messages, providers, metadata)).toEqual({
+      providerID: 'provider-a',
+      modelID: 'model-a',
+      totalTokens: 20_000,
+      contextLimit: 100_000,
+      outputLimit: 4_000,
+      percent: 20,
+    });
+  });
+
+  test('uses the intentional fallback only after the recorded model resolves', () => {
+    const providerWithoutLimits = [{ id: 'provider-a', models: [{ id: 'model-a' }] }];
+    expect(resolveSessionContextSnapshot([
+      { role: 'assistant', providerID: 'provider-a', modelID: 'model-a', tokens: { total: 20_000 } },
+    ], providerWithoutLimits, noMetadata)).toEqual({
+      providerID: 'provider-a',
+      modelID: 'model-a',
+      totalTokens: 20_000,
+      contextLimit: DEFAULT_CONTEXT_LIMIT,
+      outputLimit: 0,
+      percent: 10,
+    });
   });
 });
