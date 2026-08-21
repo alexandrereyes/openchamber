@@ -1,9 +1,31 @@
 import { describe, expect, test } from 'bun:test'
-import type { OpencodeClient } from '@opencode-ai/sdk/v2'
+import type { OpencodeClient, Session } from '@opencode-ai/sdk/v2'
+import type { Event } from '@opencode-ai/sdk/v2/client'
 
-import { listGlobalSessionPages, splitGlobalSessionsByArchived } from './globalSessions'
+import { filterManagedChatsForRuntime, listGlobalSessionPages, splitGlobalSessionsByArchived } from './globalSessions'
 import { isOpenChamberInternalSessionEvent, resetOpenChamberInternalSessions } from '@/lib/sessionInternalMetadata'
-import type { Event, Session } from '@opencode-ai/sdk/v2/client'
+
+describe('managed Chats runtime visibility', () => {
+  const session = (id: string, directory: string): Session => ({
+    id,
+    slug: id,
+    projectID: 'project',
+    directory,
+    title: id,
+    version: '1',
+    time: { created: 1, updated: 1 },
+  })
+  const chat = session('chat', '/home/user/.config/openchamber/chats/2026-08-21/session-a')
+  const project = session('project', '/workspace/project')
+
+  test('VS Code rejects managed Chats before they enter global state', () => {
+    expect(filterManagedChatsForRuntime([chat, project], true)).toEqual([project])
+  })
+
+  test('other runtimes retain managed Chats', () => {
+    expect(filterManagedChatsForRuntime([chat, project], false)).toEqual([chat, project])
+  })
+})
 
 describe('listGlobalSessionPages', () => {
   test('a stale runtime response filters marked sessions without repopulating the current registry', async () => {

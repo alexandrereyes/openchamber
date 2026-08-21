@@ -4,6 +4,7 @@ import { retry } from "@/sync/retry";
 import { stripSessionListDetails } from "@/sync/sanitize";
 import { startSessionLoadPerformanceEvent } from "@/sync/session-load-performance";
 import { getOpenChamberInternalSessionGeneration, rememberOpenChamberInternalSession } from '@/lib/sessionInternalMetadata';
+import { isChatDirectoryPath } from '@/lib/chatDirectories';
 
 export type GlobalSessionRecord = Session & {
     project?: {
@@ -12,6 +13,12 @@ export type GlobalSessionRecord = Session & {
         worktree?: string;
     } | null;
 };
+
+export const filterManagedChatsForRuntime = (sessions: Session[], vscode: boolean): Session[] => (
+    vscode
+        ? sessions.filter((session) => !isChatDirectoryPath(session.directory))
+        : sessions
+);
 
 const toNumber = (value: string | null): number | null => {
     if (!value) {
