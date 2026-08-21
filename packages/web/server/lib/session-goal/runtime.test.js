@@ -36,6 +36,7 @@ const startIdleTick = async (fetchImpl) => {
     getOpenCodeAuthHeaders: () => ({}),
     getSmallModelService,
     idleQuietMs: 10,
+    isEnabled: () => true,
   });
   runtime.processPayload({
     type: 'session.status',
@@ -157,6 +158,7 @@ describe('session goal live activity gate', () => {
       getOpenCodeAuthHeaders: () => ({}),
       getSmallModelService: async () => service,
       idleQuietMs: 10,
+      isEnabled: () => true,
     });
 
     runtime.processPayload({
