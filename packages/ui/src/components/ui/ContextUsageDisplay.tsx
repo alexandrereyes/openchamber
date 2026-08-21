@@ -97,9 +97,11 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
               viewBox={`0 0 ${circularProgressSize} ${circularProgressSize}`}
               className={cn('h-3.5 w-3.5 -rotate-90', percentIconClassName)}
               role="progressbar"
+              aria-label={t('contextUsage.aria.label')}
               aria-valuenow={Math.round(progressPct)}
               aria-valuemin={0}
               aria-valuemax={100}
+              aria-valuetext={`${formatTokens(totalTokens)} (${Math.min(percentage, 999).toFixed(1)}%)`}
             >
               <circle
                 cx={circularProgressSize / 2}
@@ -148,12 +150,12 @@ export const ContextUsageDisplay: React.FC<ContextUsageDisplayProps> = ({
     className,
   );
 
-  const contextElement = isInteractive ? (
+  const contextElement = !isMobile ? (
     <button
       type="button"
       className={sharedClassName}
       aria-label={t('contextUsage.aria.label')}
-      aria-pressed={pressed}
+      aria-pressed={isInteractive ? pressed : undefined}
       onClick={onClick}
     >
       {contextContent}

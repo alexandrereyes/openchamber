@@ -14,6 +14,8 @@
  */
 
 import { contextTokensFromBreakdown } from '@/stores/utils/tokenUtils';
+import { mergeModelMetadataWithLiveModel } from '@/lib/modelMetadata';
+import type { ModelMetadata } from '@/types';
 
 type MessageTokens = {
   /** Server-reported window of the turn's final round-trip; absent on older servers. */
@@ -45,9 +47,14 @@ type ProviderLike = {
   models: readonly ModelLike[];
 };
 
-export type SessionModelLimits = {
-  context: number;
-  output: number;
+export type SessionContextSnapshot = {
+  messageID?: string;
+  providerID: string;
+  modelID: string;
+  totalTokens: number;
+  contextLimit: number;
+  outputLimit: number;
+  percent: number;
 };
 
 type WorkStatusContextUsage = {
@@ -61,26 +68,50 @@ type WorkStatusContextUsage = {
 /** The store's own fallback when a model exposes no context limit. */
 export const DEFAULT_CONTEXT_LIMIT = 200_000;
 
-/** Resolve limits from the newest assistant message that identifies its model. */
-export const resolveSessionModelLimits = (
+/**
+ * Resolve token usage and model limits from one assistant message. A newer
+ * model-selection message without tokens cannot lend its limits to an older
+ * turn. Missing provider/catalog data remains unresolved until config catches
+ * up, while a resolved model with no advertised context limit uses the same
+ * intentional fallback as the other context readouts.
+ */
+export const resolveSessionContextSnapshot = (
   messages: readonly MessageLike[],
   providers: readonly ProviderLike[],
-): SessionModelLimits => {
+  modelsMetadata: ReadonlyMap<string, ModelMetadata>,
+): SessionContextSnapshot | null => {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    if (message?.role !== 'assistant' || !message.providerID || !message.modelID) continue;
+    if (message?.role !== 'assistant' || !message.tokens || !message.providerID || !message.modelID) continue;
+
+    const totalTokens = contextTokensFromBreakdown(message.tokens);
+    if (totalTokens <= 0) continue;
 
     const provider = providers.find((entry) => entry.id === message.providerID);
-    const model = provider?.models.find((entry) => entry.id === message.modelID);
-    if (!model) continue;
+    const liveModel = provider?.models.find((entry) => entry.id === message.modelID);
+    const metadata = modelsMetadata.get(`${message.providerID.toLowerCase()}/${message.modelID}`);
+    if (!liveModel && !metadata) return null;
+
+    const resolvedMetadata = liveModel
+      ? mergeModelMetadataWithLiveModel(message.providerID, liveModel, metadata)
+      : metadata;
+    const advertisedContextLimit = resolvedMetadata?.limit?.context ?? 0;
+    const contextLimit = advertisedContextLimit > 0 ? advertisedContextLimit : DEFAULT_CONTEXT_LIMIT;
+    const advertisedOutputLimit = resolvedMetadata?.limit?.output ?? 0;
+    const outputLimit = advertisedOutputLimit > 0 ? advertisedOutputLimit : 0;
 
     return {
-      context: model.limit?.context ?? 0,
-      output: model.limit?.output ?? 0,
+      messageID: message.id,
+      providerID: message.providerID,
+      modelID: message.modelID,
+      totalTokens,
+      contextLimit,
+      outputLimit,
+      percent: (totalTokens / contextLimit) * 100,
     };
   }
 
-  return { context: 0, output: 0 };
+  return null;
 };
 
 /**

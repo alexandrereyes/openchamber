@@ -118,10 +118,13 @@ subscribes to `currentProviderId` / `currentModelId` for the limits.
 `contextUsage.test.ts` pins the arithmetic — notably that the *latest*
 reporting assistant turn is the answer, not a sum across turns.
 
-The desktop context-panel chat header reuses this computation for its active
-chat tab. It resolves the context and output limits from the newest assistant
-message's recorded provider and model, so a subagent using a different model
-does not inherit the main session's selected model window.
+The desktop context-panel chat header resolves one coherent snapshot from the
+newest token-reporting assistant message: tokens, provider, model and limits all
+come from that message. A newer assistant message without tokens leaves the
+previous complete snapshot visible. Live model limits take precedence over the
+models.dev metadata cache; metadata can resolve a model before the live provider
+list arrives. If neither source knows the recorded model, the indicator waits
+rather than presenting the 200K fallback as authoritative.
 
 Two further rules on this readout:
 

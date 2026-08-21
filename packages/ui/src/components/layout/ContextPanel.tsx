@@ -29,7 +29,7 @@ import { useUIStore, type ContextPanelMode, type PendingDiffScope } from '@/stor
 import { markSessionViewed } from '@/sync/notification-store';
 import { setExternallyViewedSession, useDirectoryStore, useSessionMessages } from '@/sync/sync-context';
 import { useConfigStore } from '@/stores/useConfigStore';
-import { computeContextUsage, resolveSessionModelLimits } from '@/components/chat/work-status/contextUsage';
+import { resolveSessionContextSnapshot } from '@/components/chat/work-status/contextUsage';
 import { ContextPanelContent } from './ContextSidebarTab';
 import { BrowserPane } from '@/components/browser/BrowserPane';
 import { browserUrlLabel } from '@/lib/browser/url';
@@ -65,24 +65,21 @@ const SessionContextUsageIndicator: React.FC<{
 }> = ({ sessionID, directory }) => {
   const messages = useSessionMessages(sessionID, directory);
   const providers = useConfigStore((state) => state.providers);
-  const limits = React.useMemo(
-    () => resolveSessionModelLimits(messages, providers),
-    [messages, providers],
-  );
-  const usage = React.useMemo(
-    () => computeContextUsage(messages, limits.context),
-    [limits.context, messages],
+  const modelsMetadata = useConfigStore((state) => state.modelsMetadata);
+  const snapshot = React.useMemo(
+    () => resolveSessionContextSnapshot(messages, providers, modelsMetadata),
+    [messages, modelsMetadata, providers],
   );
 
-  if (!usage) return null;
+  if (!snapshot) return null;
 
   return (
     <ContextUsageDisplay
-      totalTokens={usage.totalTokens}
-      percentage={usage.percent}
-      colorPercentage={Math.round(usage.percent)}
-      contextLimit={usage.limit}
-      outputLimit={limits.output}
+      totalTokens={snapshot.totalTokens}
+      percentage={snapshot.percent}
+      colorPercentage={Math.round(snapshot.percent)}
+      contextLimit={snapshot.contextLimit}
+      outputLimit={snapshot.outputLimit}
       size="compact"
       hideIcon
       showPercentIcon
