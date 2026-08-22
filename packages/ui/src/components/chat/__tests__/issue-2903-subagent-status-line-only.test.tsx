@@ -226,7 +226,7 @@ describe('issue #2903 busy embedded subagent status-line-only', () => {
     expect(chatContainerSource).toContain('void ensureSessionRenderable(currentSessionId);');
   });
 
-  test('empty+busy branch skips empty state so StatusRowContainer can stand alone', () => {
+  test('empty idle guard does not intercept the busy status row', () => {
     expect(chatContainerSource).toContain('if (sessionMessages.length === 0 && !sessionIsWorking)');
     expect(chatContainerSource).toContain('<ChatEmptyState');
     expect(chatContainerSource).toContain('<StatusRowContainer />');
@@ -238,7 +238,7 @@ describe('issue #2903 busy embedded subagent status-line-only', () => {
       emptyStateReturn,
       emptyStateReturn + 1600,
     );
-    expect(emptyStateBlock).toContain('<ChatEmptyState');
+    expect(emptyStateBlock).not.toContain('<ChatEmptyState');
     expect(emptyStateBlock).not.toContain('<StatusRowContainer />');
   });
 
