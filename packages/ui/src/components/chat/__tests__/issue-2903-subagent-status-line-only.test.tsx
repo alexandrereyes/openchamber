@@ -234,11 +234,9 @@ describe('issue #2903 busy embedded subagent status-line-only', () => {
     const emptyBusyGuard = 'if (sessionMessages.length === 0 && !sessionIsWorking)';
     const emptyStateReturn = chatContainerSource.indexOf(emptyBusyGuard);
     expect(emptyStateReturn).toBeGreaterThan(-1);
-    const emptyStateBlock = chatContainerSource.slice(
-      emptyStateReturn,
-      emptyStateReturn + 1600,
-    );
-    expect(emptyStateBlock).toContain('<ChatEmptyState');
+    const chatViewportReturn = chatContainerSource.indexOf('<ChatViewport', emptyStateReturn);
+    expect(chatViewportReturn).toBeGreaterThan(emptyStateReturn);
+    const emptyStateBlock = chatContainerSource.slice(emptyStateReturn, chatViewportReturn);
     expect(emptyStateBlock).not.toContain('<StatusRowContainer />');
   });
 
