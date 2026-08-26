@@ -1287,6 +1287,7 @@ export const dict = {
   'filesView.diagram.closeDiagramView': 'Diagrammansicht schließen',
   'filesView.diagram.saveDiagram': 'Diagramm speichern',
   'contextUsage.aria.label': 'Kontextnutzung',
+  'contextUsage.aria.value': '{tokens}, {percentage} des Kontexts verwendet',
   'contextUsage.mobile.title': 'Kontextnutzung',
   'contextUsage.mobile.usedTokens': 'Verwendete Tokens',
   'contextUsage.mobile.contextLimit': 'Kontextlimit',
