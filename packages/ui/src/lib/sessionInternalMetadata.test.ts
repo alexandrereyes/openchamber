@@ -54,9 +54,11 @@ describe('internal session metadata', () => {
   test('hides nested message and part events for a registered internal session', () => {
     const marked = session('ses_nested', { openchamber: { internalSession: { kind: 'walkthrough-inference' } } })
     expect(isOpenChamberInternalSessionEvent(created(marked))).toBe(true)
+    // SAFETY: The test constructs the nested message.updated shape consumed by the predicate.
     expect(isOpenChamberInternalSessionEvent({
       id: 'evt_message', type: 'message.updated', properties: { info: { id: 'msg_1', sessionID: marked.id } },
     } as Event)).toBe(true)
+    // SAFETY: The test constructs the nested message.part.updated shape consumed by the predicate.
     expect(isOpenChamberInternalSessionEvent({
       id: 'evt_part', type: 'message.part.updated', properties: { part: { id: 'part_1', sessionID: marked.id } },
     } as Event)).toBe(true)
