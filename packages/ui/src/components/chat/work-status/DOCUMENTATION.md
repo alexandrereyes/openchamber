@@ -129,10 +129,12 @@ reporting assistant turn is the answer, not a sum across turns.
 
 Two further rules on this readout:
 
-- The displayed percentage is computed **unrounded**. `clampPercent` applies
-  `Math.round`, so routing the display value through it turned 33.6% into
-  "34.0%" and made the panel disagree with the header. Rounding is still right
-  for the colour threshold, which is what the header feeds it.
+- The readout shows the compact absolute token count followed by the percentage,
+  for example `48.2K (23.1%)`, matching the shared header meter. The displayed
+  percentage is computed **unrounded**. `clampPercent` applies `Math.round`, so
+  routing the display value through it turned 33.6% into "34.0%" and made the
+  panel disagree with the header. Rounding is still right for the colour
+  threshold, which is what the header feeds it.
 - When the model exposes no context limit, the percentage falls back to the
   store's own default limit instead of disappearing.
 
