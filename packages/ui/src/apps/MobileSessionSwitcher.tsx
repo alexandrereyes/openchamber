@@ -10,13 +10,14 @@ import { useTabletLayout } from '@/lib/device';
 import { useI18n } from '@/lib/i18n';
 import { getRuntimeKey } from '@/lib/runtime-switch';
 import { cn } from '@/lib/utils';
-import { refreshGlobalSessions, resolveGlobalSessionDirectory } from '@/stores/useGlobalSessionsStore';
+import { refreshGlobalSessions, resolveGlobalSessionDirectory, useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useSessionUnseenCount } from '@/sync/notification-store';
 import { useHasSessionActivityDuration } from '@/sync/session-activity-timing';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useGlobalSessionStatus } from '@/sync/sync-context';
 
+import { archiveMobileSessionSubtree, deleteMobileSessionSubtree } from './mobileSessionArchive';
 import { resolveSwipeMove, type SwipeAxis } from './mobileSessionSwipe';
 
 const RECENT_SESSIONS_LIMIT = 10;
@@ -466,7 +467,17 @@ export const MobileSessionSwitcher: React.FC<{
     setRevealedSessionId(null);
     setConfirmingDeleteSessionId(null);
     try {
-      const { archivedIds, failedIds } = await archiveSessions([session.id], { expectedRuntimeKey });
+      const globalSessions = useGlobalSessionsStore.getState();
+      const { archivedIds, failedIds } = await archiveMobileSessionSubtree({
+        sessions: [...globalSessions.activeSessions, ...globalSessions.archivedSessions],
+        rootId: session.id,
+        expectedRuntimeKey,
+        archiveSessions,
+        captureDirectory: (sessionId, candidate) => (
+          (candidate ? resolveGlobalSessionDirectory(candidate) : null)
+          ?? useSessionUIStore.getState().getDirectoryForSession(sessionId)
+        ),
+      });
       if (archivedIds.includes(session.id) && failedIds.length === 0) {
         toast.success(t('sessions.sidebar.session.archive.success'));
       } else {
@@ -493,7 +504,17 @@ export const MobileSessionSwitcher: React.FC<{
     setRevealedSessionId(null);
     setConfirmingDeleteSessionId(null);
     try {
-      const { deletedIds, failedIds } = await deleteSessions([session.id], { expectedRuntimeKey });
+      const globalSessions = useGlobalSessionsStore.getState();
+      const { deletedIds, failedIds } = await deleteMobileSessionSubtree({
+        sessions: [...globalSessions.activeSessions, ...globalSessions.archivedSessions],
+        rootId: session.id,
+        expectedRuntimeKey,
+        deleteSessions,
+        captureDirectory: (sessionId, candidate) => (
+          (candidate ? resolveGlobalSessionDirectory(candidate) : null)
+          ?? useSessionUIStore.getState().getDirectoryForSession(sessionId)
+        ),
+      });
       if (deletedIds.includes(session.id) && failedIds.length === 0) {
         toast.success(t('sessions.sidebar.session.delete.success'));
       } else {
