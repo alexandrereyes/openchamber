@@ -44,6 +44,7 @@ import { getReconnectCandidateSessionIds, mergeBootstrapSessions } from "./recon
 import { messagesBefore } from "./message-ordering"
 import { opencodeClient } from "@/lib/opencode/client"
 import { usePermissionStore } from "@/stores/permissionStore"
+import { getOpenChamberInternalSessionGeneration, isOpenChamberInternalSessionEvent, visibleOpenCodeSessions } from "@/lib/sessionInternalMetadata"
 import {
   processVSCodePermissionAutoAccept,
   processVSCodeReconciledPermissionAutoAccept,
@@ -219,6 +220,7 @@ type DirectoryEventBatch = {
   changedStores: Set<StoreApi<DirectoryStore>>
   globalSessionEvents: Event[]
   globalStatusEventsByDirectory: Map<string, Event[]>
+  internalSessionGeneration?: number
 }
 
 const createDirectoryEventBatch = (): DirectoryEventBatch => ({
@@ -235,7 +237,7 @@ const getDirectoryEventState = (
 ): DirectoryStore => batch?.states.get(store) ?? store.getState()
 
 const publishDirectoryEventBatch = (batch: DirectoryEventBatch): void => {
-  applySessionEventsToGlobalSessions(batch.globalSessionEvents)
+  applySessionEventsToGlobalSessions(batch.globalSessionEvents, batch.internalSessionGeneration)
   for (const [directory, events] of batch.globalStatusEventsByDirectory) {
     applyGlobalSessionStatusEvents(directory, events)
   }
@@ -1488,7 +1490,9 @@ export function handleEvent(
   streamingDirectory?: string,
   batch?: DirectoryEventBatch,
   globalEffectsAlreadyApplied = false,
+  internalSessionGeneration?: number,
 ) {
+  if (isOpenChamberInternalSessionEvent(payload, internalSessionGeneration)) return
   if ((payload as { type?: unknown }).type === "openchamber:permission-auto-accept.updated") {
     const properties = (payload as unknown as { properties?: unknown }).properties
     if (properties && typeof properties === "object") {
@@ -1523,7 +1527,7 @@ export function handleEvent(
       if (statusEvents) statusEvents.push(payload)
       else batch.globalStatusEventsByDirectory.set(directory, [payload])
     } else {
-      applySessionEventToGlobalSessions(payload)
+      applySessionEventToGlobalSessions(payload, internalSessionGeneration)
       // Child stores remain the primary source for synced directories; this
       // index covers unopened directories and list/status races.
       applyGlobalSessionStatusEvent(directory, payload)
@@ -2299,7 +2303,7 @@ export function SyncProvider(props: {
       routeDirectory: (directory, payload) => {
         return resolveDirectoryFromRoutingIndex(routingIndex, directory, payload, childStores)
       },
-      onEvents: (directory, payloads) => {
+      onEvents: (directory, payloads, internalSessionGeneration) => {
         // Track ALL stream activity (including heartbeats) as proof of
         // connection health. The watchdog stale check uses this to distinguish
         // a genuinely dead stream (no heartbeats for 20s) from a quiet-but-
@@ -2308,6 +2312,7 @@ export function SyncProvider(props: {
         // quiet session, triggering redundant full resyncs every ~15s.
         lastStreamActivityAtRef.current = Date.now()
         const batch = createDirectoryEventBatch()
+        batch.internalSessionGeneration = internalSessionGeneration
         try {
           for (const payload of payloads) {
             dispatchVSCodeRuntimeNotificationEvent(directory, payload)
@@ -2319,7 +2324,7 @@ export function SyncProvider(props: {
                 dispatchOpenCodeUpdateAvailable({ version })
               }
             }
-            handleEvent(directory, payload, childStores, routingIndex, runtimeKey, false, currentDirectoryRef.current, batch)
+            handleEvent(directory, payload, childStores, routingIndex, runtimeKey, false, currentDirectoryRef.current, batch, false, internalSessionGeneration)
           }
         } finally {
           publishDirectoryEventBatch(batch)
@@ -2388,8 +2393,9 @@ export function SyncProvider(props: {
       if (parentSessionIds.length === 0) return
       try {
         const scopedClient = opencodeClient.getScopedSdkClient(directory)
-        const result: unknown = await runBackgroundNetworkTask(() => scopedClient.session.list({ directory, limit: 200 }))
-        const allSessions = ((result as { data?: unknown }).data ?? []) as Session[]
+        const internalSessionGeneration = getOpenChamberInternalSessionGeneration()
+        const result = await runBackgroundNetworkTask(() => scopedClient.session.list({ directory, limit: 200 }))
+        const allSessions = visibleOpenCodeSessions(result.data ?? [], internalSessionGeneration)
         const state = store.getState()
         const existingIds = new Set(state.session.map((s) => s.id))
         const parentIdSet = new Set(parentSessionIds)
