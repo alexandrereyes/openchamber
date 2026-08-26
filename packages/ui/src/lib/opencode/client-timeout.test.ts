@@ -37,6 +37,7 @@ mock.module('@/lib/runtime-url', () => ({
 mock.module('@/lib/runtime-switch', () => ({
   getRuntimeApiBaseUrl: mock(() => ''),
   getRuntimeKey: mock(() => 'test-runtime'),
+  subscribeRuntimeEndpointWillChange: mock(() => () => undefined),
 }));
 
 mock.module('@/lib/runtime-fetch', () => ({
