@@ -9,6 +9,7 @@ import { getRuntimeKey, subscribeRuntimeEndpointWillChange } from "@/lib/runtime
 import { streamPerfCount, streamPerfMark } from "@/stores/utils/streamDebug"
 import { stripSessionDiffSnapshots } from "./sanitize"
 import { shouldSkipStaleSessionEvent } from "./session-event-freshness"
+import { isOpenChamberInternalSessionEvent } from "@/lib/sessionInternalMetadata"
 
 const pendingGlobalSessionUpdates = new Map<string, { runtimeKey: string; session: Session }>()
 
@@ -28,25 +29,31 @@ const getSessionInfoFromPayload = (event: Event): Session | null => {
     return null
   }
 
-  const properties = (event as { properties?: unknown }).properties
-  if (!properties || typeof properties !== "object") {
+  // SAFETY: OpenCode session lifecycle events own a properties object; this
+  // narrow view reads only their shared info field before validating it.
+  const properties = (event as { properties?: { info?: Partial<Session> } }).properties
+  if (!properties) {
     return null
   }
 
-  const info = (properties as { info?: unknown }).info
-  if (!info || typeof info !== "object") {
+  const info = properties.info
+  if (!info) {
     return null
   }
 
-  const session = info as Partial<Session>
-  if (typeof session.id !== "string" || !session.time) {
+  if (info.id?.constructor !== String || !info.time) {
     return null
   }
 
-  return stripSessionDiffSnapshots(session as Session)
+  // SAFETY: id and time are the required Session fields consumed by this
+  // boundary; the SDK event contract supplies the remaining session fields.
+  return stripSessionDiffSnapshots(info as Session)
 }
 
-export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): void => {
+export const applySessionEventsToGlobalSessions = (
+  payloads: readonly Event[],
+  internalSessionGeneration?: number,
+): void => {
   if (payloads.length === 0) return
   const runtimeKey = getRuntimeKey()
   const store = useGlobalSessionsStore.getState()
@@ -62,6 +69,8 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): 
   }
 
   for (const payload of payloads) {
+    if (isOpenChamberInternalSessionEvent(payload, internalSessionGeneration)) continue
+
     if (payload.type === "session.idle" || payload.type === "session.error") {
       const sessionID = (payload as { properties?: { sessionID?: unknown } }).properties?.sessionID
       if (typeof sessionID !== "string") continue
@@ -122,6 +131,6 @@ export const applySessionEventsToGlobalSessions = (payloads: readonly Event[]): 
   streamPerfCount("ui.global_sessions.event_update_publication")
 }
 
-export const applySessionEventToGlobalSessions = (payload: Event): void => {
-  applySessionEventsToGlobalSessions([payload])
+export const applySessionEventToGlobalSessions = (payload: Event, internalSessionGeneration?: number): void => {
+  applySessionEventsToGlobalSessions([payload], internalSessionGeneration)
 }

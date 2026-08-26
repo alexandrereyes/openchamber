@@ -137,4 +137,74 @@ describe('createGlobalMessageStreamHub', () => {
       warnSpy.mockRestore();
     }
   });
+
+  it('filters events before ordered fanout and replay without blocking later events', async () => {
+    const received = [];
+    const hub = createGlobalMessageStreamHub({
+      buildOpenCodeUrl: (pathname) => `http://127.0.0.1:4096${pathname}`,
+      getOpenCodeAuthHeaders: () => ({}),
+      upstreamReconnectDelayMs: 100,
+      eventFilter: async (event) => event.eventId === 'evt-internal',
+      fetchImpl: async () => createSseResponse({ blocks: [
+        'id: evt-internal\ndata: {"type":"session.created","properties":{}}\n\nid: evt-visible\ndata: {"type":"session.updated","properties":{}}\n\n',
+      ] }),
+    });
+    hub.subscribeEvent((event) => received.push(event.eventId));
+    try {
+      hub.start();
+      await hub.drainEvents();
+      await waitForAssertion(() => expect(received).toEqual(['evt-visible']));
+      expect(hub.replayAfter('evt-internal')).toEqual([]);
+    } finally {
+      hub.stop();
+    }
+  });
+
+  it('starts independent classifications concurrently while preserving event order', async () => {
+    const pending = new Map();
+    const received = [];
+    const hub = createGlobalMessageStreamHub({
+      buildOpenCodeUrl: (pathname) => `http://127.0.0.1:4096${pathname}`,
+      getOpenCodeAuthHeaders: () => ({}),
+      upstreamReconnectDelayMs: 100,
+      eventFilter: (event) => new Promise((resolve) => pending.set(event.eventId, resolve)),
+      fetchImpl: async () => createSseResponse({ blocks: [
+        'id: evt-1\ndata: {"type":"session.updated","properties":{}}\n\nid: evt-2\ndata: {"type":"session.updated","properties":{}}\n\n',
+      ] }),
+    });
+    hub.subscribeEvent((event) => received.push(event.eventId));
+    try {
+      hub.start();
+      await waitForAssertion(() => expect([...pending.keys()]).toEqual(['evt-1', 'evt-2']));
+      pending.get('evt-2')(false);
+      await Promise.resolve();
+      expect(received).toEqual([]);
+      pending.get('evt-1')(false);
+      await hub.drainEvents();
+      expect(received).toEqual(['evt-1', 'evt-2']);
+    } finally {
+      hub.stop();
+    }
+  });
+
+  it('drops classified events from a stopped runtime', async () => {
+    let resolveFilter;
+    const received = [];
+    const hub = createGlobalMessageStreamHub({
+      buildOpenCodeUrl: (pathname) => `http://127.0.0.1:4096${pathname}`,
+      getOpenCodeAuthHeaders: () => ({}),
+      upstreamReconnectDelayMs: 100,
+      eventFilter: () => new Promise((resolve) => { resolveFilter = resolve; }),
+      fetchImpl: async () => createSseResponse({ blocks: [
+        'id: evt-old\ndata: {"type":"session.updated","properties":{}}\n\n',
+      ] }),
+    });
+    hub.subscribeEvent((event) => received.push(event.eventId));
+    hub.start();
+    await waitForAssertion(() => expect(resolveFilter).toBeTypeOf('function'));
+    hub.stop();
+    resolveFilter(false);
+    await Promise.resolve();
+    expect(received).toEqual([]);
+  });
 });

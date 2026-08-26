@@ -11,6 +11,7 @@ export function createGlobalMessageStreamHub({
   upstreamStallTimeoutMs,
   upstreamReconnectDelayMs,
   replayLimit = MESSAGE_STREAM_GLOBAL_REPLAY_LIMIT,
+  eventFilter,
 }) {
   const eventSubscribers = new Set();
   const statusSubscribers = new Set();
@@ -21,11 +22,13 @@ export function createGlobalMessageStreamHub({
   let connected = false;
   let everConnected = false;
   let buildUrlFailed = false;
+  let eventQueue = Promise.resolve();
+  let lifecycleGeneration = 0;
 
   const notifySubscriber = (kind, subscriber, payload) => {
     try {
       const result = subscriber(payload);
-      if (result && typeof result.catch === 'function') {
+      if (result?.catch instanceof Function) {
         result.catch((error) => {
           console.warn(`Global message stream ${kind} subscriber failed:`, error);
         });
@@ -42,9 +45,12 @@ export function createGlobalMessageStreamHub({
   };
 
   const normalizeEvent = ({ envelope, payload }) => {
-    const directory =
-      typeof envelope?.directory === 'string' && envelope.directory.length > 0 ? envelope.directory : 'global';
-    const eventId = typeof envelope?.eventId === 'string' && envelope.eventId.length > 0 ? envelope.eventId : undefined;
+    const directory = envelope?.directory?.constructor === String && envelope.directory.length > 0
+      ? envelope.directory
+      : 'global';
+    const eventId = envelope?.eventId?.constructor === String && envelope.eventId.length > 0
+      ? envelope.eventId
+      : undefined;
     return {
       envelope,
       payload,
@@ -58,6 +64,7 @@ export function createGlobalMessageStreamHub({
       return;
     }
 
+    const generation = ++lifecycleGeneration;
     controller = new AbortController();
     reader = createUpstreamSseReader({
       signal: controller.signal,
@@ -86,16 +93,25 @@ export function createGlobalMessageStreamHub({
       },
       onEvent(event) {
         const normalized = normalizeEvent(event);
-        if (normalized.eventId) {
-          replay.push(normalized);
-          if (replay.length > replayLimit) {
-            replay.splice(0, replay.length - replayLimit);
+        const filtered = eventFilter instanceof Function
+          ? Promise.resolve(eventFilter(normalized))
+          : Promise.resolve(false);
+        eventQueue = eventQueue.then(async () => {
+          const shouldFilter = await filtered;
+          if (generation !== lifecycleGeneration || shouldFilter) return;
+          if (normalized.eventId) {
+            replay.push(normalized);
+            if (replay.length > replayLimit) {
+              replay.splice(0, replay.length - replayLimit);
+            }
           }
-        }
 
-        for (const subscriber of Array.from(eventSubscribers)) {
-          notifySubscriber('event', subscriber, normalized);
-        }
+          for (const subscriber of Array.from(eventSubscribers)) {
+            notifySubscriber('event', subscriber, normalized);
+          }
+        }).catch((error) => {
+          console.warn('Global message stream event filter failed:', error);
+        });
       },
       onError(error) {
         if (controller?.signal.aborted) {
@@ -114,6 +130,7 @@ export function createGlobalMessageStreamHub({
   };
 
   const stop = () => {
+    lifecycleGeneration += 1;
     connected = false;
     reader?.stop();
     if (controller && !controller.signal.aborted) {
@@ -123,6 +140,7 @@ export function createGlobalMessageStreamHub({
     controller = null;
     everConnected = false;
     buildUrlFailed = false;
+    eventQueue = Promise.resolve();
   };
 
   return {
@@ -153,6 +171,9 @@ export function createGlobalMessageStreamHub({
 
       const index = replay.findIndex((entry) => entry.eventId === eventId);
       return index === -1 ? [] : replay.slice(index + 1);
+    },
+    drainEvents() {
+      return eventQueue;
     },
   };
 }
