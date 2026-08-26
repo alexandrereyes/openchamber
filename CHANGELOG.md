@@ -22,6 +22,7 @@ All notable changes to this project will be documented in this file.
 - Chat: finished replies no longer flicker — tool cards stopped re-rendering (and replaying their reveal animation) when they completed, and resizing the window no longer throws the conversation up and down while you're at the bottom.
 - Chat: clicking the last item in the prompt rail now always lands on it, and rail jumps teleport instead of a long smooth scroll that could stop halfway.
 - Mobile: scrolling during a streaming reply works again — a drag immediately takes over, the scroll-to-bottom pill shows up, and the load-older button no longer throws you to the bottom of the chat.
+- Mobile: archiving or deleting a parent session from the sessions drawer now includes its subagent sessions instead of leaving orphaned rows behind.
 - Fixed file links in messages being checked twice against the filesystem, and against the wrong project directory on the first pass.
 - Fixed the selected project or session briefly jumping back to a previous choice when settings responses arrived out of order.
 - Chat: context meters in the desktop, Mini Chat, and VS Code headers now show the token count alongside the percentage; Work status uses the same format (thanks to @alexandrereyes).
