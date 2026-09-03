@@ -103,7 +103,6 @@ All notable changes to this project will be documented in this file.
 - Chat: comment on a reply — select text in a chat message (or a rendered markdown preview in Files) and choose Comment to attach exactly that quote, with a source line range when it can be located, plus your note. The selection stays highlighted while you type.
 - Diff: comment like a review — hovering a line shows a + in the gutter; clicking or dragging across lines opens the comment editor for that range, styled like the chat's comments.
 - Composer: hovering or tapping a context chip opens a stacked preview of everything attached, where a comment can be edited in place or an item removed before sending.
-- Desktop: subagent chat panels now show that subagent's token count and context usage beside the panel controls (thanks to @alexandrereyes).
 - Mobile: the chat comment input overlays the composer exactly and rides the keyboard; Enter makes a new line there, with attach on the button.
 - Terminal: terminals no longer vanish behind your back — every tab and device shows the ones already running on the server, and background tabs survive the idle cleanup.
 - Search: every searchable picker uses one matcher now — best matches first, multi-word queries in any order, punctuation ignored ("gpt4o" finds "gpt-4o"). Ctrl/Cmd+P matches whole file paths.
